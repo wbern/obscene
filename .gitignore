@@ -7,5 +7,4 @@ coverage/
 .logs/
 __pycache__/
 state.json
-CLAUDE.md
 CLAUDE.local.md
