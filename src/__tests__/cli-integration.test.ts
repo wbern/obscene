@@ -61,58 +61,64 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("report");
   });
 
-  it("should run CLI from packed tarball without crashing", {
-    timeout: 60000,
-  }, () => {
-    // Pack the package to temp dir
-    const packResult = spawnSync(
-      "pnpm",
-      ["pack", "--pack-gzip-level", "0", "--pack-destination", tempDir],
-      { cwd: PROJECT_ROOT, stdio: "pipe", shell: SHELL },
-    );
-    expect(packResult.status).toBe(0);
+  // Tarball packing runs lifecycle scripts (build, prepare) which is too slow
+  // on Windows CI. The tarball content is platform-independent so Linux-only is fine.
+  it.skipIf(process.platform === "win32")(
+    "should run CLI from packed tarball without crashing",
+    {
+      timeout: 60000,
+    },
+    () => {
+      // Pack the package to temp dir
+      const packResult = spawnSync(
+        "pnpm",
+        ["pack", "--pack-gzip-level", "0", "--pack-destination", tempDir],
+        { cwd: PROJECT_ROOT, stdio: "pipe", shell: SHELL },
+      );
+      expect(packResult.status).toBe(0);
 
-    // Find the tarball
-    const files = fs.readdirSync(tempDir);
-    const tarball = files.find((f) => f.endsWith(".tgz"));
-    expect(tarball).toBeDefined();
+      // Find the tarball
+      const files = fs.readdirSync(tempDir);
+      const tarball = files.find((f) => f.endsWith(".tgz"));
+      expect(tarball).toBeDefined();
 
-    // Check tarball size — should be small (uncompressed ~20KB, allow up to 50KB)
-    const stats = fs.statSync(path.join(tempDir, tarball!));
-    const sizeKB = stats.size / 1024;
-    expect(sizeKB).toBeLessThan(50);
+      // Check tarball size — should be small (uncompressed ~20KB, allow up to 50KB)
+      const stats = fs.statSync(path.join(tempDir, tarball!));
+      const sizeKB = stats.size / 1024;
+      expect(sizeKB).toBeLessThan(50);
 
-    // Extract it
-    const extractDir = path.join(tempDir, "extracted");
-    fs.mkdirSync(extractDir);
-    const tarResult = spawnSync(
-      "tar",
-      ["-xzf", path.join(tempDir, tarball!), "-C", extractDir],
-      { stdio: "pipe" },
-    );
-    expect(tarResult.status).toBe(0);
+      // Extract it
+      const extractDir = path.join(tempDir, "extracted");
+      fs.mkdirSync(extractDir);
+      const tarResult = spawnSync(
+        "tar",
+        ["-xzf", path.join(tempDir, tarball!), "-C", extractDir],
+        { stdio: "pipe" },
+      );
+      expect(tarResult.status).toBe(0);
 
-    const packageDir = path.join(extractDir, "package");
+      const packageDir = path.join(extractDir, "package");
 
-    // Install dependencies in isolated dir
-    const installResult = spawnSync(
-      "pnpm",
-      ["install", "--prefer-offline", "--ignore-scripts"],
-      { cwd: packageDir, stdio: "pipe", shell: SHELL },
-    );
-    expect(installResult.status).toBe(0);
+      // Install dependencies in isolated dir
+      const installResult = spawnSync(
+        "pnpm",
+        ["install", "--prefer-offline", "--ignore-scripts"],
+        { cwd: packageDir, stdio: "pipe", shell: SHELL },
+      );
+      expect(installResult.status).toBe(0);
 
-    // Run --help from the packed version — should not crash
-    const cliPath = path.join(packageDir, "dist", "cli.js");
-    const result = spawnSync("node", [cliPath, "--help"], {
-      timeout: 5000,
-      stdio: "pipe",
-      cwd: packageDir,
-    });
+      // Run --help from the packed version — should not crash
+      const cliPath = path.join(packageDir, "dist", "cli.js");
+      const result = spawnSync("node", [cliPath, "--help"], {
+        timeout: 5000,
+        stdio: "pipe",
+        cwd: packageDir,
+      });
 
-    expect(result.status).toBe(0);
-    expect(result.stdout.toString()).toContain("obscene");
-  });
+      expect(result.status).toBe(0);
+      expect(result.stdout.toString()).toContain("obscene");
+    },
+  );
 
   it("should produce valid JSON output in a git repo", {
     timeout: 30000,
