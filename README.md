@@ -135,17 +135,17 @@ Cumulative score distribution bucket:
 ## Example output
 
 ```
-Hotspots — 3 months churn window | Total score: 35452
+Hotspots — 3 months churn window | Total score: 35,452
 Tiers: 3 danger, 13 watch, 194 stable
 Showing: 5 of 210
 
-File                                       Score      %  Churn  Cmplx   Dens Dfcts  Nest  Auth    Tier
-────────────────────────────────────────────────────────────────────────────────────────────────────────
-src/utils/effect-generator.ts               8296   23.4     68    122   0.12     5     6     4  DANGER
-src/services/game-engine.ts                 4284   12.1     51     84   0.09     3     4     3  DANGER
-src/components/board-renderer.tsx           2940    8.3     42     70   0.11     2     5     3  DANGER
-src/hooks/use-game-state.ts                 1320    3.7     33     40   0.08     1     3     2   WATCH
-src/utils/move-validator.ts                  945    2.7     27     35   0.06     0     2     1   WATCH
+File                                                 Score      %  Churn  Cmplx   Dens Dfcts  Nest  Auth    Tier
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+src/utils/effect-generator.ts                        8,296   23.4     68    122   0.12     5     6     4  DANGER
+src/services/game-engine.ts                          4,284   12.1     51     84   0.09     3     4     3  DANGER
+src/components/board-renderer.tsx                    2,940    8.3     42     70   0.11     2     5     3  DANGER
+src/hooks/use-game-state.ts                          1,320    3.7     33     40   0.08     1     3     2   WATCH
+src/utils/move-validator.ts                            945    2.7     27     35   0.06     0     2     1   WATCH
 
 Score=complexity×churn | Dens=complexity/code | Dfcts=fix commits | Nest=max indent depth | Auth=unique authors
 Docs: https://github.com/wbern/obscene#metrics
