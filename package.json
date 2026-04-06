@@ -1,0 +1,44 @@
+{
+  "name": "code-hotspots",
+  "version": "0.1.0",
+  "description": "Identify hotspot files — complex code that changes frequently. Churn × complexity analysis for any git repo.",
+  "type": "module",
+  "bin": {
+    "hotspot": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "git",
+    "complexity",
+    "churn",
+    "hotspot",
+    "code-quality",
+    "scc",
+    "static-analysis",
+    "code-review",
+    "technical-debt"
+  ],
+  "license": "MIT",
+  "author": "William Bernting",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wbern/obscene.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.2",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.3"
+  }
+}
