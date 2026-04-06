@@ -19,7 +19,7 @@
     "lint:fix": "biome check --write .",
     "knip": "knip --no-config-hints",
     "duplication-check": "jscpd",
-    "markdownlint": "markdownlint --fix '**/*.md' --ignore node_modules",
+    "markdownlint": "markdownlint --fix **/*.md --ignore node_modules",
     "prepare": "husky && (claude-instructions --scope=project --prefix= --overwrite || echo .)"
   },
   "keywords": [
