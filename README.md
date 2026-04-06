@@ -105,35 +105,35 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 
 ### Hotspot metrics
 
-### Hotspot score (`Score`)
+#### Hotspot score (`Score`)
 
 `complexity × churn`. The core ranking metric — files that are both complex and frequently modified bubble to the top. See [Why churn × complexity?](#why-churn-x-complexity) for the research backing this approach.
 
-### Churn (`Churn`)
+#### Churn (`Churn`)
 
 Number of commits touching the file within the configured time window (default: 3 months). Measures how actively the file is being modified.
 
-### Cyclomatic complexity (`Cmplx`)
+#### Cyclomatic complexity (`Cmplx`)
 
 Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide.
 
-### Complexity density (`Dens`)
+#### Complexity density (`Dens`)
 
 `complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). Based on Harrison & Magel (1981), who found that complexity relative to code size is a stronger fault predictor than raw complexity alone.
 
-### Defects (`Dfcts`)
+#### Defects (`Dfcts`)
 
 Count of `fix:` conventional commits touching the file within the churn window. A proxy for historical defect rate — files that attract repeated fixes are more likely to contain latent bugs. Inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction.
 
-### Defect density (`defectDensity`, JSON only)
+#### Defect density (`defectDensity`, JSON only)
 
 `defects / lines of code`. Not shown in table output due to column width, but available in JSON. Normalizes defect count by file size.
 
-### Nesting depth (`Nest`)
+#### Nesting depth (`Nest`)
 
 Maximum indentation level (tab stops) in the file. Deep nesting correlates with high cognitive load and defect likelihood. Harrison & Magel (1981) identified nesting depth as a significant complexity contributor.
 
-### Unique authors (`Auth`)
+#### Unique authors (`Auth`)
 
 Number of distinct git authors who committed to the file within the churn window. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
 
@@ -151,7 +151,7 @@ Number of commits where both files in a pair were modified together. The core ra
 
 Sum of cyclomatic complexity of both files in the pair. Highlights coupled pairs where the involved code is also complex — the combination of hidden dependency and high complexity compounds maintenance risk.
 
-### Tier
+#### Tier
 
 Cumulative score distribution bucket:
 

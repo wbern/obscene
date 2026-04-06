@@ -134,7 +134,15 @@ describe("CLI Integration", () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toHaveProperty("generated");
     expect(parsed).toHaveProperty("guide");
-    expect(parsed.guide).toHaveProperty("hotspotScore");
+    expect(Object.keys(parsed.guide).sort()).toEqual([
+      "authors",
+      "churn",
+      "defectDensity",
+      "defects",
+      "hotspotScore",
+      "maxNesting",
+      "tier",
+    ]);
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("hotspots");
     expect(Array.isArray(parsed.hotspots)).toBe(true);
@@ -187,7 +195,12 @@ describe("CLI Integration", () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toHaveProperty("generated");
     expect(parsed).toHaveProperty("guide");
-    expect(parsed.guide).toHaveProperty("cochanges");
+    expect(Object.keys(parsed.guide).sort()).toEqual([
+      "cochanges",
+      "degree",
+      "tier",
+      "totalComplexity",
+    ]);
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("minCochanges", 1);
     expect(parsed).toHaveProperty("couplings");
@@ -223,6 +236,30 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Degree");
     expect(result.stdout).toContain("Tier");
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
+  });
+
+  it("should produce valid JSON output with report command", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "report", "--top", "5"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toHaveProperty("generated");
+    expect(parsed).toHaveProperty("guide");
+    expect(Object.keys(parsed.guide).sort()).toEqual([
+      "comments",
+      "complexity",
+      "complexityDensity",
+    ]);
+    expect(parsed).toHaveProperty("summary");
+    expect(parsed.summary).toHaveProperty("fileCount");
+    expect(parsed).toHaveProperty("files");
+    expect(Array.isArray(parsed.files)).toBe(true);
+    expect(parsed.files.length).toBeLessThanOrEqual(5);
   });
 
   it("should fail gracefully outside a git repo", () => {
