@@ -1,6 +1,12 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import type { FileMetrics, HotspotEntry, SccLanguage, Tier } from "./types.js";
+import type {
+  CouplingEntry,
+  FileMetrics,
+  HotspotEntry,
+  SccLanguage,
+  Tier,
+} from "./types.js";
 
 const DEFAULT_EXCLUDES = [
   /\.test\./,
@@ -176,6 +182,120 @@ export function getAuthors(months: number): Map<string, number> {
     counts.set(file, set.size);
   }
   return counts;
+}
+
+const MAX_FILES_PER_COMMIT = 20;
+
+/**
+ * Extract file co-change pairs from git history.
+ * Returns a map of "file1\0file2" → count (canonical alphabetical order).
+ * Excludes same-directory pairs and commits touching >20 files.
+ */
+export function getCoChanges(
+  months: number,
+  excludes: string[] = [],
+): Map<string, number> {
+  const patterns = [...DEFAULT_EXCLUDES, ...excludes.map(globToRegex)];
+
+  let raw: Buffer;
+  try {
+    raw = execSync(
+      `git log --since="${months} months ago" --format="COMMIT_SEP%n" --name-only`,
+      { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+    );
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+
+  const cochanges = new Map<string, number>();
+  const commits = raw.toString().split("COMMIT_SEP\n");
+
+  for (const commit of commits) {
+    if (!commit.trim()) continue;
+
+    const seen = new Set<string>();
+    for (const line of commit.split("\n")) {
+      const trimmed = normalizePath(line.trim());
+      if (!trimmed) continue;
+      if (!isExcluded(trimmed, patterns)) {
+        seen.add(trimmed);
+      }
+    }
+
+    const files = [...seen];
+    if (files.length < 2 || files.length > MAX_FILES_PER_COMMIT) continue;
+
+    for (let i = 0; i < files.length; i++) {
+      for (let j = i + 1; j < files.length; j++) {
+        const [a, b] =
+          files[i] < files[j] ? [files[i], files[j]] : [files[j], files[i]];
+        const dirA = a.includes("/") ? a.slice(0, a.lastIndexOf("/")) : "";
+        const dirB = b.includes("/") ? b.slice(0, b.lastIndexOf("/")) : "";
+        if (dirA === dirB) continue;
+
+        const key = `${a}\0${b}`;
+        cochanges.set(key, (cochanges.get(key) ?? 0) + 1);
+      }
+    }
+  }
+
+  return cochanges;
+}
+
+/**
+ * Score file pairs by co-change frequency and assign tiers.
+ */
+export function computeCoupling(
+  cochanges: Map<string, number>,
+  churn: Map<string, number>,
+  complexityMap: Map<string, number>,
+  minCochanges: number,
+): CouplingEntry[] {
+  const entries: CouplingEntry[] = [];
+
+  for (const [key, count] of cochanges) {
+    if (count < minCochanges) continue;
+    const [file1, file2] = key.split("\0");
+    const minChurn = Math.min(churn.get(file1) ?? 0, churn.get(file2) ?? 0);
+    const degree =
+      minChurn > 0 ? Math.round((count / minChurn) * 1000) / 10 : 0;
+    const totalComplexity =
+      (complexityMap.get(file1) ?? 0) + (complexityMap.get(file2) ?? 0);
+
+    entries.push({
+      file1,
+      file2,
+      cochanges: count,
+      degree,
+      totalComplexity,
+      couplingScore: count,
+      percentOfTotal: 0,
+      tier: "stable",
+    });
+  }
+
+  entries.sort((a, b) => b.couplingScore - a.couplingScore);
+
+  const totalScore = entries.reduce((sum, e) => sum + e.couplingScore, 0);
+  if (totalScore === 0) return [];
+
+  let cumulative = 0;
+  for (const entry of entries) {
+    entry.percentOfTotal =
+      Math.round((entry.couplingScore / totalScore) * 1000) / 10;
+    cumulative += entry.couplingScore;
+    const cumulativeShare = cumulative / totalScore;
+
+    if (cumulativeShare <= DANGER_CUMULATIVE) {
+      entry.tier = "danger";
+    } else if (cumulativeShare <= WATCH_CUMULATIVE) {
+      entry.tier = "watch";
+    } else {
+      entry.tier = "stable";
+    }
+  }
+
+  return entries;
 }
 
 /**

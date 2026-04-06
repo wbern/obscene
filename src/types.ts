@@ -55,3 +55,25 @@ export interface HotspotsOutput {
   showing: number;
   hotspots: HotspotEntry[];
 }
+
+export interface CouplingEntry {
+  file1: string;
+  file2: string;
+  cochanges: number;
+  degree: number;
+  totalComplexity: number;
+  couplingScore: number;
+  percentOfTotal: number;
+  tier: Tier;
+}
+
+export interface CouplingOutput {
+  generated: string;
+  churnWindow: string;
+  minCochanges: number;
+  totalScore: number;
+  tierCounts: Record<Tier, number>;
+  totalCouplings: number;
+  showing: number;
+  couplings: CouplingEntry[];
+}

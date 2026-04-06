@@ -1,4 +1,9 @@
-import type { HotspotsOutput, ReportOutput } from "./types.js";
+import type {
+  CouplingOutput,
+  HotspotsOutput,
+  ReportOutput,
+  Tier,
+} from "./types.js";
 
 export function formatReportTable(output: ReportOutput): string {
   const lines: string[] = [];
@@ -41,11 +46,7 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   lines.push(
     `Hotspots — ${churnWindow} churn window | Total score: ${totalScore.toLocaleString()}`,
   );
-  lines.push(
-    `Tiers: ${tierCounts.danger} danger, ${tierCounts.watch} watch, ${tierCounts.stable} stable`,
-  );
-  lines.push(`Showing: ${output.showing} of ${output.totalHotspots}`);
-  lines.push("");
+  pushTierSummary(lines, tierCounts, output.showing, output.totalHotspots);
 
   lines.push(
     padRight("File", 50) +
@@ -62,8 +63,6 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   lines.push("─".repeat(112));
 
   for (const h of hotspots) {
-    const tierLabel =
-      h.tier === "danger" ? "DANGER" : h.tier === "watch" ? "WATCH" : "stable";
     lines.push(
       padRight(truncate(h.file, 48), 50) +
         padLeft(h.hotspotScore.toLocaleString(), 8) +
@@ -74,7 +73,7 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
         padLeft(String(h.defects), 6) +
         padLeft(String(h.maxNesting), 6) +
         padLeft(String(h.authors), 6) +
-        padLeft(tierLabel, 8),
+        padLeft(tierLabel(h.tier), 8),
     );
   }
 
@@ -85,6 +84,64 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   lines.push("Docs: https://github.com/wbern/obscene#metrics");
 
   return lines.join("\n");
+}
+
+export function formatCouplingTable(output: CouplingOutput): string {
+  const lines: string[] = [];
+  const { tierCounts, totalScore, churnWindow, couplings } = output;
+
+  lines.push(
+    `Coupling — ${churnWindow} churn window | Min shared: ${output.minCochanges} | Total score: ${totalScore.toLocaleString()}`,
+  );
+  pushTierSummary(lines, tierCounts, output.showing, output.totalCouplings);
+
+  lines.push(
+    padRight("File 1", 35) +
+      padRight("File 2", 35) +
+      padLeft("Shared", 7) +
+      padLeft("Degree", 8) +
+      padLeft("Cmplx", 7) +
+      padLeft("Tier", 8),
+  );
+  lines.push("─".repeat(100));
+
+  for (const c of couplings) {
+    lines.push(
+      padRight(truncate(c.file1, 33), 35) +
+        padRight(truncate(c.file2, 33), 35) +
+        padLeft(String(c.cochanges), 7) +
+        padLeft(`${c.degree.toFixed(1)}%`, 8) +
+        padLeft(String(c.totalComplexity), 7) +
+        padLeft(tierLabel(c.tier), 8),
+    );
+  }
+
+  lines.push("");
+  lines.push(
+    "Shared=co-changed commits | Degree=shared/min(churn)\u00D7100 | Cmplx=sum of both files",
+  );
+  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+
+  return lines.join("\n");
+}
+
+function pushTierSummary(
+  lines: string[],
+  tierCounts: Record<Tier, number>,
+  showing: number,
+  total: number,
+): void {
+  lines.push(
+    `Tiers: ${tierCounts.danger} danger, ${tierCounts.watch} watch, ${tierCounts.stable} stable`,
+  );
+  lines.push(`Showing: ${showing} of ${total}`);
+  lines.push("");
+}
+
+function tierLabel(tier: Tier): string {
+  if (tier === "danger") return "DANGER";
+  if (tier === "watch") return "WATCH";
+  return "stable";
 }
 
 function padRight(s: string, n: number): string {

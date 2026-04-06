@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatHotspotsTable, formatReportTable } from "./format.js";
-import type { HotspotsOutput, ReportOutput } from "./types.js";
+import {
+  formatCouplingTable,
+  formatHotspotsTable,
+  formatReportTable,
+} from "./format.js";
+import type { CouplingOutput, HotspotsOutput, ReportOutput } from "./types.js";
 
 describe("formatReportTable", () => {
   it("formats report output as a table", () => {
@@ -243,6 +247,115 @@ describe("formatHotspotsTable", () => {
     };
 
     const result = formatHotspotsTable(output);
+
+    expect(result).toContain("…");
+  });
+});
+
+describe("formatCouplingTable", () => {
+  it("formats coupling output with all expected content", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      churnWindow: "3 months",
+      minCochanges: 2,
+      totalScore: 15,
+      tierCounts: { danger: 1, watch: 1, stable: 0 },
+      totalCouplings: 2,
+      showing: 2,
+      couplings: [
+        {
+          file1: "src/auth.ts",
+          file2: "lib/session.ts",
+          cochanges: 10,
+          degree: 83.3,
+          totalComplexity: 45,
+          couplingScore: 10,
+          percentOfTotal: 66.7,
+          tier: "danger",
+        },
+        {
+          file1: "src/api.ts",
+          file2: "lib/http.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 30,
+          couplingScore: 5,
+          percentOfTotal: 33.3,
+          tier: "watch",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).toContain("Coupling");
+    expect(result).toContain("3 months");
+    expect(result).toContain("Min shared: 2");
+    expect(result).toContain("1 danger");
+    expect(result).toContain("1 watch");
+    expect(result).toContain("0 stable");
+    expect(result).toContain("DANGER");
+    expect(result).toContain("WATCH");
+    expect(result).toContain("src/auth.ts");
+    expect(result).toContain("lib/session.ts");
+    expect(result).toContain("Showing: 2 of 2");
+    expect(result).toContain("Shared=co-changed commits");
+    expect(result).toContain("Degree=shared/min(churn)");
+  });
+
+  it("shows stable tier in lowercase", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 3,
+      tierCounts: { danger: 0, watch: 0, stable: 1 },
+      totalCouplings: 1,
+      showing: 1,
+      couplings: [
+        {
+          file1: "src/a.ts",
+          file2: "lib/b.ts",
+          cochanges: 3,
+          degree: 30.0,
+          totalComplexity: 10,
+          couplingScore: 3,
+          percentOfTotal: 100,
+          tier: "stable",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).toContain("stable");
+    expect(result).not.toContain("STABLE");
+  });
+
+  it("truncates long file paths", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { danger: 1, watch: 0, stable: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      couplings: [
+        {
+          file1: "src/very/deeply/nested/directory/structure/component.ts",
+          file2: "lib/another/very/deeply/nested/directory/service.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 20,
+          couplingScore: 5,
+          percentOfTotal: 100,
+          tier: "danger",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
 
     expect(result).toContain("…");
   });

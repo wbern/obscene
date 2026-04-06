@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  computeCoupling,
   computeHotspots,
   getAuthors,
   getChurn,
+  getCoChanges,
   getDefects,
   getNestingDepths,
   runScc,
@@ -688,5 +690,223 @@ describe("computeHotspots", () => {
     expect(result[0].defectDensity).toBe(0);
     expect(result[0].maxNesting).toBe(0);
     expect(result[0].authors).toBe(0);
+  });
+});
+
+describe("getCoChanges", () => {
+  it("counts co-occurrences across commits", () => {
+    const gitOutput =
+      "COMMIT_SEP\nsrc/foo.ts\nlib/bar.ts\nCOMMIT_SEP\nsrc/foo.ts\nlib/bar.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    expect(result.get("lib/bar.ts\0src/foo.ts")).toBe(2);
+  });
+
+  it("skips commits with more than 20 files", () => {
+    const files = Array.from({ length: 21 }, (_, i) => `dir${i}/f${i}.ts`).join(
+      "\n",
+    );
+    const gitOutput = `COMMIT_SEP\n${files}\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("excludes same-directory pairs", () => {
+    const gitOutput = "COMMIT_SEP\nsrc/a.ts\nsrc/b.ts\nlib/c.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    // src/a.ts + src/b.ts are same dir → excluded
+    // src/a.ts + lib/c.ts and src/b.ts + lib/c.ts are cross-dir → included
+    expect(result.has("src/a.ts\0src/b.ts")).toBe(false);
+    expect(result.get("lib/c.ts\0src/a.ts")).toBe(1);
+    expect(result.get("lib/c.ts\0src/b.ts")).toBe(1);
+  });
+
+  it("excludes test files by default", () => {
+    const gitOutput = "COMMIT_SEP\nsrc/foo.test.ts\nlib/bar.ts\nsrc/real.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    // foo.test.ts should be excluded
+    for (const key of result.keys()) {
+      expect(key).not.toContain("foo.test.ts");
+    }
+  });
+
+  it("applies custom exclude patterns", () => {
+    const gitOutput = "COMMIT_SEP\nsrc/gen.ts\nlib/bar.ts\nsrc/real.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3, ["**/gen.ts"]);
+
+    for (const key of result.keys()) {
+      expect(key).not.toContain("gen.ts");
+    }
+  });
+
+  it("normalizes ./ paths", () => {
+    const gitOutput = "COMMIT_SEP\n./src/foo.ts\n./lib/bar.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    expect(result.get("lib/bar.ts\0src/foo.ts")).toBe(1);
+  });
+
+  it("deduplicates files within a commit", () => {
+    const gitOutput = "COMMIT_SEP\nsrc/foo.ts\nlib/bar.ts\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    expect(result.get("lib/bar.ts\0src/foo.ts")).toBe(1);
+  });
+
+  it("returns empty map for no commits", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = getCoChanges(3);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("treats root-level files as same directory", () => {
+    const gitOutput = "COMMIT_SEP\na.ts\nb.ts\nsrc/c.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    // a.ts and b.ts both have dir="" → same dir → excluded
+    expect(result.has("a.ts\0b.ts")).toBe(false);
+    // a.ts + src/c.ts and b.ts + src/c.ts are cross-dir
+    expect(result.get("a.ts\0src/c.ts")).toBe(1);
+    expect(result.get("b.ts\0src/c.ts")).toBe(1);
+  });
+
+  it("throws on non-git repo", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+
+    expect(() => getCoChanges(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+});
+
+describe("computeCoupling", () => {
+  it("scores and sorts by cochanges", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 5],
+      ["c.ts\0lib/d.ts", 10],
+    ]);
+    const churn = new Map([
+      ["a.ts", 10],
+      ["lib/b.ts", 8],
+      ["c.ts", 15],
+      ["lib/d.ts", 12],
+    ]);
+    const complexity = new Map([
+      ["a.ts", 20],
+      ["lib/b.ts", 30],
+      ["c.ts", 10],
+      ["lib/d.ts", 40],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, complexity, 1);
+
+    expect(result[0].file1).toBe("c.ts");
+    expect(result[0].file2).toBe("lib/d.ts");
+    expect(result[0].couplingScore).toBe(10);
+    expect(result[1].couplingScore).toBe(5);
+  });
+
+  it("calculates degree as cochanges/min(churn)×100", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
+    const churn = new Map([
+      ["a.ts", 10],
+      ["lib/b.ts", 8],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    // degree = 4/8 × 100 = 50.0
+    expect(result[0].degree).toBe(50);
+  });
+
+  it("sets degree to 0 when min churn is 0", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 3]]);
+    const churn = new Map<string, number>();
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].degree).toBe(0);
+  });
+
+  it("filters below minCochanges", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 1],
+      ["c.ts\0lib/d.ts", 3],
+    ]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 2);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].file1).toBe("c.ts");
+  });
+
+  it("assigns tiers by cumulative distribution", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 10],
+      ["c.ts\0lib/d.ts", 10],
+      ["e.ts\0lib/f.ts", 10],
+      ["g.ts\0lib/h.ts", 10],
+    ]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 1);
+
+    // All equal: 10 each, total 40
+    // 10/40 = 25% → danger, 50% → danger, 75% → watch, 100% → stable
+    expect(result[0].tier).toBe("danger");
+    expect(result[1].tier).toBe("danger");
+    expect(result[2].tier).toBe("watch");
+    expect(result[3].tier).toBe("stable");
+  });
+
+  it("returns empty array when all below threshold", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 1]]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 5);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it("defaults complexity to 0 for unknown files", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 3]]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 1);
+
+    expect(result[0].totalComplexity).toBe(0);
+  });
+
+  it("percentOfTotal sums to ~100", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 5],
+      ["c.ts\0lib/d.ts", 3],
+      ["e.ts\0lib/f.ts", 2],
+    ]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 1);
+    const totalPercent = result.reduce((s, e) => s + e.percentOfTotal, 0);
+
+    expect(totalPercent).toBeCloseTo(100, 0);
   });
 });

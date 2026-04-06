@@ -2,15 +2,21 @@ declare const __VERSION__: string;
 
 import { Command } from "commander";
 import {
+  computeCoupling,
   computeHotspots,
   getAuthors,
   getChurn,
+  getCoChanges,
   getDefects,
   getNestingDepths,
   runScc,
 } from "./analyze.js";
-import { formatHotspotsTable, formatReportTable } from "./format.js";
-import type { HotspotsOutput, ReportOutput } from "./types.js";
+import {
+  formatCouplingTable,
+  formatHotspotsTable,
+  formatReportTable,
+} from "./format.js";
+import type { CouplingOutput, HotspotsOutput, ReportOutput } from "./types.js";
 
 const program = new Command();
 
@@ -27,6 +33,11 @@ interface SharedOpts {
 
 interface HotspotsOpts extends SharedOpts {
   months: string;
+}
+
+interface CouplingOpts extends SharedOpts {
+  months: string;
+  minCochanges: string;
 }
 
 function addSharedOptions(cmd: Command): Command {
@@ -60,6 +71,24 @@ addSharedOptions(
   .action((opts: HotspotsOpts) => {
     try {
       runHotspots(opts);
+    } catch (err: unknown) {
+      exitWithError(err);
+    }
+  });
+
+// coupling command
+addSharedOptions(
+  program
+    .command("coupling")
+    .description(
+      "temporal coupling — files that change together across directories",
+    ),
+)
+  .option("--months <n>", "churn window in months", "3")
+  .option("--min-cochanges <n>", "minimum shared commits to include", "2")
+  .action((opts: CouplingOpts) => {
+    try {
+      runCoupling(opts);
     } catch (err: unknown) {
       exitWithError(err);
     }
@@ -138,6 +167,53 @@ function runHotspots(opts: HotspotsOpts): void {
 
   if (opts.format === "table") {
     process.stdout.write(`${formatHotspotsTable(output)}\n`);
+  } else {
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  }
+}
+
+function runCoupling(opts: CouplingOpts): void {
+  const top = parseInt(opts.top, 10);
+  const months = parseInt(opts.months, 10);
+  const minCochanges = parseInt(opts.minCochanges, 10);
+  const files = runScc(opts.exclude);
+  const churn = getChurn(months);
+  const cochanges = getCoChanges(months, opts.exclude);
+
+  const complexityMap = new Map<string, number>();
+  for (const f of files) {
+    complexityMap.set(f.file, f.complexity);
+  }
+
+  const couplings = computeCoupling(
+    cochanges,
+    churn,
+    complexityMap,
+    minCochanges,
+  );
+
+  const limited = top > 0 ? couplings.slice(0, top) : couplings;
+
+  const tierCounts = { danger: 0, watch: 0, stable: 0 };
+  for (const c of couplings) {
+    tierCounts[c.tier]++;
+  }
+
+  const totalScore = couplings.reduce((sum, c) => sum + c.couplingScore, 0);
+
+  const output: CouplingOutput = {
+    generated: new Date().toISOString(),
+    churnWindow: `${months} months`,
+    minCochanges,
+    totalScore,
+    tierCounts,
+    totalCouplings: couplings.length,
+    showing: limited.length,
+    couplings: limited,
+  };
+
+  if (opts.format === "table") {
+    process.stdout.write(`${formatCouplingTable(output)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }

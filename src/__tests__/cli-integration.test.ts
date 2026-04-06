@@ -59,6 +59,7 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("obscene");
     expect(result.stdout).toContain("hotspots");
     expect(result.stdout).toContain("report");
+    expect(result.stdout).toContain("coupling");
   });
 
   // Tarball packing runs lifecycle scripts (build, prepare) which is too slow
@@ -164,6 +165,58 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("churn window");
     expect(result.stdout).toContain("Score");
     expect(result.stdout).toContain("Churn");
+    expect(result.stdout).toContain("Tier");
+    expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
+  });
+
+  it("should produce valid JSON output with coupling command", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "coupling", "--top", "5", "--min-cochanges", "1"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf-8",
+      },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toHaveProperty("generated");
+    expect(parsed).toHaveProperty("churnWindow", "3 months");
+    expect(parsed).toHaveProperty("minCochanges", 1);
+    expect(parsed).toHaveProperty("couplings");
+    expect(Array.isArray(parsed.couplings)).toBe(true);
+    expect(parsed.couplings.length).toBeLessThanOrEqual(5);
+
+    if (parsed.couplings.length > 0) {
+      const first = parsed.couplings[0];
+      expect(first).toHaveProperty("file1");
+      expect(first).toHaveProperty("file2");
+      expect(first).toHaveProperty("cochanges");
+      expect(first).toHaveProperty("degree");
+      expect(first).toHaveProperty("tier");
+    }
+  });
+
+  it("should produce table output with coupling --format table", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "coupling", "--format", "table", "--min-cochanges", "1"],
+      {
+        cwd: PROJECT_ROOT,
+        encoding: "utf-8",
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Coupling");
+    expect(result.stdout).toContain("churn window");
+    expect(result.stdout).toContain("Shared");
+    expect(result.stdout).toContain("Degree");
     expect(result.stdout).toContain("Tier");
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
   });

@@ -57,6 +57,8 @@ obscene --format table           # human-readable table
 obscene --top 50 --months 6     # more results, longer window
 obscene --top 0                  # all files
 obscene report                   # raw complexity (no churn)
+obscene coupling                 # temporal coupling analysis
+obscene coupling --min-cochanges 1 --format table
 obscene --exclude "*.generated.*"
 obscene | jq '.hotspots[0]'     # pipe-friendly
 ```
@@ -73,6 +75,18 @@ Scores each file by `complexity × commits` over a time window, then assigns tie
 | **watch** | next 30% (50–80%) | Keep an eye on these |
 | **stable** | bottom 20% | Low risk |
 
+### `obscene coupling`
+
+Detects files that frequently change together in the same commit but live in different directories — Tornhill's "temporal coupling" analysis. Surfaces hidden structural dependencies that aren't visible in the code itself.
+
+Same-directory pairs are excluded (co-location is expected coupling). Mass commits touching >20 files are skipped (formatting changes, large refactors).
+
+```bash
+obscene coupling                          # default: min 2 shared commits
+obscene coupling --min-cochanges 1        # include single co-occurrences
+obscene coupling --format table --top 10  # human-readable, top 10
+```
+
 ### `obscene report`
 
 Per-file complexity without churn. Useful for raw complexity distribution.
@@ -84,6 +98,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--top <n>` | `20` | Limit results (0 = all) |
 | `--months <n>` | `3` | Churn window in months |
 | `--format <type>` | `json` | `json` or `table` |
+| `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
 | `--exclude <patterns...>` | — | Additional exclusion patterns |
 
 ## Metrics
@@ -121,6 +136,14 @@ Maximum indentation level (tab stops) in the file. Deep nesting correlates with 
 ### Unique authors (`Auth`)
 
 Number of distinct git authors who committed to the file within the churn window. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
+
+### Shared commits (`Shared`, coupling only)
+
+Number of commits where both files in a pair were modified together. The core ranking metric for temporal coupling — higher values indicate stronger hidden dependencies between files in different directories.
+
+### Coupling degree (`Degree`, coupling only)
+
+`shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file.
 
 ### Tier
 
