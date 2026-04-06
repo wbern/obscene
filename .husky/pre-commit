@@ -1,5 +1,22 @@
 #!/bin/sh
 
+# Validate commit author matches expected identity
+EXPECTED_NAME="wbern"
+EXPECTED_EMAIL="wbern@users.noreply.github.com"
+AUTHOR_NAME=$(git config user.name)
+AUTHOR_EMAIL=$(git config user.email)
+
+if [ "$AUTHOR_NAME" != "$EXPECTED_NAME" ] || [ "$AUTHOR_EMAIL" != "$EXPECTED_EMAIL" ]; then
+  echo "❌ Invalid git author configuration"
+  echo "   Expected: $EXPECTED_NAME <$EXPECTED_EMAIL>"
+  echo "   Got:      $AUTHOR_NAME <$AUTHOR_EMAIL>"
+  echo ""
+  echo "Fix with:"
+  echo "   git config user.name \"$EXPECTED_NAME\""
+  echo "   git config user.email \"$EXPECTED_EMAIL\""
+  exit 1
+fi
+
 # Validate lockfile is up to date if package.json changed
 if git diff --cached --name-only | grep -q "package.json"; then
   echo "package.json changed, validating lockfile..."
