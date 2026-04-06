@@ -165,6 +165,7 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Score");
     expect(result.stdout).toContain("Churn");
     expect(result.stdout).toContain("Tier");
+    expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
   });
 
   it("should fail gracefully outside a git repo", () => {

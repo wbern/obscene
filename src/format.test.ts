@@ -137,6 +137,13 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("Dfcts");
     expect(result).toContain("Nest");
     expect(result).toContain("Auth");
+
+    // Legend
+    expect(result).toContain("Score=complexity\u00D7churn");
+    expect(result).toContain("Dfcts=fix commits");
+    expect(result).toContain("Nest=max indent depth");
+    expect(result).toContain("Auth=unique authors");
+    expect(result).toContain("Docs: https://github.com/wbern/obscene#metrics");
   });
 
   it("shows stable tier label in lowercase", () => {

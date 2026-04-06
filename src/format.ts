@@ -78,6 +78,12 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
     );
   }
 
+  lines.push("");
+  lines.push(
+    "Score=complexity\u00D7churn | Dens=complexity/code | Dfcts=fix commits | Nest=max indent depth | Auth=unique authors",
+  );
+  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+
   return lines.join("\n");
 }
 
