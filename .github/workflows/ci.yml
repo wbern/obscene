@@ -34,8 +34,8 @@ jobs:
       - name: Install scc (Linux)
         if: runner.os == 'Linux'
         run: |
-          curl -sL https://github.com/boyter/scc/releases/download/v3.4.0/scc_Linux_x86_64.tar.gz | tar xz
-          sudo mv scc /usr/local/bin/
+          curl -sL https://github.com/boyter/scc/releases/download/v3.4.0/scc_Linux_x86_64.tar.gz | tar xz -C /tmp
+          sudo mv /tmp/scc /usr/local/bin/
 
       - name: Install scc (Windows)
         if: runner.os == 'Windows'
@@ -57,19 +57,3 @@ jobs:
       - name: Run coverage
         if: runner.os == 'Linux'
         run: pnpm vitest run --coverage
-
-      - name: Debug — pack and capture tarball
-        if: runner.os == 'Linux'
-        run: |
-          echo "README before pack: $(wc -c < README.md) bytes"
-          pnpm pack --pack-gzip-level 0 --pack-destination /tmp/debug-pack
-          echo "README after pack: $(wc -c < README.md) bytes"
-          tar -tzvf /tmp/debug-pack/*.tgz
-          cp /tmp/debug-pack/*.tgz .
-
-      - name: Upload tarball artifact
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-tarball
-          path: "*.tgz"

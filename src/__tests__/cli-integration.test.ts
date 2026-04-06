@@ -62,15 +62,6 @@ describe("CLI Integration", () => {
   it("should run CLI from packed tarball without crashing", {
     timeout: 60000,
   }, () => {
-    // Diagnostic: list dist/ contents before packing
-    const distDir = path.join(PROJECT_ROOT, "dist");
-    const distFiles = fs.readdirSync(distDir);
-    console.log("=== dist/ contents ===");
-    for (const f of distFiles) {
-      const s = fs.statSync(path.join(distDir, f));
-      console.log(`  ${f}: ${s.size} bytes`);
-    }
-
     // Pack the package to temp dir
     const packResult = spawnSync(
       "pnpm",
@@ -84,24 +75,10 @@ describe("CLI Integration", () => {
     const tarball = files.find((f) => f.endsWith(".tgz"));
     expect(tarball).toBeDefined();
 
-    // Diagnostic: list tarball contents and sizes
-    const listResult = spawnSync(
-      "tar",
-      ["-tzvf", path.join(tempDir, tarball!)],
-      { encoding: "utf-8" },
-    );
-    console.log("=== Tarball contents ===");
-    console.log(listResult.stdout);
-
-    // Diagnostic: pnpm pack stdout (file listing)
-    console.log("=== pnpm pack output ===");
-    console.log(packResult.stdout?.toString());
-
-    // Check tarball size — should be small (currently ~10KB, allow up to 50KB)
+    // Check tarball size — should be small (uncompressed ~20KB, allow up to 50KB)
     const stats = fs.statSync(path.join(tempDir, tarball!));
     const sizeKB = stats.size / 1024;
-    console.log(`=== Tarball size: ${sizeKB} KB (${stats.size} bytes) ===`);
-    expect(sizeKB).toBeLessThan(100);
+    expect(sizeKB).toBeLessThan(50);
 
     // Extract it
     const extractDir = path.join(tempDir, "extracted");
