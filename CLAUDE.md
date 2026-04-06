@@ -21,9 +21,7 @@ unset GIT_AUTHOR_NAME
 - Use **conventional commits**: `feat:`, `fix:`, `docs:`, `chore:`, etc.
 - **No Co-Authored-By trailers** — commitlint blocks Claude Code promotional text.
   Set `"includeCoAuthoredBy": false` in `.claude/settings.local.json`.
-- Use `--no-verify` when you've already run checks manually. The pre-commit hook
-  runs the full suite (build + tests + coverage + all linters) which is redundant
-  if you just verified everything.
+- **Never use `--no-verify`** — always let the pre-commit hooks run.
 
 ## Key commands
 
