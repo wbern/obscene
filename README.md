@@ -77,9 +77,9 @@ Scores each file by `complexity × commits` over a time window, then assigns tie
 
 ### `obscene coupling`
 
-Detects files that frequently change together in the same commit but live in different directories — Tornhill's "temporal coupling" analysis. Surfaces hidden structural dependencies that aren't visible in the code itself.
+Detects files that frequently change together in the same commit but live in different directories — Tornhill's "temporal coupling" analysis from *Your Code as a Crime Scene* (2015). Surfaces hidden structural dependencies that aren't visible in imports or the module graph.
 
-Same-directory pairs are excluded (co-location is expected coupling). Mass commits touching >20 files are skipped (formatting changes, large refactors).
+Same-directory pairs are excluded (co-location is expected coupling). Mass commits touching >20 files are skipped (formatting changes, large refactors). See [Why temporal coupling?](#why-temporal-coupling) for the research backing this approach.
 
 ```bash
 obscene coupling                          # default: min 2 shared commits
@@ -103,7 +103,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 
 ## Metrics
 
-Each hotspot row includes the following metrics:
+### Hotspot metrics
 
 ### Hotspot score (`Score`)
 
@@ -137,13 +137,19 @@ Maximum indentation level (tab stops) in the file. Deep nesting correlates with 
 
 Number of distinct git authors who committed to the file within the churn window. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
 
-### Shared commits (`Shared`, coupling only)
+### Coupling metrics
 
-Number of commits where both files in a pair were modified together. The core ranking metric for temporal coupling — higher values indicate stronger hidden dependencies between files in different directories.
+#### Shared commits (`Shared`)
 
-### Coupling degree (`Degree`, coupling only)
+Number of commits where both files in a pair were modified together. The core ranking metric for temporal coupling — higher values indicate stronger hidden dependencies between files in different directories. Ball, Kim, Porter & Siy (1997) demonstrated that co-change relationships reveal design dependencies that static analysis misses.
 
-`shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file.
+#### Coupling degree (`Degree`)
+
+`shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file. This normalization follows D'Ambros, Lanza & Lungu (2009), who showed that relative coupling measures provide more stable results than raw co-change counts across projects of different sizes.
+
+#### Combined complexity (`Cmplx`)
+
+Sum of cyclomatic complexity of both files in the pair. Highlights coupled pairs where the involved code is also complex — the combination of hidden dependency and high complexity compounds maintenance risk.
 
 ### Tier
 
@@ -174,6 +180,25 @@ Score=complexity×churn | Dens=complexity/code | Dfcts=fix commits | Nest=max in
 Docs: https://github.com/wbern/obscene#metrics
 ```
 
+### Coupling example
+
+```
+Coupling — 6 months churn window | Min shared: 3 | Total score: 91
+Tiers: 10 danger, 7 watch, 7 stable
+Showing: 5 of 24
+
+File 1                             File 2                              Shared  Degree  Cmplx    Tier
+────────────────────────────────────────────────────────────────────────────────────────────────────
+…ePlayer/hooks/useChessEffects.ts  src/utils/effect-generator.ts            6   46.2%    261  DANGER
+…ePlayer/hooks/useChessEffects.ts  src/utils/pgn-types.ts                   6   50.0%    121  DANGER
+src/test/pgn-fixtures.ts           src/utils/pgn-parser.server.ts           5   71.4%      3  DANGER
+src/test/pgn-fixtures.ts           src/utils/effect-generator.ts            4   57.1%    145  DANGER
+src/test/pgn-fixtures.ts           src/utils/pgn-types.ts                   4   57.1%      5  DANGER
+
+Shared=co-changed commits | Degree=shared/min(churn)×100 | Cmplx=sum of both files
+Docs: https://github.com/wbern/obscene#metrics
+```
+
 ## Supported languages
 
 Any language [scc supports](https://github.com/boyter/scc#features) — 200+ languages including C, C++, Go, Java, JavaScript, TypeScript, Python, Rust, Ruby, PHP, Swift, Kotlin, and many more. No configuration needed; scc auto-detects languages from file extensions.
@@ -193,13 +218,31 @@ Files that are both complex and frequently modified are disproportionately likel
 
 The general approach was popularized by Adam Tornhill's *Your Code as a Crime Scene* (2015), which applies forensic analysis techniques to version control history.
 
+## Why temporal coupling?
+
+Files that change together but live in different directories reveal implicit dependencies that the module graph doesn't capture. These hidden couplings are a maintenance hazard: a developer modifying one file doesn't know they also need to update the other, leading to bugs that only surface later.
+
+- **Ball, Kim, Porter & Siy (1997)** pioneered co-change analysis and showed that version control history surfaces design relationships invisible to static analysis. — [ICSE 1997 Workshop](https://www.researchgate.net/publication/2791666_If_Your_Version_Control_System_Could_Talk)
+- **D'Ambros, Lanza & Lungu (2009)** developed the Evolution Radar for visualizing logical coupling at both file and module level, showing how evolutionary coupling reveals architectural decay. The normalized approach (coupling relative to total changes) provides more stable measures across projects of different sizes. — [IEEE TSE](https://doi.org/10.1109/TSE.2009.17)
+- **Tornhill (2015)** popularized temporal coupling analysis in *Your Code as a Crime Scene*, demonstrating how co-change patterns reveal "surprise dependencies" — files that should logically be independent but can't be changed separately in practice. His tooling (Code Maat) uses the same commit co-occurrence approach.
+- **Cataldo, Mockus, Roberts & Herbsleb (2009)** analyzed both syntactic and logical dependencies across two large systems and found that logical (co-change) dependencies have a significant independent effect on failure proneness. When developers are unaware of these hidden couplings, defects increase. — [IEEE TSE](https://doi.org/10.1109/TSE.2009.42)
+
 ## Limitations
+
+### General
 
 - **Churn = commit count**, not lines changed. A one-line typo fix counts the same as a 500-line rewrite.
 - **Per-file granularity only.** A 1000-line file with many small functions scores higher than it probably should. No function-level breakdown.
 - **Must be run inside a git repo.** Churn data comes from `git log`.
 - **Only analyzes files that currently exist.** Deleted files don't appear, even if they churned heavily before removal.
 - **Tier thresholds are fixed** (50/80 cumulative %). Not configurable yet.
+
+### Coupling-specific
+
+- **Same-directory exclusion is a heuristic.** Files in the same directory that are unexpectedly coupled won't be surfaced. The assumption is that co-located files are *expected* to change together.
+- **Mass commit threshold (>20 files) is hardcoded.** Commits touching many files are skipped to avoid noise from formatting changes and large refactors, but legitimate large features that touch many files across directories are also excluded.
+- **Degree uses unfiltered churn.** The denominator (`min(churn)`) counts all commits to a file, including single-file commits. This means degree can understate coupling when a file has high solo churn.
+- **Squash merges collapse coupling signal.** If a branch with 10 separate commits is squash-merged into one, all co-changes within that branch become a single co-occurrence.
 
 ## License
 
