@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 const PROJECT_ROOT = path.join(import.meta.dirname, "../..");
 const BIN_PATH = path.join(PROJECT_ROOT, "dist", "cli.js");
+// On Windows, .cmd wrappers (pnpm, npm) need shell: true to be found by spawnSync
+const SHELL = process.platform === "win32";
 
 describe("CLI Integration", () => {
   let tempDir: string;
@@ -66,7 +68,7 @@ describe("CLI Integration", () => {
     const packResult = spawnSync(
       "pnpm",
       ["pack", "--pack-gzip-level", "0", "--pack-destination", tempDir],
-      { cwd: PROJECT_ROOT, stdio: "pipe" },
+      { cwd: PROJECT_ROOT, stdio: "pipe", shell: SHELL },
     );
     expect(packResult.status).toBe(0);
 
@@ -96,7 +98,7 @@ describe("CLI Integration", () => {
     const installResult = spawnSync(
       "pnpm",
       ["install", "--prefer-offline", "--ignore-scripts"],
-      { cwd: packageDir, stdio: "pipe" },
+      { cwd: packageDir, stdio: "pipe", shell: SHELL },
     );
     expect(installResult.status).toBe(0);
 
