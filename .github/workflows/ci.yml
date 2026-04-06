@@ -57,3 +57,19 @@ jobs:
       - name: Run coverage
         if: runner.os == 'Linux'
         run: pnpm vitest run --coverage
+
+      - name: Debug — pack and capture tarball
+        if: runner.os == 'Linux'
+        run: |
+          echo "README before pack: $(wc -c < README.md) bytes"
+          pnpm pack --pack-gzip-level 0 --pack-destination /tmp/debug-pack
+          echo "README after pack: $(wc -c < README.md) bytes"
+          tar -tzvf /tmp/debug-pack/*.tgz
+          cp /tmp/debug-pack/*.tgz .
+
+      - name: Upload tarball artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-tarball
+          path: "*.tgz"
