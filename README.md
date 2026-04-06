@@ -88,9 +88,21 @@ src/hooks/use-game-state.ts                 1320    3.7     33     40     0.08  
 src/utils/move-validator.ts                  945    2.7     27     35     0.06   WATCH
 ```
 
+## Supported languages
+
+Any language [scc supports](https://github.com/boyter/scc#features) — 200+ languages including C, C++, Go, Java, JavaScript, TypeScript, Python, Rust, Ruby, PHP, Swift, Kotlin, and many more. No configuration needed; scc auto-detects languages from file extensions.
+
 ## Default exclusions
 
-Test and generated files are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, and similar patterns.
+Test and generated files are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, and similar patterns. scc also skips generated files by default (`--no-gen`).
+
+## Limitations
+
+- **Churn = commit count**, not lines changed. A one-line typo fix counts the same as a 500-line rewrite.
+- **Per-file granularity only.** A 1000-line file with many small functions scores higher than it probably should. No function-level breakdown.
+- **Must be run inside a git repo.** Churn data comes from `git log`.
+- **Only analyzes files that currently exist.** Deleted files don't appear, even if they churned heavily before removal.
+- **Tier thresholds are fixed** (50/80 cumulative %). Not configurable yet.
 
 ## License
 
