@@ -40,7 +40,10 @@ jobs:
       - name: Install scc (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: choco install scc --version=3.4.0 -y
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/boyter/scc/releases/download/v3.4.0/scc_Windows_x86_64.zip" -OutFile scc.zip
+          Expand-Archive scc.zip -DestinationPath scc-bin
+          Move-Item scc-bin\scc.exe C:\Windows\system32\scc.exe
 
       - name: Install dependencies
         run: pnpm install
