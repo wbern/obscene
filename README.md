@@ -25,6 +25,12 @@ Works on any language scc supports. No configuration needed.
 
 [scc](https://github.com/boyter/scc#install) must be installed and on your PATH.
 
+## Quick run (no install)
+
+```bash
+pnpm dlx @wbern/obscene --format table
+```
+
 ## Install
 
 ```bash
