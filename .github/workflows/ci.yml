@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      # fetch-depth: 0 needed — integration tests run `obscene` on the repo, which needs git log history
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install scc (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -sL https://github.com/boyter/scc/releases/download/v3.4.0/scc_Linux_x86_64.tar.gz | tar xz
+          sudo mv scc /usr/local/bin/
+
+      - name: Install scc (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install scc --version=3.4.0 -y
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run tests
+        run: pnpm vitest run
+
+      - name: Run coverage
+        if: runner.os == 'Linux'
+        run: pnpm vitest run --coverage

@@ -10,9 +10,8 @@
     "dist"
   ],
   "scripts": {
-    "postinstall": "claude-instructions --scope=project --prefix= --overwrite || true",
     "build": "tsup",
-    "prepublishOnly": "bash scripts/check-publish.sh && pnpm run build",
+    "prepublishOnly": "node scripts/check-publish.js && pnpm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
@@ -21,7 +20,7 @@
     "knip": "knip --no-config-hints",
     "duplication-check": "jscpd",
     "markdownlint": "markdownlint --fix '**/*.md' --ignore node_modules",
-    "prepare": "husky"
+    "prepare": "husky && (claude-instructions --scope=project --prefix= --overwrite || echo .)"
   },
   "keywords": [
     "git",

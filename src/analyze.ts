@@ -35,9 +35,10 @@ function globToRegex(pattern: string): RegExp {
   return new RegExp(escaped);
 }
 
-/** Normalize paths: strip leading "./" */
+/** Normalize paths: strip leading "./" and convert backslashes to forward slashes */
 function normalizePath(p: string): string {
-  return p.startsWith("./") ? p.slice(2) : p;
+  const forwardSlash = p.replaceAll("\\", "/");
+  return forwardSlash.startsWith("./") ? forwardSlash.slice(2) : forwardSlash;
 }
 
 /**

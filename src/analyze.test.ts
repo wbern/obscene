@@ -199,6 +199,37 @@ describe("runScc", () => {
     expect(result[0].complexityDensity).toBe(0);
   });
 
+  it("normalizes backslash paths from scc on Windows", () => {
+    const sccOutput = JSON.stringify([
+      {
+        Name: "TypeScript",
+        Files: [
+          {
+            Location: "src\\utils\\foo.ts",
+            Code: 100,
+            Lines: 120,
+            Complexity: 10,
+            Comment: 5,
+          },
+          {
+            Location: ".\\src\\bar.ts",
+            Code: 100,
+            Lines: 120,
+            Complexity: 10,
+            Comment: 5,
+          },
+        ],
+      },
+    ]);
+
+    mockExecSync.mockReturnValue(Buffer.from(sccOutput));
+
+    const result = runScc();
+
+    expect(result[0].file).toBe("src/utils/foo.ts");
+    expect(result[1].file).toBe("src/bar.ts");
+  });
+
   it("strips ./ prefix from paths", () => {
     const sccOutput = JSON.stringify([
       {

@@ -1,4 +1,4 @@
-import { execSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -42,27 +42,33 @@ describe("CLI Integration", () => {
   });
 
   it("should output version with --version flag", () => {
-    const result = execSync(`node ${BIN_PATH} --version`, {
+    const result = spawnSync("node", [BIN_PATH, "--version"], {
       encoding: "utf-8",
     });
-    expect(result.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("should output help with --help flag", () => {
-    const result = execSync(`node ${BIN_PATH} --help`, { encoding: "utf-8" });
-    expect(result).toContain("obscene");
-    expect(result).toContain("hotspots");
-    expect(result).toContain("report");
+    const result = spawnSync("node", [BIN_PATH, "--help"], {
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("obscene");
+    expect(result.stdout).toContain("hotspots");
+    expect(result.stdout).toContain("report");
   });
 
   it("should run CLI from packed tarball without crashing", {
     timeout: 60000,
   }, () => {
     // Pack the package to temp dir
-    execSync(`pnpm pack --pack-gzip-level 0 --pack-destination ${tempDir}`, {
-      cwd: PROJECT_ROOT,
-      stdio: "pipe",
-    });
+    const packResult = spawnSync(
+      "pnpm",
+      ["pack", "--pack-gzip-level", "0", "--pack-destination", tempDir],
+      { cwd: PROJECT_ROOT, stdio: "pipe" },
+    );
+    expect(packResult.status).toBe(0);
 
     // Find the tarball
     const files = fs.readdirSync(tempDir);
@@ -77,15 +83,22 @@ describe("CLI Integration", () => {
     // Extract it
     const extractDir = path.join(tempDir, "extracted");
     fs.mkdirSync(extractDir);
-    execSync(`tar -xzf ${path.join(tempDir, tarball!)} -C ${extractDir}`);
+    const tarResult = spawnSync(
+      "tar",
+      ["-xzf", path.join(tempDir, tarball!), "-C", extractDir],
+      { stdio: "pipe" },
+    );
+    expect(tarResult.status).toBe(0);
 
     const packageDir = path.join(extractDir, "package");
 
     // Install dependencies in isolated dir
-    execSync("pnpm install --prefer-offline --ignore-scripts", {
-      cwd: packageDir,
-      stdio: "pipe",
-    });
+    const installResult = spawnSync(
+      "pnpm",
+      ["install", "--prefer-offline", "--ignore-scripts"],
+      { cwd: packageDir, stdio: "pipe" },
+    );
+    expect(installResult.status).toBe(0);
 
     // Run --help from the packed version — should not crash
     const cliPath = path.join(packageDir, "dist", "cli.js");
@@ -103,12 +116,13 @@ describe("CLI Integration", () => {
     timeout: 30000,
   }, () => {
     // Run obscene on this repo (which is a git repo with scc-analyzable files)
-    const result = execSync(`node ${BIN_PATH} --top 5`, {
+    const result = spawnSync("node", [BIN_PATH, "--top", "5"], {
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
     });
 
-    const parsed = JSON.parse(result);
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
     expect(parsed).toHaveProperty("generated");
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("hotspots");
@@ -128,16 +142,17 @@ describe("CLI Integration", () => {
   it("should produce table output with --format table", {
     timeout: 30000,
   }, () => {
-    const result = execSync(`node ${BIN_PATH} --format table`, {
+    const result = spawnSync("node", [BIN_PATH, "--format", "table"], {
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
     });
 
-    expect(result).toContain("Hotspots");
-    expect(result).toContain("churn window");
-    expect(result).toContain("Score");
-    expect(result).toContain("Churn");
-    expect(result).toContain("Tier");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Hotspots");
+    expect(result.stdout).toContain("churn window");
+    expect(result.stdout).toContain("Score");
+    expect(result.stdout).toContain("Churn");
+    expect(result.stdout).toContain("Tier");
   });
 
   it("should fail gracefully outside a git repo", () => {

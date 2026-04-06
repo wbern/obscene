@@ -25,6 +25,14 @@ Works on any language scc supports. No configuration needed.
 
 [scc](https://github.com/boyter/scc#install) must be installed and on your PATH.
 
+```bash
+brew install scc          # macOS
+choco install scc         # Windows
+scoop install scc         # Windows (alt)
+```
+
+See [scc install docs](https://github.com/boyter/scc#install) for Linux and other options.
+
 ## Quick run (no install)
 
 ```bash
