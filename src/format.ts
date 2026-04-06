@@ -53,10 +53,13 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
       padLeft("%", 7) +
       padLeft("Churn", 7) +
       padLeft("Cmplx", 7) +
-      padLeft("Density", 9) +
+      padLeft("Dens", 7) +
+      padLeft("Dfcts", 6) +
+      padLeft("Nest", 6) +
+      padLeft("Auth", 6) +
       padLeft("Tier", 8),
   );
-  lines.push("─".repeat(96));
+  lines.push("─".repeat(112));
 
   for (const h of hotspots) {
     const tierLabel =
@@ -67,7 +70,10 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
         padLeft(h.percentOfTotal.toFixed(1), 7) +
         padLeft(String(h.churn), 7) +
         padLeft(String(h.complexity), 7) +
-        padLeft(h.complexityDensity.toFixed(2), 9) +
+        padLeft(h.complexityDensity.toFixed(2), 7) +
+        padLeft(String(h.defects), 6) +
+        padLeft(String(h.maxNesting), 6) +
+        padLeft(String(h.authors), 6) +
         padLeft(tierLabel, 8),
     );
   }

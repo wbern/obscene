@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { FileMetrics, HotspotEntry, SccLanguage, Tier } from "./types.js";
 
 const DEFAULT_EXCLUDES = [
@@ -91,17 +92,20 @@ export function runScc(excludes: string[] = []): FileMetrics[] {
 }
 
 /**
- * Count commits per file over a given time window via git log.
+ * Run a git log command that produces one file path per line and return counts.
  */
-export function getChurn(months: number): Map<string, number> {
+function gitFileCount(
+  gitArgs: string,
+  errorMessage: string,
+): Map<string, number> {
   let raw: Buffer;
   try {
-    raw = execSync(
-      `git log --since="${months} months ago" --format="" --name-only`,
-      { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
-    );
+    raw = execSync(gitArgs, {
+      maxBuffer: 50 * 1024 * 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
   } catch {
-    throw new Error("Not a git repository or git is not installed.");
+    throw new Error(errorMessage);
   }
 
   const counts = new Map<string, number>();
@@ -114,19 +118,140 @@ export function getChurn(months: number): Map<string, number> {
 }
 
 /**
+ * Count commits per file over a given time window via git log.
+ */
+export function getChurn(months: number): Map<string, number> {
+  return gitFileCount(
+    `git log --since="${months} months ago" --format="" --name-only`,
+    "Not a git repository or git is not installed.",
+  );
+}
+
+/**
+ * Count fix commits (conventional commit `fix:` prefix) per file.
+ */
+export function getDefects(months: number): Map<string, number> {
+  return gitFileCount(
+    `git log --since="${months} months ago" --grep="^fix" --format="" --name-only`,
+    "Not a git repository or git is not installed.",
+  );
+}
+
+/**
+ * Count unique git authors per file over a given time window.
+ */
+export function getAuthors(months: number): Map<string, number> {
+  let raw: Buffer;
+  try {
+    raw = execSync(
+      `git log --since="${months} months ago" --format="COMMIT_SEP%n%aN" --name-only`,
+      { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+    );
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+
+  const authorSets = new Map<string, Set<string>>();
+  const blocks = raw.toString().split("COMMIT_SEP\n");
+
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    const lines = block.split("\n");
+    const author = lines[0].trim();
+    if (!author) continue;
+    for (let i = 1; i < lines.length; i++) {
+      const file = normalizePath(lines[i].trim());
+      if (!file) continue;
+      let set = authorSets.get(file);
+      if (!set) {
+        set = new Set();
+        authorSets.set(file, set);
+      }
+      set.add(author);
+    }
+  }
+
+  const counts = new Map<string, number>();
+  for (const [file, set] of authorSets) {
+    counts.set(file, set.size);
+  }
+  return counts;
+}
+
+/**
+ * Measure deepest indentation level per file.
+ * Language-agnostic: detects indent unit from smallest non-zero leading space count.
+ */
+export function getNestingDepths(filePaths: string[]): Map<string, number> {
+  const depths = new Map<string, number>();
+
+  for (const filePath of filePaths) {
+    let content: string;
+    try {
+      content = readFileSync(filePath, "utf-8");
+    } catch {
+      depths.set(filePath, 0);
+      continue;
+    }
+
+    let minSpaces = Number.POSITIVE_INFINITY;
+    const leadings: string[] = [];
+    for (const line of content.split("\n")) {
+      if (!line.trim()) continue;
+      const match = line.match(/^(\s+)/);
+      if (!match) continue;
+      const leading = match[1];
+      leadings.push(leading);
+      const spaceCount = (leading.match(/ /g) ?? []).length;
+      if (spaceCount > 0 && !leading.includes("\t") && spaceCount < minSpaces) {
+        minSpaces = spaceCount;
+      }
+    }
+
+    const indentUnit = minSpaces === Number.POSITIVE_INFINITY ? 4 : minSpaces;
+    let maxDepth = 0;
+    for (const leading of leadings) {
+      let depth = 0;
+      for (const ch of leading) {
+        if (ch === "\t") {
+          depth += 1;
+        } else if (ch === " ") {
+          depth += 1 / indentUnit;
+        }
+      }
+      depth = Math.floor(depth);
+      if (depth > maxDepth) maxDepth = depth;
+    }
+
+    depths.set(filePath, maxDepth);
+  }
+
+  return depths;
+}
+
+/**
  * Score files by churn × complexity and assign cumulative-distribution tiers.
  */
 export function computeHotspots(
   files: FileMetrics[],
   churn: Map<string, number>,
+  defects: Map<string, number> = new Map(),
+  nestingDepths: Map<string, number> = new Map(),
+  authors: Map<string, number> = new Map(),
 ): HotspotEntry[] {
   const scored = files
     .map((f) => {
       const fileChurn = churn.get(f.file) ?? 0;
+      const fileDefects = defects.get(f.file) ?? 0;
       return {
         ...f,
         churn: fileChurn,
         hotspotScore: f.complexity * fileChurn,
+        defects: fileDefects,
+        defectDensity:
+          f.code > 0 ? Math.round((fileDefects / f.code) * 10000) / 10000 : 0,
+        maxNesting: nestingDepths.get(f.file) ?? 0,
+        authors: authors.get(f.file) ?? 0,
       };
     })
     .filter((h) => h.hotspotScore > 0)

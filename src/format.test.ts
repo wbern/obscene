@@ -97,6 +97,10 @@ describe("formatHotspotsTable", () => {
           hotspotScore: 750,
           percentOfTotal: 75,
           tier: "danger",
+          defects: 3,
+          defectDensity: 0.015,
+          maxNesting: 4,
+          authors: 2,
         },
         {
           file: "src/bar.ts",
@@ -109,6 +113,10 @@ describe("formatHotspotsTable", () => {
           hotspotScore: 250,
           percentOfTotal: 25,
           tier: "watch",
+          defects: 1,
+          defectDensity: 0.01,
+          maxNesting: 2,
+          authors: 1,
         },
       ],
     };
@@ -126,6 +134,9 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("src/foo.ts");
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Showing: 2 of 2");
+    expect(result).toContain("Dfcts");
+    expect(result).toContain("Nest");
+    expect(result).toContain("Auth");
   });
 
   it("shows stable tier label in lowercase", () => {
@@ -148,6 +159,10 @@ describe("formatHotspotsTable", () => {
           hotspotScore: 100,
           percentOfTotal: 100,
           tier: "stable",
+          defects: 0,
+          defectDensity: 0,
+          maxNesting: 0,
+          authors: 0,
         },
       ],
     };
@@ -177,6 +192,10 @@ describe("formatHotspotsTable", () => {
           hotspotScore: 10000000000,
           percentOfTotal: 100,
           tier: "danger",
+          defects: 0,
+          defectDensity: 0,
+          maxNesting: 0,
+          authors: 0,
         },
       ],
     };
@@ -208,6 +227,10 @@ describe("formatHotspotsTable", () => {
           hotspotScore: 500,
           percentOfTotal: 100,
           tier: "danger",
+          defects: 0,
+          defectDensity: 0,
+          maxNesting: 0,
+          authors: 0,
         },
       ],
     };

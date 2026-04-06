@@ -144,6 +144,10 @@ describe("CLI Integration", () => {
       expect(first).toHaveProperty("churn");
       expect(first).toHaveProperty("hotspotScore");
       expect(first).toHaveProperty("tier");
+      expect(first).toHaveProperty("defects");
+      expect(first).toHaveProperty("defectDensity");
+      expect(first).toHaveProperty("maxNesting");
+      expect(first).toHaveProperty("authors");
     }
   });
 

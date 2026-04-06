@@ -1,7 +1,14 @@
 declare const __VERSION__: string;
 
 import { Command } from "commander";
-import { computeHotspots, getChurn, runScc } from "./analyze.js";
+import {
+  computeHotspots,
+  getAuthors,
+  getChurn,
+  getDefects,
+  getNestingDepths,
+  runScc,
+} from "./analyze.js";
 import { formatHotspotsTable, formatReportTable } from "./format.js";
 import type { HotspotsOutput, ReportOutput } from "./types.js";
 
@@ -99,7 +106,16 @@ function runHotspots(opts: HotspotsOpts): void {
   const months = parseInt(opts.months, 10);
   const files = runScc(opts.exclude);
   const churn = getChurn(months);
-  const hotspots = computeHotspots(files, churn);
+  const defects = getDefects(months);
+  const authors = getAuthors(months);
+  const nestingDepths = getNestingDepths(files.map((f) => f.file));
+  const hotspots = computeHotspots(
+    files,
+    churn,
+    defects,
+    nestingDepths,
+    authors,
+  );
 
   const limited = top > 0 ? hotspots.slice(0, top) : hotspots;
 

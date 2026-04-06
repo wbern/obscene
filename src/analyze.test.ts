@@ -1,14 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { computeHotspots, getChurn, runScc } from "./analyze.js";
+import {
+  computeHotspots,
+  getAuthors,
+  getChurn,
+  getDefects,
+  getNestingDepths,
+  runScc,
+} from "./analyze.js";
 import type { FileMetrics } from "./types.js";
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
 }));
 
+vi.mock("node:fs", () => ({
+  readFileSync: vi.fn(),
+}));
+
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const mockExecSync = vi.mocked(execSync);
+const mockReadFileSync = vi.mocked(readFileSync);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -316,6 +329,174 @@ describe("getChurn", () => {
   });
 });
 
+describe("getDefects", () => {
+  it("counts fix commits per file", () => {
+    const gitOutput = "src/foo.ts\nsrc/bar.ts\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getDefects(3);
+
+    expect(result.get("src/foo.ts")).toBe(2);
+    expect(result.get("src/bar.ts")).toBe(1);
+  });
+
+  it("passes --grep flag to match fix commits", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    getDefects(6);
+
+    expect(mockExecSync).toHaveBeenCalledWith(
+      expect.stringContaining('--grep="^fix"'),
+      expect.any(Object),
+    );
+  });
+
+  it("returns empty map when no fix commits exist", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = getDefects(3);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("throws error when not in a git repo", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+
+    expect(() => getDefects(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+});
+
+describe("getAuthors", () => {
+  it("counts unique authors per file", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\nsrc/foo.ts\nsrc/bar.ts\nCOMMIT_SEP\nBob\nsrc/foo.ts\nCOMMIT_SEP\nAlice\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    expect(result.get("src/foo.ts")).toBe(2);
+    expect(result.get("src/bar.ts")).toBe(1);
+  });
+
+  it("returns 1 for single-author file", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\nsrc/solo.ts\nCOMMIT_SEP\nAlice\nsrc/solo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    expect(result.get("src/solo.ts")).toBe(1);
+  });
+
+  it("normalizes paths with ./ prefix", () => {
+    const gitOutput = "COMMIT_SEP\nAlice\n./src/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    expect(result.get("src/foo.ts")).toBe(1);
+  });
+
+  it("skips blocks with empty author", () => {
+    const gitOutput =
+      "COMMIT_SEP\n\nsrc/foo.ts\nCOMMIT_SEP\nAlice\nsrc/bar.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    expect(result.has("src/foo.ts")).toBe(false);
+    expect(result.get("src/bar.ts")).toBe(1);
+  });
+
+  it("returns empty map when no commits exist", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = getAuthors(3);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("throws error when not in a git repo", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+
+    expect(() => getAuthors(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+});
+
+describe("getNestingDepths", () => {
+  it("detects nesting depth with 2-space indentation", () => {
+    const content = "function foo() {\n  if (x) {\n    return;\n  }\n}\n";
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/foo.ts"]);
+
+    expect(result.get("src/foo.ts")).toBe(2);
+  });
+
+  it("detects nesting depth with 4-space indentation", () => {
+    const content =
+      "function foo() {\n    if (x) {\n        return;\n    }\n}\n";
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/foo.ts"]);
+
+    expect(result.get("src/foo.ts")).toBe(2);
+  });
+
+  it("detects nesting depth with tabs", () => {
+    const content = "function foo() {\n\tif (x) {\n\t\treturn;\n\t}\n}\n";
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/foo.ts"]);
+
+    expect(result.get("src/foo.ts")).toBe(2);
+  });
+
+  it("returns 0 for flat file with no indentation", () => {
+    const content = "const a = 1;\nconst b = 2;\n";
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/flat.ts"]);
+
+    expect(result.get("src/flat.ts")).toBe(0);
+  });
+
+  it("returns 0 for empty file", () => {
+    mockReadFileSync.mockReturnValue("");
+
+    const result = getNestingDepths(["src/empty.ts"]);
+
+    expect(result.get("src/empty.ts")).toBe(0);
+  });
+
+  it("returns 0 for unreadable file", () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    const result = getNestingDepths(["src/missing.ts"]);
+
+    expect(result.get("src/missing.ts")).toBe(0);
+  });
+
+  it("skips blank lines when measuring depth", () => {
+    const content = "function foo() {\n\n  return;\n}\n";
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/blanks.ts"]);
+
+    expect(result.get("src/blanks.ts")).toBe(1);
+  });
+});
+
 describe("computeHotspots", () => {
   const files: FileMetrics[] = [
     {
@@ -455,5 +636,57 @@ describe("computeHotspots", () => {
 
     // Should sum to ~100%
     expect(totalPercent).toBeCloseTo(100, 0);
+  });
+
+  it("populates defects, defectDensity, maxNesting, and authors from maps", () => {
+    const churn = new Map([["a.ts", 10]]);
+    const defects = new Map([["a.ts", 3]]);
+    const nestingDepths = new Map([["a.ts", 5]]);
+    const authors = new Map([["a.ts", 2]]);
+
+    const result = computeHotspots(
+      files,
+      churn,
+      defects,
+      nestingDepths,
+      authors,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].defects).toBe(3);
+    expect(result[0].defectDensity).toBe(0.03); // 3/100
+    expect(result[0].maxNesting).toBe(5);
+    expect(result[0].authors).toBe(2);
+  });
+
+  it("sets defectDensity to 0 when code is 0", () => {
+    const zeroCodeFiles: FileMetrics[] = [
+      {
+        file: "empty.ts",
+        code: 0,
+        lines: 5,
+        complexity: 1,
+        comments: 0,
+        complexityDensity: 0,
+      },
+    ];
+    const churn = new Map([["empty.ts", 2]]);
+    const defects = new Map([["empty.ts", 1]]);
+
+    const result = computeHotspots(zeroCodeFiles, churn, defects);
+
+    expect(result[0].defectDensity).toBe(0);
+    expect(result[0].defects).toBe(1);
+  });
+
+  it("defaults new fields to zero when maps are empty", () => {
+    const churn = new Map([["a.ts", 10]]);
+
+    const result = computeHotspots(files, churn);
+
+    expect(result[0].defects).toBe(0);
+    expect(result[0].defectDensity).toBe(0);
+    expect(result[0].maxNesting).toBe(0);
+    expect(result[0].authors).toBe(0);
   });
 });

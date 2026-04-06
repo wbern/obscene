@@ -27,6 +27,10 @@ export interface HotspotEntry extends FileMetrics {
   hotspotScore: number;
   percentOfTotal: number;
   tier: Tier;
+  defects: number;
+  defectDensity: number;
+  maxNesting: number;
+  authors: number;
 }
 
 export interface ReportOutput {
