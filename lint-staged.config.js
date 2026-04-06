@@ -5,4 +5,6 @@ export default {
   ],
   "*.{js,jsx,cjs,mjs}": ["biome check --write --no-errors-on-unmatched"],
   "*.json": ["biome check --write --no-errors-on-unmatched"],
+  // Run secretlint on all files
+  "*": ["secretlint"],
 };
