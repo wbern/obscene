@@ -3,6 +3,34 @@
 # Validate commit author matches expected identity
 EXPECTED_NAME="wbern"
 EXPECTED_EMAIL="wbern@users.noreply.github.com"
+
+# Check for env vars that override git config (Gas Town sets these for agents)
+BLOCKED=""
+if [ -n "$GIT_AUTHOR_NAME" ] && [ "$GIT_AUTHOR_NAME" != "$EXPECTED_NAME" ]; then
+  BLOCKED="${BLOCKED}  GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME\n"
+fi
+if [ -n "$GIT_AUTHOR_EMAIL" ] && [ "$GIT_AUTHOR_EMAIL" != "$EXPECTED_EMAIL" ]; then
+  BLOCKED="${BLOCKED}  GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL\n"
+fi
+if [ -n "$GIT_COMMITTER_NAME" ] && [ "$GIT_COMMITTER_NAME" != "$EXPECTED_NAME" ]; then
+  BLOCKED="${BLOCKED}  GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME\n"
+fi
+if [ -n "$GIT_COMMITTER_EMAIL" ] && [ "$GIT_COMMITTER_EMAIL" != "$EXPECTED_EMAIL" ]; then
+  BLOCKED="${BLOCKED}  GIT_COMMITTER_EMAIL=$GIT_COMMITTER_EMAIL\n"
+fi
+
+if [ -n "$BLOCKED" ]; then
+  echo "❌ Environment variables are overriding git author identity"
+  echo "   Expected: $EXPECTED_NAME <$EXPECTED_EMAIL>"
+  echo ""
+  printf "   Offending variables:\n$BLOCKED"
+  echo ""
+  echo "Fix by unsetting them before committing:"
+  echo "   unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL"
+  exit 1
+fi
+
+# Also validate git config itself
 AUTHOR_NAME=$(git config user.name)
 AUTHOR_EMAIL=$(git config user.email)
 
