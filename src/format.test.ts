@@ -10,6 +10,7 @@ describe("formatReportTable", () => {
   it("formats report output as a table", () => {
     const output: ReportOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       summary: {
         totalComplexity: 50,
         totalCode: 300,
@@ -48,11 +49,14 @@ describe("formatReportTable", () => {
     expect(result).toContain("0.15");
     expect(result).toContain("0.20");
     expect(result).toContain("Showing: 2");
+    expect(result).toContain("Compare density across files");
+    expect(result).toContain("Docs: https://github.com/wbern/obscene#metrics");
   });
 
   it("truncates long file paths", () => {
     const output: ReportOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       summary: {
         totalComplexity: 10,
         totalCode: 100,
@@ -84,6 +88,7 @@ describe("formatHotspotsTable", () => {
   it("formats hotspot output as a table", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       totalScore: 1000,
       tierCounts: { danger: 1, watch: 1, stable: 0 },
@@ -147,12 +152,14 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("Dfcts=fix commits");
     expect(result).toContain("Nest=max indent depth");
     expect(result).toContain("Auth=unique authors");
+    expect(result).toContain("not absolute quality grades");
     expect(result).toContain("Docs: https://github.com/wbern/obscene#metrics");
   });
 
   it("shows stable tier label in lowercase", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       totalScore: 100,
       tierCounts: { danger: 0, watch: 0, stable: 1 },
@@ -186,6 +193,7 @@ describe("formatHotspotsTable", () => {
   it("handles large scores that overflow column width", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       totalScore: 10000000000,
       tierCounts: { danger: 1, watch: 0, stable: 0 },
@@ -221,6 +229,7 @@ describe("formatHotspotsTable", () => {
   it("truncates long file paths in hotspots", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       totalScore: 500,
       tierCounts: { danger: 1, watch: 0, stable: 0 },
@@ -256,6 +265,7 @@ describe("formatCouplingTable", () => {
   it("formats coupling output with all expected content", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       minCochanges: 2,
       totalScore: 15,
@@ -306,6 +316,7 @@ describe("formatCouplingTable", () => {
   it("shows stable tier in lowercase", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       minCochanges: 1,
       totalScore: 3,
@@ -335,6 +346,7 @@ describe("formatCouplingTable", () => {
   it("truncates long file paths", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
       churnWindow: "3 months",
       minCochanges: 1,
       totalScore: 5,

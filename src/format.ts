@@ -36,6 +36,15 @@ export function formatReportTable(output: ReportOutput): string {
     );
   }
 
+  lines.push("");
+  lines.push(
+    "Complexity=cyclomatic branch/loop count | Density=complexity/code | Comments=comment lines",
+  );
+  lines.push(
+    "High complexity is expected for parsers, state machines, and business logic. Compare density across files, not raw values.",
+  );
+  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+
   return lines.join("\n");
 }
 
@@ -81,6 +90,12 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   lines.push(
     "Score=complexity\u00D7churn | Dens=complexity/code | Dfcts=fix commits | Nest=max indent depth | Auth=unique authors",
   );
+  lines.push(
+    "Tiers are relative to THIS codebase, not absolute quality grades. A 'danger' file in a clean codebase may be fine.",
+  );
+  lines.push(
+    "High scores flag review candidates, not bad code — stable complex files (parsers, engines) score high naturally.",
+  );
   lines.push("Docs: https://github.com/wbern/obscene#metrics");
 
   return lines.join("\n");
@@ -119,6 +134,12 @@ export function formatCouplingTable(output: CouplingOutput): string {
   lines.push("");
   lines.push(
     "Shared=co-changed commits | Degree=shared/min(churn)\u00D7100 | Cmplx=sum of both files",
+  );
+  lines.push(
+    "Tiers are relative to THIS codebase, not absolute quality grades. High coupling may be intentional and fine.",
+  );
+  lines.push(
+    "Same-directory pairs excluded. Commits touching >20 files skipped. Only cross-directory dependencies shown.",
   );
   lines.push("Docs: https://github.com/wbern/obscene#metrics");
 

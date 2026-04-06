@@ -40,6 +40,41 @@ interface CouplingOpts extends SharedOpts {
   minCochanges: string;
 }
 
+const REPORT_GUIDE: Record<string, string> = {
+  complexity:
+    "Cyclomatic complexity (branch/loop count). NOT a quality judgment — a 500-line parser will naturally score high. Compare density, not raw values.",
+  complexityDensity:
+    "Complexity per line of code. Normalizes for file size. >0.25 suggests dense logic worth reviewing; <0.10 is typical for straightforward code.",
+  comments:
+    "Comment line count. Low comments in high-density files may indicate under-documented logic. High comments alone is not a problem.",
+};
+
+const HOTSPOTS_GUIDE: Record<string, string> = {
+  hotspotScore:
+    "complexity × churn. Ranks files by combined risk: complex code that changes often. High score does NOT mean bad code — stable high-complexity files (parsers, engines) are fine. Focus on files where score is rising over time.",
+  churn:
+    "Commit count in the time window. High churn alone is neutral — active development is normal. It becomes a signal when combined with high complexity.",
+  tier: "Relative ranking within THIS codebase (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade. A 'danger' file in a clean codebase may be perfectly fine. Compare across runs to spot trends.",
+  defects:
+    "Count of fix: conventional commits. A proxy for bug frequency — 0 does not mean bug-free, and >0 does not mean bad code. Useful for spotting files that attract repeated fixes.",
+  defectDensity:
+    "Fix commits per line of code. Normalizes defect count by file size. Only meaningful with conventional commits (fix: prefix).",
+  maxNesting:
+    "Deepest indentation level. >6 suggests complex control flow worth simplifying. Language-dependent — Python files naturally nest less than C++.",
+  authors:
+    "Unique committers in the time window. High author count may indicate unclear ownership. Low count is normal for specialized code. Neither value is inherently good or bad.",
+};
+
+const COUPLING_GUIDE: Record<string, string> = {
+  cochanges:
+    "Times both files appeared in the same commit. Higher values suggest a dependency between the files. Same-directory pairs are excluded — only cross-directory pairs are shown.",
+  degree:
+    "Percentage: shared commits / min(churn of file1, file2) × 100. Shows how tightly coupled the pair is relative to their individual change rates. 100% means every change to the less-active file also touched the other.",
+  totalComplexity:
+    "Sum of both files' cyclomatic complexity. Highlights coupled pairs where the involved code is also complex — hidden dependency + high complexity compounds maintenance risk.",
+  tier: "Relative ranking within THIS codebase's coupling pairs (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade. 'danger' means this pair co-changes more than most — it may be intentional and fine.",
+};
+
 function addSharedOptions(cmd: Command): Command {
   return cmd
     .option("--top <n>", "limit to top N entries (0 = all)", "20")
@@ -111,6 +146,7 @@ function runReport(opts: SharedOpts): void {
 
   const output: ReportOutput = {
     generated: new Date().toISOString(),
+    guide: REPORT_GUIDE,
     summary: {
       ...totals,
       fileCount: files.length,
@@ -157,6 +193,7 @@ function runHotspots(opts: HotspotsOpts): void {
 
   const output: HotspotsOutput = {
     generated: new Date().toISOString(),
+    guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
     totalScore,
     tierCounts,
@@ -203,6 +240,7 @@ function runCoupling(opts: CouplingOpts): void {
 
   const output: CouplingOutput = {
     generated: new Date().toISOString(),
+    guide: COUPLING_GUIDE,
     churnWindow: `${months} months`,
     minCochanges,
     totalScore,

@@ -133,6 +133,8 @@ describe("CLI Integration", () => {
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toHaveProperty("generated");
+    expect(parsed).toHaveProperty("guide");
+    expect(parsed.guide).toHaveProperty("hotspotScore");
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("hotspots");
     expect(Array.isArray(parsed.hotspots)).toBe(true);
@@ -184,6 +186,8 @@ describe("CLI Integration", () => {
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed).toHaveProperty("generated");
+    expect(parsed).toHaveProperty("guide");
+    expect(parsed.guide).toHaveProperty("cochanges");
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("minCochanges", 1);
     expect(parsed).toHaveProperty("couplings");

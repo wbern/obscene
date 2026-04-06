@@ -35,6 +35,7 @@ export interface HotspotEntry extends FileMetrics {
 
 export interface ReportOutput {
   generated: string;
+  guide: Record<string, string>;
   summary: {
     totalComplexity: number;
     totalCode: number;
@@ -48,6 +49,7 @@ export interface ReportOutput {
 
 export interface HotspotsOutput {
   generated: string;
+  guide: Record<string, string>;
   churnWindow: string;
   totalScore: number;
   tierCounts: Record<Tier, number>;
@@ -69,6 +71,7 @@ export interface CouplingEntry {
 
 export interface CouplingOutput {
   generated: string;
+  guide: Record<string, string>;
   churnWindow: string;
   minCochanges: number;
   totalScore: number;
