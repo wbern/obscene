@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import type { FileMetrics, HotspotEntry, Tier, SccLanguage } from "./types.js";
+import type { FileMetrics, HotspotEntry, SccLanguage, Tier } from "./types.js";
 
 const DEFAULT_EXCLUDES = [
   /\.test\./,
@@ -54,7 +54,12 @@ export function runScc(excludes: string[] = []): FileMetrics[] {
       stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (err: unknown) {
-    if (err && typeof err === "object" && "code" in err && err.code === "ENOENT") {
+    if (
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      err.code === "ENOENT"
+    ) {
       throw new Error(
         "scc not found. Install it: https://github.com/boyter/scc#install",
       );
@@ -76,9 +81,7 @@ export function runScc(excludes: string[] = []): FileMetrics[] {
         complexity: f.Complexity,
         comments: f.Comment,
         complexityDensity:
-          f.Code > 0
-            ? Math.round((f.Complexity / f.Code) * 100) / 100
-            : 0,
+          f.Code > 0 ? Math.round((f.Complexity / f.Code) * 100) / 100 : 0,
       });
     }
   }

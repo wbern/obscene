@@ -1,4 +1,4 @@
-import type { ReportOutput, HotspotsOutput } from "./types.js";
+import type { HotspotsOutput, ReportOutput } from "./types.js";
 
 export function formatReportTable(output: ReportOutput): string {
   const lines: string[] = [];
@@ -76,6 +76,7 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
 }
 
 function padRight(s: string, n: number): string {
+  /* v8 ignore next -- truncation ensures s < n in all call sites */
   return s.length >= n ? s : s + " ".repeat(n - s.length);
 }
 
@@ -84,5 +85,5 @@ function padLeft(s: string, n: number): string {
 }
 
 function truncate(s: string, max: number): string {
-  return s.length <= max ? s : "…" + s.slice(s.length - max + 1);
+  return s.length <= max ? s : `…${s.slice(s.length - max + 1)}`;
 }

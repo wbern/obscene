@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Run lint-staged (biome, tsc on staged files)
+pnpm exec lint-staged
+
+# Check for unused code/dependencies
+pnpm knip --no-config-hints
+
+# Check for code duplication
+pnpm duplication-check
+
+# Build
+pnpm build
+
+# Run tests with coverage (fails if below thresholds)
+pnpm test:coverage

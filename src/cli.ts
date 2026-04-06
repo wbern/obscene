@@ -1,17 +1,15 @@
 declare const __VERSION__: string;
 
 import { Command } from "commander";
-import { runScc, getChurn, computeHotspots } from "./analyze.js";
-import { formatReportTable, formatHotspotsTable } from "./format.js";
-import type { ReportOutput, HotspotsOutput } from "./types.js";
+import { computeHotspots, getChurn, runScc } from "./analyze.js";
+import { formatHotspotsTable, formatReportTable } from "./format.js";
+import type { HotspotsOutput, ReportOutput } from "./types.js";
 
 const program = new Command();
 
 program
   .name("obscene")
-  .description(
-    "Identify hotspot files — complex code that changes frequently",
-  )
+  .description("Identify hotspot files — complex code that changes frequently")
   .version(__VERSION__);
 
 interface SharedOpts {
@@ -90,9 +88,9 @@ function runReport(opts: SharedOpts): void {
   };
 
   if (opts.format === "table") {
-    process.stdout.write(formatReportTable(output) + "\n");
+    process.stdout.write(`${formatReportTable(output)}\n`);
   } else {
-    process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }
 }
 
@@ -123,9 +121,9 @@ function runHotspots(opts: HotspotsOpts): void {
   };
 
   if (opts.format === "table") {
-    process.stdout.write(formatHotspotsTable(output) + "\n");
+    process.stdout.write(`${formatHotspotsTable(output)}\n`);
   } else {
-    process.stdout.write(JSON.stringify(output, null, 2) + "\n");
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }
 }
 

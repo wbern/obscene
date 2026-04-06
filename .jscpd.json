@@ -1,0 +1,18 @@
+{
+  "threshold": 0,
+  "minTokens": 40,
+  "include": ["src/**/*.{ts,js}"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/*.test.{ts,js}",
+    "**/*.spec.{ts,js}",
+    "**/*.d.ts",
+    "**/*.config.{ts,js}",
+    "**/dist/**",
+    "**/coverage/**"
+  ],
+  "format": ["javascript", "typescript"],
+  "reporters": ["console"],
+  "skipComments": true,
+  "gitignore": true
+}
