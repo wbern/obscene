@@ -1,4 +1,4 @@
-# code-hotspots
+# obscene
 
 Identify hotspot files — complex code that changes frequently.
 
@@ -9,7 +9,7 @@ Works on any language scc supports. No configuration needed.
 ## Install
 
 ```bash
-npm install -g code-hotspots
+npm install -g @wbern/obscene
 ```
 
 Requires [scc](https://github.com/boyter/scc#install) to be installed separately.
@@ -18,33 +18,33 @@ Requires [scc](https://github.com/boyter/scc#install) to be installed separately
 
 ```bash
 # Run from any git repo — shows top 20 hotspots (default)
-hotspot
+obscene
 
 # More results
-hotspot --top 50
+obscene --top 50
 
 # All files
-hotspot --top 0
+obscene --top 0
 
 # 6-month churn window (default: 3)
-hotspot --months 6
+obscene --months 6
 
 # Raw complexity data (no churn)
-hotspot report
+obscene report
 
 # Human-readable table output
-hotspot --format table
+obscene --format table
 
 # Custom exclusion patterns
-hotspot --exclude "*.generated.*"
+obscene --exclude "*.generated.*"
 
 # Pipe-friendly JSON to stdout
-hotspot | jq '.hotspots[0]'
+obscene | jq '.hotspots[0]'
 ```
 
 ## Commands
 
-### `hotspot hotspots` (default)
+### `obscene hotspots` (default)
 
 Churn × complexity analysis. Scores each file by `complexity × commits` over a configurable time window, then assigns tiers based on cumulative score distribution:
 
@@ -52,7 +52,7 @@ Churn × complexity analysis. Scores each file by `complexity × commits` over a
 - **watch** — next 30% (cumulative 50–80%)
 - **stable** — bottom 20%
 
-### `hotspot report`
+### `obscene report`
 
 Per-file complexity data without churn. Useful for understanding raw complexity distribution.
 

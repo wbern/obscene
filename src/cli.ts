@@ -8,7 +8,7 @@ import type { ReportOutput, HotspotsOutput } from "./types.js";
 const program = new Command();
 
 program
-  .name("hotspot")
+  .name("obscene")
   .description(
     "Identify hotspot files — complex code that changes frequently",
   )
