@@ -28,9 +28,9 @@ describe("visualWidth", () => {
 
   it("counts emoji as 2 columns wide", () => {
     expect(visualWidth("🔴")).toBe(2);
-    expect(visualWidth("🔴 DANGER")).toBe(9);
-    expect(visualWidth("🟡 WATCH")).toBe(8);
-    expect(visualWidth("🟢 stable")).toBe(9);
+    expect(visualWidth("🔥 HOT")).toBe(6);
+    expect(visualWidth("☀️ WARM")).toBe(7);
+    expect(visualWidth("🧊 cool")).toBe(7);
   });
 
   it("counts CJK characters as 2 columns wide", () => {
@@ -126,68 +126,66 @@ describe("truncate", () => {
 });
 
 describe("tierLabel", () => {
-  it("returns label with emoji for danger", () => {
-    const label = tierLabel("danger");
-    expect(label).toContain("DANGER");
-    expect(label).toContain("🔴");
+  it("returns label with emoji for hot", () => {
+    const label = tierLabel("hot");
+    expect(label).toContain("HOT");
+    expect(label).toContain("🔥");
   });
 
-  it("returns label with emoji for watch", () => {
-    const label = tierLabel("watch");
-    expect(label).toContain("WATCH");
-    expect(label).toContain("🟡");
+  it("returns label with emoji for warm", () => {
+    const label = tierLabel("warm");
+    expect(label).toContain("WARM");
+    expect(label).toContain("☀️");
   });
 
-  it("returns label with emoji for stable", () => {
-    const label = tierLabel("stable");
-    expect(label).toContain("stable");
-    expect(label).toContain("🟢");
+  it("returns label with emoji for cool", () => {
+    const label = tierLabel("cool");
+    expect(label).toContain("cool");
+    expect(label).toContain("🧊");
   });
 });
 
 describe("colorRow", () => {
-  it("preserves text content for danger", () => {
-    const result = colorRow("danger", "test row data");
+  it("preserves text content for hot", () => {
+    const result = colorRow("hot", "test row data");
     expect(result).toContain("test row data");
   });
 
-  it("preserves text content for watch", () => {
-    const result = colorRow("watch", "test row data");
+  it("preserves text content for warm", () => {
+    const result = colorRow("warm", "test row data");
     expect(result).toContain("test row data");
   });
 
-  it("preserves text content for stable", () => {
-    const result = colorRow("stable", "test row data");
+  it("preserves text content for cool", () => {
+    const result = colorRow("cool", "test row data");
     expect(result).toContain("test row data");
   });
 
   it("returns different output for different tiers (when color enabled)", () => {
-    // Even if no ANSI in test env, the function returns the wrapped text
-    const danger = colorRow("danger", "x");
-    const watch = colorRow("watch", "x");
-    const stable = colorRow("stable", "x");
-    // All should contain the text
-    expect(danger).toContain("x");
-    expect(watch).toContain("x");
-    expect(stable).toContain("x");
+    const hot = colorRow("hot", "x");
+    const warm = colorRow("warm", "x");
+    const cool = colorRow("cool", "x");
+    expect(hot).toContain("x");
+    expect(warm).toContain("x");
+    expect(cool).toContain("x");
   });
 });
 
 describe("tierSummary", () => {
   it("returns two lines with tier counts and showing info", () => {
-    const lines = tierSummary({ danger: 2, watch: 3, stable: 5 }, 10, 20);
+    const lines = tierSummary({ hot: 2, warm: 3, cool: 5 }, 10, 20);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("2 danger");
-    expect(lines[0]).toContain("3 watch");
-    expect(lines[0]).toContain("5 stable");
+    expect(lines[0]).toContain("2 hot");
+    expect(lines[0]).toContain("3 warm");
+    expect(lines[0]).toContain("5 cool");
     expect(lines[1]).toBe("Showing: 10 of 20");
   });
 
   it("includes Tiers prefix in tier line", () => {
-    const lines = tierSummary({ danger: 1, watch: 0, stable: 0 }, 1, 1);
+    const lines = tierSummary({ hot: 1, warm: 0, cool: 0 }, 1, 1);
     expect(lines[0]).toContain("Tiers:");
-    expect(lines[0]).toContain("1 danger");
-    expect(lines[0]).toContain("0 watch");
-    expect(lines[0]).toContain("0 stable");
+    expect(lines[0]).toContain("1 hot");
+    expect(lines[0]).toContain("0 warm");
+    expect(lines[0]).toContain("0 cool");
   });
 });

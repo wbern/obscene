@@ -20,7 +20,7 @@ export interface FileMetrics {
   complexityDensity: number;
 }
 
-export type Tier = "danger" | "watch" | "stable";
+export type Tier = "hot" | "warm" | "cool";
 
 export interface RankingEntry {
   file: string;

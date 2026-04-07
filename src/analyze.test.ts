@@ -502,26 +502,26 @@ describe("getNestingDepths", () => {
 });
 
 describe("assignTiers", () => {
-  it("assigns danger to items in top 50%, watch to next 30%, stable to rest", () => {
+  it("assigns hot to items in top 50%, warm to next 30%, cool to rest", () => {
     const items = [
-      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
-      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
-      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
-      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "cool" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "cool" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "cool" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "cool" as Tier },
     ];
 
     assignTiers(items, 400);
 
-    expect(items[0].tier).toBe("danger");
-    expect(items[1].tier).toBe("danger");
-    expect(items[2].tier).toBe("watch");
-    expect(items[3].tier).toBe("stable");
+    expect(items[0].tier).toBe("hot");
+    expect(items[1].tier).toBe("hot");
+    expect(items[2].tier).toBe("warm");
+    expect(items[3].tier).toBe("cool");
   });
 
   it("calculates percentOfTotal correctly", () => {
     const items = [
-      { score: 75, percentOfTotal: 0, tier: "stable" as Tier },
-      { score: 25, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 75, percentOfTotal: 0, tier: "cool" as Tier },
+      { score: 25, percentOfTotal: 0, tier: "cool" as Tier },
     ];
 
     assignTiers(items, 100);
@@ -809,10 +809,10 @@ describe("computeAllRankings", () => {
 
     const entries = result.complexity.entries;
     expect(entries).toHaveLength(4);
-    expect(entries[0].tier).toBe("danger");
-    expect(entries[1].tier).toBe("danger");
-    expect(entries[2].tier).toBe("watch");
-    expect(entries[3].tier).toBe("stable");
+    expect(entries[0].tier).toBe("hot");
+    expect(entries[1].tier).toBe("hot");
+    expect(entries[2].tier).toBe("warm");
+    expect(entries[3].tier).toBe("cool");
   });
 
   it("calculates percentOfTotal correctly", () => {
@@ -855,7 +855,7 @@ describe("computeAllRankings", () => {
     );
 
     const counts = result.complexity.tierCounts;
-    const total = counts.danger + counts.watch + counts.stable;
+    const total = counts.hot + counts.warm + counts.cool;
     expect(total).toBe(result.complexity.totalEntries);
   });
 });
@@ -1041,11 +1041,11 @@ describe("computeCoupling", () => {
     const result = computeCoupling(cochanges, new Map(), new Map(), 1);
 
     // All equal: 10 each, total 40
-    // 10/40 = 25% → danger, 50% → danger, 75% → watch, 100% → stable
-    expect(result[0].tier).toBe("danger");
-    expect(result[1].tier).toBe("danger");
-    expect(result[2].tier).toBe("watch");
-    expect(result[3].tier).toBe("stable");
+    // 10/40 = 25% → hot, 50% → hot, 75% → warm, 100% → cool
+    expect(result[0].tier).toBe("hot");
+    expect(result[1].tier).toBe("hot");
+    expect(result[2].tier).toBe("warm");
+    expect(result[3].tier).toBe("cool");
   });
 
   it("returns empty array when all below threshold", () => {
@@ -1130,12 +1130,10 @@ describe("computeComposite", () => {
 
     const result = computeComposite(rankings, new Map(), 0);
 
-    expect(result.entries[0].tier).toBe("danger");
-    expect(result.entries[3].tier).toBe("stable");
+    expect(result.entries[0].tier).toBe("hot");
+    expect(result.entries[3].tier).toBe("cool");
     expect(
-      result.tierCounts.danger +
-        result.tierCounts.watch +
-        result.tierCounts.stable,
+      result.tierCounts.hot + result.tierCounts.warm + result.tierCounts.cool,
     ).toBe(4);
   });
 

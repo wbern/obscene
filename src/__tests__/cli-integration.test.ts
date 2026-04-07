@@ -186,7 +186,7 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Churn");
     expect(result.stdout).toContain("Tier");
     // Emoji presence
-    expect(result.stdout).toMatch(/[🔴🟡🟢]/u);
+    expect(result.stdout).toMatch(/🔥|☀️|🧊/u);
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
     // Combined table
     expect(result.stdout).toContain("Combined");

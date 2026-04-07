@@ -25,11 +25,11 @@ const DEFAULT_EXCLUDES = [
 ];
 
 // Cumulative score tiers — based on share of total hotspot burden.
-// danger: files that together account for the top 50% of total score.
-// watch: next 30% (cumulative 50–80%).
-// stable: bottom 20%.
-const DANGER_CUMULATIVE = 0.5;
-const WATCH_CUMULATIVE = 0.8;
+// hot: files that together account for the top 50% of total score.
+// warm: next 30% (cumulative 50–80%).
+// cool: bottom 20%.
+const HOT_CUMULATIVE = 0.5;
+const WARM_CUMULATIVE = 0.8;
 
 function isExcluded(location: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(location));
@@ -258,12 +258,12 @@ export function assignTiers<
     cumulative += item.score;
     const cumulativeShare = cumulative / totalScore;
 
-    if (cumulativeShare <= DANGER_CUMULATIVE) {
-      item.tier = "danger";
-    } else if (cumulativeShare <= WATCH_CUMULATIVE) {
-      item.tier = "watch";
+    if (cumulativeShare <= HOT_CUMULATIVE) {
+      item.tier = "hot";
+    } else if (cumulativeShare <= WARM_CUMULATIVE) {
+      item.tier = "warm";
     } else {
-      item.tier = "stable";
+      item.tier = "cool";
     }
   }
 }
@@ -311,7 +311,7 @@ function computeRanking(
         file: f.file,
         score: metricValue * fileChurn,
         percentOfTotal: 0,
-        tier: "stable" as Tier,
+        tier: "cool" as Tier,
         churn: fileChurn,
         metricValue,
         metricDensity: densityExtractor ? densityExtractor(f) : undefined,
@@ -373,9 +373,9 @@ export function computeAllRankings(
 
     const limited = top > 0 ? allEntries.slice(0, top) : allEntries;
     const tierCounts: Record<Tier, number> = {
-      danger: 0,
-      watch: 0,
-      stable: 0,
+      hot: 0,
+      warm: 0,
+      cool: 0,
     };
     for (const e of allEntries) {
       tierCounts[e.tier]++;
@@ -423,7 +423,7 @@ export function computeCoupling(
       totalComplexity,
       couplingScore: count,
       percentOfTotal: 0,
-      tier: "stable",
+      tier: "cool",
     });
   }
 
@@ -531,7 +531,7 @@ export function computeComposite(
       file,
       score: Math.round(data.score * 10000) / 10000,
       percentOfTotal: 0,
-      tier: "stable",
+      tier: "cool",
       churn: churn.get(file) ?? 0,
       dimensionCount: data.dims,
     });
@@ -545,7 +545,7 @@ export function computeComposite(
       label: "Combined",
       scoreFormula: "reciprocal rank fusion across all dimensions",
       totalScore: 0,
-      tierCounts: { danger: 0, watch: 0, stable: 0 },
+      tierCounts: { hot: 0, warm: 0, cool: 0 },
       totalEntries: 0,
       showing: 0,
       entries: [],
@@ -555,7 +555,7 @@ export function computeComposite(
   assignTiers(entries, totalScore);
 
   const limited = top > 0 ? entries.slice(0, top) : entries;
-  const tierCounts: Record<Tier, number> = { danger: 0, watch: 0, stable: 0 };
+  const tierCounts: Record<Tier, number> = { hot: 0, warm: 0, cool: 0 };
   for (const e of entries) {
     tierCounts[e.tier]++;
   }

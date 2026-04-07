@@ -101,7 +101,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 1000,
-          tierCounts: { danger: 1, watch: 1, stable: 0 },
+          tierCounts: { hot: 1, warm: 1, cool: 0 },
           totalEntries: 2,
           showing: 2,
           entries: [
@@ -109,7 +109,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 750,
               percentOfTotal: 75,
-              tier: "danger",
+              tier: "hot",
               churn: 15,
               metricValue: 50,
               metricDensity: 0.25,
@@ -118,7 +118,7 @@ describe("formatHotspotsTable", () => {
               file: "src/bar.ts",
               score: 250,
               percentOfTotal: 25,
-              tier: "watch",
+              tier: "warm",
               churn: 10,
               metricValue: 25,
               metricDensity: 0.25,
@@ -138,10 +138,10 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Showing: 2 of 2");
     // Emoji tier labels
-    expect(result).toContain("🔴");
-    expect(result).toContain("DANGER");
-    expect(result).toContain("🟡");
-    expect(result).toContain("WATCH");
+    expect(result).toContain("🔥");
+    expect(result).toContain("HOT");
+    expect(result).toContain("☀️");
+    expect(result).toContain("WARM");
     // Column headers
     expect(result).toContain("Cmplx");
     expect(result).toContain("Dens");
@@ -160,7 +160,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 500,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -168,7 +168,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 500,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 50,
               metricDensity: 0.25,
@@ -179,7 +179,7 @@ describe("formatHotspotsTable", () => {
           label: "Nesting \u00D7 Churn",
           scoreFormula: "maxNesting \u00D7 churn",
           totalScore: 50,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -187,7 +187,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 50,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 5,
             },
@@ -204,7 +204,7 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("Nest");
   });
 
-  it("shows stable tier with green emoji", () => {
+  it("shows cool tier with green emoji", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
@@ -214,7 +214,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 100,
-          tierCounts: { danger: 0, watch: 0, stable: 1 },
+          tierCounts: { hot: 0, warm: 0, cool: 1 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -222,7 +222,7 @@ describe("formatHotspotsTable", () => {
               file: "src/calm.ts",
               score: 100,
               percentOfTotal: 100,
-              tier: "stable",
+              tier: "cool",
               churn: 20,
               metricValue: 5,
               metricDensity: 0.1,
@@ -234,8 +234,8 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("🟢");
-    expect(result).toContain("stable");
+    expect(result).toContain("🧊");
+    expect(result).toContain("cool");
   });
 
   it("handles large scores that overflow column width", () => {
@@ -248,7 +248,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 10000000000,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -256,7 +256,7 @@ describe("formatHotspotsTable", () => {
               file: "src/big.ts",
               score: 10000000000,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 100000,
               metricValue: 100000,
               metricDensity: 1.0,
@@ -282,7 +282,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 500,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -290,7 +290,7 @@ describe("formatHotspotsTable", () => {
               file: "src/very/deeply/nested/directory/structure/component.ts",
               score: 500,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 50,
               metricDensity: 0.5,
@@ -315,7 +315,7 @@ describe("formatHotspotsTable", () => {
           label: "Defects \u00D7 Churn",
           scoreFormula: "defects \u00D7 churn",
           totalScore: 30,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -323,7 +323,7 @@ describe("formatHotspotsTable", () => {
               file: "src/buggy.ts",
               score: 30,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 3,
               metricDensity: 0.03,
@@ -350,7 +350,7 @@ describe("formatHotspotsTable", () => {
           label: "Authors \u00D7 Churn",
           scoreFormula: "authors \u00D7 churn",
           totalScore: 20,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -358,7 +358,7 @@ describe("formatHotspotsTable", () => {
               file: "src/shared.ts",
               score: 20,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 2,
             },
@@ -383,7 +383,7 @@ describe("formatHotspotsTable", () => {
           label: "Complexity \u00D7 Churn",
           scoreFormula: "complexity \u00D7 churn",
           totalScore: 100,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -391,7 +391,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 100,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 10,
               metricValue: 10,
             },
@@ -415,7 +415,7 @@ describe("formatHotspotsTable", () => {
           label: "Defects \u00D7 Churn",
           scoreFormula: "defects \u00D7 churn",
           totalScore: 10,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -423,7 +423,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 10,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 5,
               metricValue: 2,
             },
@@ -447,7 +447,7 @@ describe("formatHotspotsTable", () => {
           label: "Custom Metric",
           scoreFormula: "custom \u00D7 churn",
           totalScore: 42,
-          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
           entries: [
@@ -455,7 +455,7 @@ describe("formatHotspotsTable", () => {
               file: "src/foo.ts",
               score: 42,
               percentOfTotal: 100,
-              tier: "danger",
+              tier: "hot",
               churn: 7,
               metricValue: 6,
             },
@@ -484,7 +484,7 @@ describe("formatCouplingTable", () => {
       churnWindow: "3 months",
       minCochanges: 2,
       totalScore: 15,
-      tierCounts: { danger: 1, watch: 1, stable: 0 },
+      tierCounts: { hot: 1, warm: 1, cool: 0 },
       totalCouplings: 2,
       showing: 2,
       couplings: [
@@ -496,7 +496,7 @@ describe("formatCouplingTable", () => {
           totalComplexity: 45,
           couplingScore: 10,
           percentOfTotal: 66.7,
-          tier: "danger",
+          tier: "hot",
         },
         {
           file1: "src/api.ts",
@@ -506,7 +506,7 @@ describe("formatCouplingTable", () => {
           totalComplexity: 30,
           couplingScore: 5,
           percentOfTotal: 33.3,
-          tier: "watch",
+          tier: "warm",
         },
       ],
     };
@@ -516,10 +516,10 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("Coupling");
     expect(result).toContain("3 months");
     expect(result).toContain("Min shared: 2");
-    expect(result).toContain("🔴");
-    expect(result).toContain("DANGER");
-    expect(result).toContain("🟡");
-    expect(result).toContain("WATCH");
+    expect(result).toContain("🔥");
+    expect(result).toContain("HOT");
+    expect(result).toContain("☀️");
+    expect(result).toContain("WARM");
     expect(result).toContain("src/auth.ts");
     expect(result).toContain("lib/session.ts");
     expect(result).toContain("Showing: 2 of 2");
@@ -527,14 +527,14 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("Degree=shared/min(churn)");
   });
 
-  it("shows stable tier with green emoji", () => {
+  it("shows cool tier with green emoji", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
       minCochanges: 1,
       totalScore: 3,
-      tierCounts: { danger: 0, watch: 0, stable: 1 },
+      tierCounts: { hot: 0, warm: 0, cool: 1 },
       totalCouplings: 1,
       showing: 1,
       couplings: [
@@ -546,15 +546,15 @@ describe("formatCouplingTable", () => {
           totalComplexity: 10,
           couplingScore: 3,
           percentOfTotal: 100,
-          tier: "stable",
+          tier: "cool",
         },
       ],
     };
 
     const result = formatCouplingTable(output);
 
-    expect(result).toContain("🟢");
-    expect(result).toContain("stable");
+    expect(result).toContain("🧊");
+    expect(result).toContain("cool");
   });
 
   it("truncates long file paths", () => {
@@ -564,7 +564,7 @@ describe("formatCouplingTable", () => {
       churnWindow: "3 months",
       minCochanges: 1,
       totalScore: 5,
-      tierCounts: { danger: 1, watch: 0, stable: 0 },
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
       totalCouplings: 1,
       showing: 1,
       couplings: [
@@ -576,7 +576,7 @@ describe("formatCouplingTable", () => {
           totalComplexity: 20,
           couplingScore: 5,
           percentOfTotal: 100,
-          tier: "danger",
+          tier: "hot",
         },
       ],
     };
@@ -593,7 +593,7 @@ describe("formatCompositeTable", () => {
       label: "Combined",
       scoreFormula: "reciprocal rank fusion across all dimensions",
       totalScore: 0.5,
-      tierCounts: { danger: 1, watch: 1, stable: 0 },
+      tierCounts: { hot: 1, warm: 1, cool: 0 },
       totalEntries: 2,
       showing: 2,
       entries: [
@@ -601,7 +601,7 @@ describe("formatCompositeTable", () => {
           file: "src/foo.ts",
           score: 0.3,
           percentOfTotal: 60,
-          tier: "danger",
+          tier: "hot",
           churn: 15,
           dimensionCount: 4,
         },
@@ -609,7 +609,7 @@ describe("formatCompositeTable", () => {
           file: "src/bar.ts",
           score: 0.2,
           percentOfTotal: 40,
-          tier: "watch",
+          tier: "warm",
           churn: 8,
           dimensionCount: 2,
         },
@@ -622,10 +622,10 @@ describe("formatCompositeTable", () => {
     expect(result).toContain("src/foo.ts");
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Dims");
-    expect(result).toContain("🔴");
-    expect(result).toContain("DANGER");
-    expect(result).toContain("🟡");
-    expect(result).toContain("WATCH");
+    expect(result).toContain("🔥");
+    expect(result).toContain("HOT");
+    expect(result).toContain("☀️");
+    expect(result).toContain("WARM");
     expect(result).toContain("Showing: 2 of 2");
   });
 });

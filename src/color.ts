@@ -57,14 +57,14 @@ export function truncate(s: string, max: number): string {
 }
 
 export function tierLabel(tier: Tier): string {
-  if (tier === "danger") return pc.red("🔴 DANGER");
-  if (tier === "watch") return pc.yellow("🟡 WATCH");
-  return pc.green("🟢 stable");
+  if (tier === "hot") return pc.red("🔥 HOT");
+  if (tier === "warm") return pc.yellow("☀️ WARM");
+  return pc.green("🧊 cool");
 }
 
 export function colorRow(tier: Tier, text: string): string {
-  if (tier === "danger") return pc.red(text);
-  if (tier === "watch") return pc.yellow(text);
+  if (tier === "hot") return pc.red(text);
+  if (tier === "warm") return pc.yellow(text);
   return pc.green(text);
 }
 
@@ -75,7 +75,7 @@ export function tierSummary(
 ): string[] {
   const lines: string[] = [];
   lines.push(
-    `Tiers: ${pc.red(`${tierCounts.danger} danger`)}, ${pc.yellow(`${tierCounts.watch} watch`)}, ${pc.green(`${tierCounts.stable} stable`)}`,
+    `Tiers: ${pc.red(`${tierCounts.hot} hot`)}, ${pc.yellow(`${tierCounts.warm} warm`)}, ${pc.green(`${tierCounts.cool} cool`)}`,
   );
   lines.push(`Showing: ${showing} of ${total}`);
   return lines;

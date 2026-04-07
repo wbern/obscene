@@ -64,7 +64,7 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
     "authors × churn. Files touched by many authors and changing often may lack clear ownership.",
   composite:
     "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.",
-  tier: "Relative ranking within THIS codebase (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade.",
+  tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -74,7 +74,7 @@ const COUPLING_GUIDE: Record<string, string> = {
     "Percentage: shared commits / min(churn of file1, file2) × 100. Shows how tightly coupled the pair is relative to their individual change rates. 100% means every change to the less-active file also touched the other.",
   totalComplexity:
     "Sum of both files' cyclomatic complexity. Highlights coupled pairs where the involved code is also complex — hidden dependency + high complexity compounds maintenance risk.",
-  tier: "Relative ranking within THIS codebase's coupling pairs (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade. 'danger' means this pair co-changes more than most — it may be intentional and fine.",
+  tier: "Relative ranking within THIS codebase's coupling pairs (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade. 'hot' means this pair co-changes more than most — it may be intentional and fine.",
 };
 
 function addSharedOptions(cmd: Command): Command {
@@ -227,7 +227,7 @@ function runCoupling(opts: CouplingOpts): void {
 
   const limited = top > 0 ? couplings.slice(0, top) : couplings;
 
-  const tierCounts = { danger: 0, watch: 0, stable: 0 };
+  const tierCounts = { hot: 0, warm: 0, cool: 0 };
   for (const c of couplings) {
     tierCounts[c.tier]++;
   }
