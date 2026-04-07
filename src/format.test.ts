@@ -474,6 +474,49 @@ describe("formatHotspotsTable", () => {
     expect(result).not.toContain("Nest");
     expect(result).not.toContain("Auth");
   });
+
+  it("renders skip messages for skipped rankings", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 500,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 500,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 10,
+              metricValue: 50,
+              metricDensity: 0.25,
+            },
+          ],
+        },
+      },
+      skipped: {
+        defects: {
+          reason: "insufficient data (2 fix: commits, need 5+)",
+          suggestion:
+            "Adopt conventional commits with fix: prefix. See conventionalcommits.org",
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Defects");
+    expect(result).toContain("skipped");
+    expect(result).toContain("fix:");
+    expect(result).toContain("conventionalcommits.org");
+  });
 });
 
 describe("formatCouplingTable", () => {
@@ -594,6 +637,7 @@ describe("formatCompositeTable", () => {
       scoreFormula: "reciprocal rank fusion across all dimensions",
       totalScore: 0.5,
       tierCounts: { hot: 1, warm: 1, cool: 0 },
+      totalDimensions: 4,
       totalEntries: 2,
       showing: 2,
       entries: [

@@ -56,11 +56,17 @@ export interface ReportOutput {
   files: FileMetrics[];
 }
 
+export interface SkippedRanking {
+  reason: string;
+  suggestion?: string;
+}
+
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
   rankings: Record<string, RankingOutput>;
+  skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
 }
 
@@ -78,6 +84,7 @@ export interface CompositeOutput {
   scoreFormula: string;
   totalScore: number;
   tierCounts: Record<Tier, number>;
+  totalDimensions: number;
   totalEntries: number;
   showing: number;
   entries: CompositeEntry[];

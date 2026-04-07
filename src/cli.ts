@@ -176,7 +176,7 @@ function runHotspots(opts: HotspotsOpts): void {
   const defects = getDefects(months);
   const authors = getAuthors(months);
   const nestingDepths = getNestingDepths(files.map((f) => f.file));
-  const rankings = computeAllRankings(
+  const { rankings, skipped } = computeAllRankings(
     files,
     churn,
     defects,
@@ -192,6 +192,7 @@ function runHotspots(opts: HotspotsOpts): void {
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
     rankings,
+    skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
   };
 

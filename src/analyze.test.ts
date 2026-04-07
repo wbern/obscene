@@ -583,11 +583,11 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.complexity).toBeDefined();
-    expect(result.complexity.entries[0].file).toBe("a.ts");
-    expect(result.complexity.entries[0].score).toBe(500);
-    expect(result.complexity.entries[1].score).toBe(100);
-    expect(result.complexity.label).toBe("Complexity \u00D7 Churn");
+    expect(result.rankings.complexity).toBeDefined();
+    expect(result.rankings.complexity.entries[0].file).toBe("a.ts");
+    expect(result.rankings.complexity.entries[0].score).toBe(500);
+    expect(result.rankings.complexity.entries[1].score).toBe(100);
+    expect(result.rankings.complexity.label).toBe("Complexity \u00D7 Churn");
   });
 
   it("includes complexity density in complexity ranking entries", () => {
@@ -602,7 +602,7 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.complexity.entries[0].metricDensity).toBe(0.5);
+    expect(result.rankings.complexity.entries[0].metricDensity).toBe(0.5);
   });
 
   it("produces nesting ranking from nestingDepths map", () => {
@@ -624,15 +624,23 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.nesting).toBeDefined();
-    expect(result.nesting.entries[0].file).toBe("a.ts");
-    expect(result.nesting.entries[0].score).toBe(50); // 5 × 10
-    expect(result.nesting.entries[0].metricValue).toBe(5);
+    expect(result.rankings.nesting).toBeDefined();
+    expect(result.rankings.nesting.entries[0].file).toBe("a.ts");
+    expect(result.rankings.nesting.entries[0].score).toBe(50); // 5 × 10
+    expect(result.rankings.nesting.entries[0].metricValue).toBe(5);
   });
 
   it("produces defects ranking with defect density", () => {
-    const churn = new Map([["a.ts", 10]]);
-    const defectMap = new Map([["a.ts", 3]]);
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 3],
+    ]);
+    const defectMap = new Map([
+      ["a.ts", 3],
+      ["b.ts", 1],
+      ["c.ts", 1],
+    ]);
 
     const result = computeAllRankings(
       files,
@@ -643,9 +651,9 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.defects).toBeDefined();
-    expect(result.defects.entries[0].score).toBe(30); // 3 × 10
-    expect(result.defects.entries[0].metricDensity).toBe(0.03); // 3/100
+    expect(result.rankings.defects).toBeDefined();
+    expect(result.rankings.defects.entries[0].score).toBe(30); // 3 × 10
+    expect(result.rankings.defects.entries[0].metricDensity).toBe(0.03); // 3/100
   });
 
   it("sets defect density to 0 when code is 0", () => {
@@ -658,9 +666,33 @@ describe("computeAllRankings", () => {
         comments: 0,
         complexityDensity: 0,
       },
+      {
+        file: "x.ts",
+        code: 10,
+        lines: 12,
+        complexity: 1,
+        comments: 0,
+        complexityDensity: 0.1,
+      },
+      {
+        file: "y.ts",
+        code: 20,
+        lines: 25,
+        complexity: 2,
+        comments: 0,
+        complexityDensity: 0.1,
+      },
     ];
-    const churn = new Map([["empty.ts", 2]]);
-    const defectMap = new Map([["empty.ts", 1]]);
+    const churn = new Map([
+      ["empty.ts", 2],
+      ["x.ts", 1],
+      ["y.ts", 1],
+    ]);
+    const defectMap = new Map([
+      ["empty.ts", 2],
+      ["x.ts", 2],
+      ["y.ts", 1],
+    ]);
 
     const result = computeAllRankings(
       zeroCodeFiles,
@@ -671,7 +703,7 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.defects.entries[0].metricDensity).toBe(0);
+    expect(result.rankings.defects.entries[0].metricDensity).toBe(0);
   });
 
   it("produces authors ranking", () => {
@@ -693,10 +725,10 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(result.authors).toBeDefined();
-    expect(result.authors.entries[0].file).toBe("a.ts");
-    expect(result.authors.entries[0].score).toBe(20); // 2 × 10
-    expect(result.authors.entries[1].score).toBe(20); // 4 × 5
+    expect(result.rankings.authors).toBeDefined();
+    expect(result.rankings.authors.entries[0].file).toBe("a.ts");
+    expect(result.rankings.authors.entries[0].score).toBe(20); // 2 × 10
+    expect(result.rankings.authors.entries[1].score).toBe(20); // 4 × 5
   });
 
   it("omits rankings with no scored entries", () => {
@@ -712,10 +744,10 @@ describe("computeAllRankings", () => {
     );
 
     // Only complexity should exist since nesting/defects/authors maps are empty
-    expect(result.complexity).toBeDefined();
-    expect(result.nesting).toBeUndefined();
-    expect(result.defects).toBeUndefined();
-    expect(result.authors).toBeUndefined();
+    expect(result.rankings.complexity).toBeDefined();
+    expect(result.rankings.nesting).toBeUndefined();
+    expect(result.rankings.defects).toBeUndefined();
+    expect(result.rankings.authors).toBeUndefined();
   });
 
   it("returns empty object when no files have churn", () => {
@@ -730,7 +762,7 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    expect(Object.keys(result)).toHaveLength(0);
+    expect(Object.keys(result.rankings)).toHaveLength(0);
   });
 
   it("limits entries by top parameter", () => {
@@ -750,9 +782,9 @@ describe("computeAllRankings", () => {
       2,
     );
 
-    expect(result.complexity.showing).toBe(2);
-    expect(result.complexity.entries).toHaveLength(2);
-    expect(result.complexity.totalEntries).toBe(4);
+    expect(result.rankings.complexity.showing).toBe(2);
+    expect(result.rankings.complexity.entries).toHaveLength(2);
+    expect(result.rankings.complexity.totalEntries).toBe(4);
   });
 
   it("assigns tiers by cumulative distribution", () => {
@@ -807,7 +839,7 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    const entries = result.complexity.entries;
+    const entries = result.rankings.complexity.entries;
     expect(entries).toHaveLength(4);
     expect(entries[0].tier).toBe("hot");
     expect(entries[1].tier).toBe("hot");
@@ -830,7 +862,7 @@ describe("computeAllRankings", () => {
       0,
     );
 
-    const totalPercent = result.complexity.entries.reduce(
+    const totalPercent = result.rankings.complexity.entries.reduce(
       (s, e) => s + e.percentOfTotal,
       0,
     );
@@ -854,9 +886,112 @@ describe("computeAllRankings", () => {
       2,
     );
 
-    const counts = result.complexity.tierCounts;
+    const counts = result.rankings.complexity.tierCounts;
     const total = counts.hot + counts.warm + counts.cool;
-    expect(total).toBe(result.complexity.totalEntries);
+    expect(total).toBe(result.rankings.complexity.totalEntries);
+  });
+
+  it("skips defects ranking when fewer than 5 fix commits exist", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 8],
+    ]);
+    // Only 4 total fix commits across 3 files — below threshold of 5
+    const defects = new Map([
+      ["a.ts", 2],
+      ["b.ts", 1],
+      ["c.ts", 1],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      defects,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.rankings.defects).toBeUndefined();
+    expect(result.rankings.complexity).toBeDefined();
+    expect(result.skipped.defects).toBeDefined();
+    expect(result.skipped.defects.reason).toContain("fix:");
+    expect(result.skipped.defects.suggestion).toContain("conventionalcommits");
+  });
+
+  it("skips defects ranking when fewer than 3 files have fix commits", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 8],
+    ]);
+    // 6 total fix commits but only 2 files — below threshold of 3 files
+    const defects = new Map([
+      ["a.ts", 4],
+      ["b.ts", 2],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      defects,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.rankings.defects).toBeUndefined();
+  });
+
+  it("includes defects ranking when thresholds are met", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 8],
+    ]);
+    // 6 total fix commits across 3 files — meets both thresholds
+    const defects = new Map([
+      ["a.ts", 2],
+      ["b.ts", 2],
+      ["c.ts", 2],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      defects,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.rankings.defects).toBeDefined();
+  });
+
+  it("skips authors ranking when max author count is 1", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    // Every file has exactly 1 author — no variance
+    const authors = new Map([
+      ["a.ts", 1],
+      ["b.ts", 1],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authors,
+      0,
+    );
+
+    expect(result.rankings.authors).toBeUndefined();
+    expect(result.skipped.authors).toBeDefined();
+    expect(result.skipped.authors.reason).toContain("author count");
   });
 });
 

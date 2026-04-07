@@ -204,6 +204,17 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
     }
   }
 
+  if (output.skipped) {
+    for (const [key, info] of Object.entries(output.skipped)) {
+      lines.push("");
+      const label = key.charAt(0).toUpperCase() + key.slice(1);
+      lines.push(`${label} \u00D7 Churn \u2014 skipped (${info.reason})`);
+      if (info.suggestion) {
+        lines.push(`  ${info.suggestion}`);
+      }
+    }
+  }
+
   lines.push("");
   lines.push(
     "Score=metric\u00D7churn | Tiers are relative to THIS codebase, not absolute quality grades.",
@@ -286,7 +297,7 @@ export function formatCompositeTable(output: CompositeOutput): string {
       padRight(truncate(entry.file, 48), 50) +
       padLeft(entry.score.toFixed(4), 9) +
       padLeft(String(entry.churn), 7) +
-      padLeft(`${entry.dimensionCount}/4`, 6) +
+      padLeft(`${entry.dimensionCount}/${output.totalDimensions}`, 6) +
       padLeft(tierLabel(entry.tier), 12);
     lines.push(colorRow(entry.tier, rawRow));
   }

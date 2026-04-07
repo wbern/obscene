@@ -8,6 +8,7 @@ import type {
   RankingEntry,
   RankingOutput,
   SccLanguage,
+  SkippedRanking,
   Tier,
 } from "./types.js";
 
@@ -30,6 +31,9 @@ const DEFAULT_EXCLUDES = [
 // cool: bottom 20%.
 const HOT_CUMULATIVE = 0.5;
 const WARM_CUMULATIVE = 0.8;
+
+const MIN_FIX_COMMITS = 5;
+const MIN_FILES_WITH_FIXES = 3;
 
 function isExcluded(location: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(location));
@@ -337,7 +341,10 @@ export function computeAllRankings(
   nestingDepths: Map<string, number>,
   authors: Map<string, number>,
   top: number,
-): Record<string, RankingOutput> {
+): {
+  rankings: Record<string, RankingOutput>;
+  skipped: Record<string, SkippedRanking>;
+} {
   const extractors: Record<
     string,
     {
@@ -364,9 +371,37 @@ export function computeAllRankings(
     },
   };
 
+  const skipped: Record<string, SkippedRanking> = {};
+
+  // Skip defects when insufficient fix: commit data
+  const totalFixCommits = [...defects.values()].reduce((s, v) => s + v, 0);
+  const filesWithFixes = defects.size;
+  if (
+    totalFixCommits < MIN_FIX_COMMITS ||
+    filesWithFixes < MIN_FILES_WITH_FIXES
+  ) {
+    skipped.defects = {
+      reason: `insufficient data (${totalFixCommits} fix: commits across ${filesWithFixes} files, need ${MIN_FIX_COMMITS}+ commits across ${MIN_FILES_WITH_FIXES}+ files)`,
+      suggestion:
+        "Adopt conventional commits with fix: prefix. See conventionalcommits.org",
+    };
+  }
+
+  // Skip authors when every file has the same author count (no variance)
+  let maxAuthors = 0;
+  for (const count of authors.values()) {
+    if (count > maxAuthors) maxAuthors = count;
+  }
+  if (maxAuthors <= 1) {
+    skipped.authors = {
+      reason: "all files have the same author count — no variance to rank",
+    };
+  }
+
   const rankings: Record<string, RankingOutput> = {};
 
   for (const def of RANKING_DEFS) {
+    if (skipped[def.key]) continue;
     const ext = extractors[def.key];
     const allEntries = computeRanking(files, churn, ext.extract, ext.density);
     if (allEntries.length === 0) continue;
@@ -392,7 +427,7 @@ export function computeAllRankings(
     };
   }
 
-  return rankings;
+  return { rankings, skipped };
 }
 
 /**
@@ -509,6 +544,7 @@ export function computeComposite(
   churn: Map<string, number>,
   top: number,
 ): CompositeOutput {
+  const totalDimensions = Object.keys(rankings).length;
   const fileScores = new Map<string, { score: number; dims: number }>();
 
   for (const ranking of Object.values(rankings)) {
@@ -546,6 +582,7 @@ export function computeComposite(
       scoreFormula: "reciprocal rank fusion across all dimensions",
       totalScore: 0,
       tierCounts: { hot: 0, warm: 0, cool: 0 },
+      totalDimensions,
       totalEntries: 0,
       showing: 0,
       entries: [],
@@ -565,6 +602,7 @@ export function computeComposite(
     scoreFormula: "reciprocal rank fusion across all dimensions",
     totalScore: Math.round(totalScore * 10000) / 10000,
     tierCounts,
+    totalDimensions,
     totalEntries: entries.length,
     showing: limited.length,
     entries: limited,
