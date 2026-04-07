@@ -61,6 +61,26 @@ export interface HotspotsOutput {
   guide: Record<string, string>;
   churnWindow: string;
   rankings: Record<string, RankingOutput>;
+  composite?: CompositeOutput;
+}
+
+export interface CompositeEntry {
+  file: string;
+  score: number;
+  percentOfTotal: number;
+  tier: Tier;
+  churn: number;
+  dimensionCount: number;
+}
+
+export interface CompositeOutput {
+  label: string;
+  scoreFormula: string;
+  totalScore: number;
+  tierCounts: Record<Tier, number>;
+  totalEntries: number;
+  showing: number;
+  entries: CompositeEntry[];
 }
 
 export interface CouplingEntry {

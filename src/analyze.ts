@@ -1,6 +1,8 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type {
+  CompositeEntry,
+  CompositeOutput,
   CouplingEntry,
   FileMetrics,
   RankingEntry,
@@ -493,4 +495,78 @@ export function getNestingDepths(filePaths: string[]): Map<string, number> {
   }
 
   return depths;
+}
+
+const RRF_K = 10;
+
+/**
+ * Combine multiple rankings into a single composite list using
+ * Reciprocal Rank Fusion (RRF). Each file's composite score is
+ * the sum of 1/(k + rank) across all dimensions it appears in.
+ */
+export function computeComposite(
+  rankings: Record<string, { entries: { file: string }[] }>,
+  churn: Map<string, number>,
+  top: number,
+): CompositeOutput {
+  const fileScores = new Map<string, { score: number; dims: number }>();
+
+  for (const ranking of Object.values(rankings)) {
+    for (let i = 0; i < ranking.entries.length; i++) {
+      const file = ranking.entries[i].file;
+      const rrf = 1 / (RRF_K + i + 1);
+      const existing = fileScores.get(file);
+      if (existing) {
+        existing.score += rrf;
+        existing.dims += 1;
+      } else {
+        fileScores.set(file, { score: rrf, dims: 1 });
+      }
+    }
+  }
+
+  const entries: CompositeEntry[] = [];
+  for (const [file, data] of fileScores) {
+    entries.push({
+      file,
+      score: Math.round(data.score * 10000) / 10000,
+      percentOfTotal: 0,
+      tier: "stable",
+      churn: churn.get(file) ?? 0,
+      dimensionCount: data.dims,
+    });
+  }
+
+  entries.sort((a, b) => b.score - a.score);
+
+  const totalScore = entries.reduce((sum, e) => sum + e.score, 0);
+  if (totalScore === 0) {
+    return {
+      label: "Combined",
+      scoreFormula: "reciprocal rank fusion across all dimensions",
+      totalScore: 0,
+      tierCounts: { danger: 0, watch: 0, stable: 0 },
+      totalEntries: 0,
+      showing: 0,
+      entries: [],
+    };
+  }
+
+  assignTiers(entries, totalScore);
+
+  const limited = top > 0 ? entries.slice(0, top) : entries;
+  const tierCounts: Record<Tier, number> = { danger: 0, watch: 0, stable: 0 };
+  for (const e of entries) {
+    tierCounts[e.tier]++;
+  }
+
+  return {
+    label: "Combined",
+    scoreFormula: "reciprocal rank fusion across all dimensions",
+    totalScore: Math.round(totalScore * 10000) / 10000,
+    tierCounts,
+    totalEntries: entries.length,
+    showing: limited.length,
+    entries: limited,
+  };
 }

@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatCompositeTable,
   formatCouplingTable,
   formatHotspotsTable,
   formatReportTable,
 } from "./format.js";
-import type { CouplingOutput, HotspotsOutput, ReportOutput } from "./types.js";
+import type {
+  CompositeOutput,
+  CouplingOutput,
+  HotspotsOutput,
+  ReportOutput,
+} from "./types.js";
 
 describe("formatReportTable", () => {
   it("formats report output as a table", () => {
@@ -578,5 +584,48 @@ describe("formatCouplingTable", () => {
     const result = formatCouplingTable(output);
 
     expect(result).toContain("…");
+  });
+});
+
+describe("formatCompositeTable", () => {
+  it("renders composite table with dimension count and tier labels", () => {
+    const output: CompositeOutput = {
+      label: "Combined",
+      scoreFormula: "reciprocal rank fusion across all dimensions",
+      totalScore: 0.5,
+      tierCounts: { danger: 1, watch: 1, stable: 0 },
+      totalEntries: 2,
+      showing: 2,
+      entries: [
+        {
+          file: "src/foo.ts",
+          score: 0.3,
+          percentOfTotal: 60,
+          tier: "danger",
+          churn: 15,
+          dimensionCount: 4,
+        },
+        {
+          file: "src/bar.ts",
+          score: 0.2,
+          percentOfTotal: 40,
+          tier: "watch",
+          churn: 8,
+          dimensionCount: 2,
+        },
+      ],
+    };
+
+    const result = formatCompositeTable(output);
+
+    expect(result).toContain("Combined");
+    expect(result).toContain("src/foo.ts");
+    expect(result).toContain("src/bar.ts");
+    expect(result).toContain("Dims");
+    expect(result).toContain("🔴");
+    expect(result).toContain("DANGER");
+    expect(result).toContain("🟡");
+    expect(result).toContain("WATCH");
+    expect(result).toContain("Showing: 2 of 2");
   });
 });

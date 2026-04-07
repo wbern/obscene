@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assignTiers,
   computeAllRankings,
+  computeComposite,
   computeCoupling,
   getAuthors,
   getChurn,
@@ -1074,5 +1075,97 @@ describe("computeCoupling", () => {
     const totalPercent = result.reduce((s, e) => s + e.percentOfTotal, 0);
 
     expect(totalPercent).toBeCloseTo(100, 0);
+  });
+});
+
+describe("computeComposite", () => {
+  it("ranks files by RRF score across multiple rankings", () => {
+    const rankings: Record<string, { entries: { file: string }[] }> = {
+      complexity: {
+        entries: [{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }],
+      },
+      nesting: {
+        entries: [{ file: "a.ts" }, { file: "c.ts" }, { file: "b.ts" }],
+      },
+      defects: {
+        entries: [{ file: "a.ts" }, { file: "b.ts" }],
+      },
+    };
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 8],
+      ["c.ts", 5],
+    ]);
+
+    const result = computeComposite(rankings, churn, 3);
+
+    // a.ts: rank 1 in all three → highest RRF
+    // b.ts: rank 2 in complexity, rank 3 in nesting, rank 2 in defects
+    // c.ts: rank 3 in complexity, rank 2 in nesting, absent from defects
+    expect(result.entries[0].file).toBe("a.ts");
+    expect(result.entries[0].dimensionCount).toBe(3);
+    expect(result.entries[0].churn).toBe(10);
+    expect(result.entries.length).toBe(3);
+  });
+
+  it("returns empty output when no rankings provided", () => {
+    const result = computeComposite({}, new Map(), 20);
+
+    expect(result.entries).toHaveLength(0);
+    expect(result.totalScore).toBe(0);
+    expect(result.totalEntries).toBe(0);
+  });
+
+  it("assigns tiers by cumulative distribution", () => {
+    const rankings: Record<string, { entries: { file: string }[] }> = {
+      complexity: {
+        entries: [
+          { file: "a.ts" },
+          { file: "b.ts" },
+          { file: "c.ts" },
+          { file: "d.ts" },
+        ],
+      },
+    };
+
+    const result = computeComposite(rankings, new Map(), 0);
+
+    expect(result.entries[0].tier).toBe("danger");
+    expect(result.entries[3].tier).toBe("stable");
+    expect(
+      result.tierCounts.danger +
+        result.tierCounts.watch +
+        result.tierCounts.stable,
+    ).toBe(4);
+  });
+
+  it("limits output by top parameter", () => {
+    const rankings: Record<string, { entries: { file: string }[] }> = {
+      complexity: {
+        entries: [{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }],
+      },
+    };
+
+    const result = computeComposite(rankings, new Map(), 2);
+
+    expect(result.entries).toHaveLength(2);
+    expect(result.showing).toBe(2);
+    expect(result.totalEntries).toBe(3);
+  });
+
+  it("counts dimensions a file appears in", () => {
+    const rankings: Record<string, { entries: { file: string }[] }> = {
+      complexity: { entries: [{ file: "a.ts" }, { file: "b.ts" }] },
+      nesting: { entries: [{ file: "a.ts" }] },
+      defects: { entries: [{ file: "a.ts" }] },
+      authors: { entries: [{ file: "b.ts" }] },
+    };
+
+    const result = computeComposite(rankings, new Map(), 0);
+
+    const aEntry = result.entries.find((e) => e.file === "a.ts");
+    const bEntry = result.entries.find((e) => e.file === "b.ts");
+    expect(aEntry?.dimensionCount).toBe(3);
+    expect(bEntry?.dimensionCount).toBe(2);
   });
 });

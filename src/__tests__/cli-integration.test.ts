@@ -83,10 +83,10 @@ describe("CLI Integration", () => {
       const tarball = files.find((f) => f.endsWith(".tgz"));
       expect(tarball).toBeDefined();
 
-      // Check tarball size — should be small (uncompressed ~20KB, allow up to 50KB)
+      // Check tarball size — should be small (uncompressed ~25KB, allow up to 55KB)
       const stats = fs.statSync(path.join(tempDir, tarball!));
       const sizeKB = stats.size / 1024;
-      expect(sizeKB).toBeLessThan(50);
+      expect(sizeKB).toBeLessThan(55);
 
       // Extract it
       const extractDir = path.join(tempDir, "extracted");
@@ -137,6 +137,7 @@ describe("CLI Integration", () => {
     expect(Object.keys(parsed.guide).sort()).toEqual([
       "authors",
       "complexity",
+      "composite",
       "defects",
       "nesting",
       "rankings",
@@ -145,6 +146,10 @@ describe("CLI Integration", () => {
     expect(parsed).toHaveProperty("churnWindow", "3 months");
     expect(parsed).toHaveProperty("rankings");
     expect(typeof parsed.rankings).toBe("object");
+    expect(parsed).toHaveProperty("composite");
+    expect(parsed.composite).toHaveProperty("entries");
+    expect(parsed.composite).toHaveProperty("totalScore");
+    expect(parsed.composite).toHaveProperty("label", "Combined");
 
     // complexity ranking should always exist
     expect(parsed.rankings).toHaveProperty("complexity");
@@ -183,6 +188,9 @@ describe("CLI Integration", () => {
     // Emoji presence
     expect(result.stdout).toMatch(/[🔴🟡🟢]/u);
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
+    // Combined table
+    expect(result.stdout).toContain("Combined");
+    expect(result.stdout).toContain("Dims");
   });
 
   it("should produce valid JSON output with coupling command", {

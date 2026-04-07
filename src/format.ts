@@ -7,6 +7,7 @@ import {
   truncate,
 } from "./color.js";
 import type {
+  CompositeOutput,
   CouplingOutput,
   HotspotsOutput,
   RankingOutput,
@@ -256,6 +257,39 @@ export function formatCouplingTable(output: CouplingOutput): string {
     "Same-directory pairs excluded. Commits touching >20 files skipped. Only cross-directory dependencies shown.",
   );
   lines.push("Docs: https://github.com/wbern/obscene#metrics");
+
+  return lines.join("\n");
+}
+
+export function formatCompositeTable(output: CompositeOutput): string {
+  const lines: string[] = [];
+
+  lines.push(
+    `${output.label} — Total score: ${output.totalScore.toLocaleString()}`,
+  );
+  lines.push(
+    ...tierSummary(output.tierCounts, output.showing, output.totalEntries),
+  );
+  lines.push("");
+
+  lines.push(
+    padRight("File", 50) +
+      padLeft("Score", 9) +
+      padLeft("Churn", 7) +
+      padLeft("Dims", 6) +
+      padLeft("Tier", 12),
+  );
+  lines.push("─".repeat(84));
+
+  for (const entry of output.entries) {
+    const rawRow =
+      padRight(truncate(entry.file, 48), 50) +
+      padLeft(entry.score.toFixed(4), 9) +
+      padLeft(String(entry.churn), 7) +
+      padLeft(`${entry.dimensionCount}/4`, 6) +
+      padLeft(tierLabel(entry.tier), 12);
+    lines.push(colorRow(entry.tier, rawRow));
+  }
 
   return lines.join("\n");
 }

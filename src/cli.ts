@@ -3,6 +3,7 @@ declare const __VERSION__: string;
 import { Command } from "commander";
 import {
   computeAllRankings,
+  computeComposite,
   computeCoupling,
   getAuthors,
   getChurn,
@@ -12,6 +13,7 @@ import {
   runScc,
 } from "./analyze.js";
 import {
+  formatCompositeTable,
   formatCouplingTable,
   formatHotspotsTable,
   formatReportTable,
@@ -60,6 +62,8 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
     "defects × churn. Files with fix: commits that also churn heavily may contain latent bugs.",
   authors:
     "authors × churn. Files touched by many authors and changing often may lack clear ownership.",
+  composite:
+    "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.",
   tier: "Relative ranking within THIS codebase (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade.",
 };
 
@@ -181,15 +185,21 @@ function runHotspots(opts: HotspotsOpts): void {
     top,
   );
 
+  const composite = computeComposite(rankings, churn, top);
+
   const output: HotspotsOutput = {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
     rankings,
+    composite,
   };
 
   if (opts.format === "table") {
     process.stdout.write(`${formatHotspotsTable(output)}\n`);
+    if (composite.entries.length > 0) {
+      process.stdout.write(`\n${formatCompositeTable(composite)}\n`);
+    }
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }
