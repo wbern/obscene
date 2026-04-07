@@ -15,6 +15,7 @@ import {
   getNestingDepths,
   readIgnoreFile,
   runScc,
+  UNIVERSAL_IGNORE_GROUPS,
 } from "./analyze.js";
 import {
   formatCompositeTable,
@@ -151,7 +152,16 @@ function resolveExcludes(cliExcludes?: string[]): string[] {
   return [...readIgnoreFile(), ...(cliExcludes ?? [])];
 }
 
+function warnIfNoIgnoreFile(): void {
+  if (!existsSync(".obsignore") && !existsSync(".obsceneignore")) {
+    process.stderr.write(
+      "hint: no .obsignore found — run `obscene init` to generate one with recommended exclusions\n",
+    );
+  }
+}
+
 function runReport(opts: SharedOpts): void {
+  warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
   const allExcludes = resolveExcludes(opts.exclude);
   const files = runScc(allExcludes);
@@ -190,6 +200,7 @@ function runReport(opts: SharedOpts): void {
 }
 
 function runHotspots(opts: HotspotsOpts): void {
+  warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const allExcludes = resolveExcludes(opts.exclude);
@@ -229,6 +240,7 @@ function runHotspots(opts: HotspotsOpts): void {
 }
 
 function runCoupling(opts: CouplingOpts): void {
+  warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const minCochanges = parseInt(opts.minCochanges, 10);
@@ -289,21 +301,25 @@ function runInit(): void {
     );
   }
 
-  const patterns = detectIgnorePatterns();
-  const content = formatIgnoreFile(patterns);
+  const detected = detectIgnorePatterns();
+  const content = formatIgnoreFile(detected);
   writeFileSync(".obsignore", content);
 
-  if (patterns.length === 0) {
-    process.stderr.write(
-      "Created .obsignore (no project-specific patterns detected)\n",
-    );
-  } else {
-    process.stderr.write(
-      `Created .obsignore with ${patterns.length} patterns:\n`,
-    );
-    for (const p of patterns) {
+  const universalCount = UNIVERSAL_IGNORE_GROUPS.reduce(
+    (sum, g) => sum + g.patterns.length,
+    0,
+  );
+
+  process.stderr.write(
+    `Created .obsignore with ${universalCount} universal exclusions`,
+  );
+  if (detected.length > 0) {
+    process.stderr.write(` + ${detected.length} detected patterns:\n`);
+    for (const p of detected) {
       process.stderr.write(`  ${p.pattern.padEnd(20)} ${p.comment}\n`);
     }
+  } else {
+    process.stderr.write(" (no project-specific patterns detected)\n");
   }
 }
 

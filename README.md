@@ -252,9 +252,25 @@ Docs: https://github.com/wbern/obscene#metrics
 
 Any language [scc supports](https://github.com/boyter/scc#features) — 200+ languages including C, C++, Go, Java, JavaScript, TypeScript, Python, Rust, Ruby, PHP, Swift, Kotlin, and many more. No configuration needed; scc auto-detects languages from file extensions.
 
-## Default exclusions
+## Exclusions
 
-Test files, lock files, and package manifests are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, and similar patterns. scc also skips generated files by default (`--no-gen`).
+All exclusions are opt-in. Run `obscene init` to generate a `.obsignore` file with recommended patterns for your project:
+
+```bash
+obscene init
+```
+
+This creates a `.obsignore` containing:
+- **Universal exclusions** — test files (`*.test.*`, `*.spec.*`, `__tests__/`, etc.), lock files (`package-lock.json`, `pnpm-lock.yaml`, etc.), and package manifests (`package.json`)
+- **Detected project patterns** — CI directories (`.github/`), config files (`*.config.*`), vendored code, etc., based on your project structure
+
+If no `.obsignore` or `.obsceneignore` exists, obscene prints a hint to stderr:
+
+```
+hint: no .obsignore found — run `obscene init` to generate one with recommended exclusions
+```
+
+scc also skips generated files by default (`--no-gen`).
 
 ## Ignore files
 
