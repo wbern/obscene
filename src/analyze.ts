@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import type {
   CouplingEntry,
   FileMetrics,
-  HotspotEntry,
+  RankingEntry,
+  RankingOutput,
   SccLanguage,
   Tier,
 } from "./types.js";
@@ -243,6 +244,156 @@ export function getCoChanges(
 }
 
 /**
+ * Assign cumulative-distribution tiers to a sorted array of scored items.
+ * Mutates the items in-place. Items must be sorted descending by score.
+ */
+export function assignTiers<
+  T extends { score: number; percentOfTotal: number; tier: Tier },
+>(items: T[], totalScore: number): void {
+  let cumulative = 0;
+  for (const item of items) {
+    item.percentOfTotal = Math.round((item.score / totalScore) * 1000) / 10;
+    cumulative += item.score;
+    const cumulativeShare = cumulative / totalScore;
+
+    if (cumulativeShare <= DANGER_CUMULATIVE) {
+      item.tier = "danger";
+    } else if (cumulativeShare <= WATCH_CUMULATIVE) {
+      item.tier = "watch";
+    } else {
+      item.tier = "stable";
+    }
+  }
+}
+
+interface RankingDef {
+  key: string;
+  label: string;
+  scoreFormula: string;
+}
+
+const RANKING_DEFS: RankingDef[] = [
+  {
+    key: "complexity",
+    label: "Complexity \u00D7 Churn",
+    scoreFormula: "complexity \u00D7 churn",
+  },
+  {
+    key: "nesting",
+    label: "Nesting \u00D7 Churn",
+    scoreFormula: "maxNesting \u00D7 churn",
+  },
+  {
+    key: "defects",
+    label: "Defects \u00D7 Churn",
+    scoreFormula: "defects \u00D7 churn",
+  },
+  {
+    key: "authors",
+    label: "Authors \u00D7 Churn",
+    scoreFormula: "authors \u00D7 churn",
+  },
+];
+
+function computeRanking(
+  files: FileMetrics[],
+  churn: Map<string, number>,
+  metricExtractor: (f: FileMetrics) => number,
+  densityExtractor?: (f: FileMetrics) => number,
+): RankingEntry[] {
+  const scored = files
+    .map((f) => {
+      const fileChurn = churn.get(f.file) ?? 0;
+      const metricValue = metricExtractor(f);
+      return {
+        file: f.file,
+        score: metricValue * fileChurn,
+        percentOfTotal: 0,
+        tier: "stable" as Tier,
+        churn: fileChurn,
+        metricValue,
+        metricDensity: densityExtractor ? densityExtractor(f) : undefined,
+      };
+    })
+    .filter((e) => e.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const totalScore = scored.reduce((sum, e) => sum + e.score, 0);
+  if (totalScore === 0) return [];
+
+  assignTiers(scored, totalScore);
+  return scored;
+}
+
+/**
+ * Compute all four ranking tables from file metrics and git data.
+ */
+export function computeAllRankings(
+  files: FileMetrics[],
+  churn: Map<string, number>,
+  defects: Map<string, number>,
+  nestingDepths: Map<string, number>,
+  authors: Map<string, number>,
+  top: number,
+): Record<string, RankingOutput> {
+  const extractors: Record<
+    string,
+    {
+      extract: (f: FileMetrics) => number;
+      density?: (f: FileMetrics) => number;
+    }
+  > = {
+    complexity: {
+      extract: (f) => f.complexity,
+      density: (f) => f.complexityDensity,
+    },
+    nesting: {
+      extract: (f) => nestingDepths.get(f.file) ?? 0,
+    },
+    defects: {
+      extract: (f) => defects.get(f.file) ?? 0,
+      density: (f) => {
+        const d = defects.get(f.file) ?? 0;
+        return f.code > 0 ? Math.round((d / f.code) * 10000) / 10000 : 0;
+      },
+    },
+    authors: {
+      extract: (f) => authors.get(f.file) ?? 0,
+    },
+  };
+
+  const rankings: Record<string, RankingOutput> = {};
+
+  for (const def of RANKING_DEFS) {
+    const ext = extractors[def.key];
+    const allEntries = computeRanking(files, churn, ext.extract, ext.density);
+    if (allEntries.length === 0) continue;
+
+    const limited = top > 0 ? allEntries.slice(0, top) : allEntries;
+    const tierCounts: Record<Tier, number> = {
+      danger: 0,
+      watch: 0,
+      stable: 0,
+    };
+    for (const e of allEntries) {
+      tierCounts[e.tier]++;
+    }
+
+    rankings[def.key] = {
+      label: def.label,
+      scoreFormula: def.scoreFormula,
+      totalScore: allEntries.reduce((sum, e) => sum + e.score, 0),
+      tierCounts,
+      totalEntries: allEntries.length,
+      showing: limited.length,
+      entries: limited,
+    };
+  }
+
+  return rankings;
+}
+
+/**
  * Score file pairs by co-change frequency and assign tiers.
  */
 export function computeCoupling(
@@ -279,20 +430,15 @@ export function computeCoupling(
   const totalScore = entries.reduce((sum, e) => sum + e.couplingScore, 0);
   if (totalScore === 0) return [];
 
-  let cumulative = 0;
-  for (const entry of entries) {
-    entry.percentOfTotal =
-      Math.round((entry.couplingScore / totalScore) * 1000) / 10;
-    cumulative += entry.couplingScore;
-    const cumulativeShare = cumulative / totalScore;
-
-    if (cumulativeShare <= DANGER_CUMULATIVE) {
-      entry.tier = "danger";
-    } else if (cumulativeShare <= WATCH_CUMULATIVE) {
-      entry.tier = "watch";
-    } else {
-      entry.tier = "stable";
-    }
+  // Adapt CouplingEntry to use assignTiers by mapping score field
+  const adapted = entries.map((e) => ({
+    ...e,
+    score: e.couplingScore,
+  }));
+  assignTiers(adapted, totalScore);
+  for (let i = 0; i < entries.length; i++) {
+    entries[i].percentOfTotal = adapted[i].percentOfTotal;
+    entries[i].tier = adapted[i].tier;
   }
 
   return entries;
@@ -347,55 +493,4 @@ export function getNestingDepths(filePaths: string[]): Map<string, number> {
   }
 
   return depths;
-}
-
-/**
- * Score files by churn × complexity and assign cumulative-distribution tiers.
- */
-export function computeHotspots(
-  files: FileMetrics[],
-  churn: Map<string, number>,
-  defects: Map<string, number> = new Map(),
-  nestingDepths: Map<string, number> = new Map(),
-  authors: Map<string, number> = new Map(),
-): HotspotEntry[] {
-  const scored = files
-    .map((f) => {
-      const fileChurn = churn.get(f.file) ?? 0;
-      const fileDefects = defects.get(f.file) ?? 0;
-      return {
-        ...f,
-        churn: fileChurn,
-        hotspotScore: f.complexity * fileChurn,
-        defects: fileDefects,
-        defectDensity:
-          f.code > 0 ? Math.round((fileDefects / f.code) * 10000) / 10000 : 0,
-        maxNesting: nestingDepths.get(f.file) ?? 0,
-        authors: authors.get(f.file) ?? 0,
-      };
-    })
-    .filter((h) => h.hotspotScore > 0)
-    .sort((a, b) => b.hotspotScore - a.hotspotScore);
-
-  const totalScore = scored.reduce((sum, h) => sum + h.hotspotScore, 0);
-  if (totalScore === 0) return [];
-
-  let cumulative = 0;
-  return scored.map((h) => {
-    const percentOfTotal =
-      Math.round((h.hotspotScore / totalScore) * 1000) / 10;
-    cumulative += h.hotspotScore;
-    const cumulativeShare = cumulative / totalScore;
-
-    let tier: Tier;
-    if (cumulativeShare <= DANGER_CUMULATIVE) {
-      tier = "danger";
-    } else if (cumulativeShare <= WATCH_CUMULATIVE) {
-      tier = "watch";
-    } else {
-      tier = "stable";
-    }
-
-    return { ...h, percentOfTotal, tier };
-  });
 }

@@ -60,20 +60,31 @@ obscene report                   # raw complexity (no churn)
 obscene coupling                 # temporal coupling analysis
 obscene coupling --min-cochanges 1 --format table
 obscene --exclude "*.generated.*"
-obscene | jq '.hotspots[0]'     # pipe-friendly
+obscene | jq '.rankings.complexity.entries[0]'  # pipe-friendly
 ```
 
 ## Commands
 
 ### `obscene hotspots` (default)
 
-Scores each file by `complexity × commits` over a time window, then assigns tiers by cumulative score distribution:
+Produces **four independent ranking tables**, each scoring files by a different metric multiplied by churn:
+
+| Ranking | Score formula | Metric columns |
+|---------|---------------|----------------|
+| Complexity × Churn | `complexity × churn` | Cmplx, Dens |
+| Nesting × Churn | `maxNesting × churn` | Nest |
+| Defects × Churn | `defects × churn` | Dfcts, DfDns |
+| Authors × Churn | `authors × churn` | Auth |
+
+Each table has its own tier assignment by cumulative score distribution:
 
 | Tier | Range | Meaning |
 |------|-------|---------|
 | **danger** | top 50% of total score | Refactor candidates |
 | **watch** | next 30% (50–80%) | Keep an eye on these |
 | **stable** | bottom 20% | Low risk |
+
+A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Tables with no scored entries are omitted.
 
 ### `obscene coupling`
 
@@ -105,9 +116,9 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 
 ### Hotspot metrics
 
-#### Hotspot score (`Score`)
+#### Score
 
-`complexity × churn`. The core ranking metric — files that are both complex and frequently modified bubble to the top. See [Why churn × complexity?](#why-churn-x-complexity) for the research backing this approach.
+`metric × churn`. Each ranking table uses a different metric (complexity, nesting, defects, or authors) multiplied by churn. See [Why churn × complexity?](#why-churn-x-complexity) for the research backing this approach.
 
 #### Churn (`Churn`)
 
@@ -125,9 +136,9 @@ Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc).
 
 Count of `fix:` conventional commits touching the file within the churn window. A proxy for historical defect rate — files that attract repeated fixes are more likely to contain latent bugs. Inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction.
 
-#### Defect density (`defectDensity`, JSON only)
+#### Defect density (`DfDns`)
 
-`defects / lines of code`. Not shown in table output due to column width, but available in JSON. Normalizes defect count by file size.
+`defects / lines of code`. Shown in the Defects × Churn table. Normalizes defect count by file size.
 
 #### Nesting depth (`Nest`)
 
@@ -164,19 +175,34 @@ Cumulative score distribution bucket:
 ## Example output
 
 ```
-Hotspots — 3 months churn window | Total score: 35,452
+Hotspots — 3 months churn window
+
+Complexity × Churn — Total score: 35,452
 Tiers: 3 danger, 13 watch, 194 stable
 Showing: 5 of 210
 
-File                                                 Score      %  Churn  Cmplx   Dens Dfcts  Nest  Auth    Tier
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-src/utils/effect-generator.ts                        8,296   23.4     68    122   0.12     5     6     4  DANGER
-src/services/game-engine.ts                          4,284   12.1     51     84   0.09     3     4     3  DANGER
-src/components/board-renderer.tsx                    2,940    8.3     42     70   0.11     2     5     3  DANGER
-src/hooks/use-game-state.ts                          1,320    3.7     33     40   0.08     1     3     2   WATCH
-src/utils/move-validator.ts                            945    2.7     27     35   0.06     0     2     1   WATCH
+File                                                Score       %  Churn  Cmplx   Dens        Tier
+──────────────────────────────────────────────────────────────────────────────────────────────────
+src/utils/effect-generator.ts                       8,296    23.4     68    122   0.12  🔴 DANGER
+src/services/game-engine.ts                         4,284    12.1     51     84   0.09  🔴 DANGER
+src/components/board-renderer.tsx                   2,940     8.3     42     70   0.11  🔴 DANGER
+src/hooks/use-game-state.ts                         1,320     3.7     33     40   0.08   🟡 WATCH
+src/utils/move-validator.ts                           945     2.7     27     35   0.06   🟡 WATCH
 
-Score=complexity×churn | Dens=complexity/code | Dfcts=fix commits | Nest=max indent depth | Auth=unique authors
+Nesting × Churn — Total score: 1,284
+Tiers: 2 danger, 5 watch, 203 stable
+Showing: 5 of 210
+
+File                                                Score       %  Churn  Nest        Tier
+────────────────────────────────────────────────────────────────────────────────────────
+src/utils/effect-generator.ts                         408    31.8     68     6  🔴 DANGER
+src/services/game-engine.ts                           255    19.8     51     5  🔴 DANGER
+src/components/board-renderer.tsx                     210    16.4     42     5   🟡 WATCH
+src/hooks/use-game-state.ts                            99     7.7     33     3   🟡 WATCH
+src/utils/move-validator.ts                            54     4.2     27     2   🟡 WATCH
+
+Score=metric×churn | Tiers are relative to THIS codebase, not absolute quality grades.
+High scores flag review candidates, not bad code — stable complex files (parsers, engines) score high naturally.
 Docs: https://github.com/wbern/obscene#metrics
 ```
 

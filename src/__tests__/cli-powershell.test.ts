@@ -59,8 +59,8 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
 
     expect(result.status).toBe(0);
     const parsed = JSON.parse(result.stdout.toString());
-    expect(parsed).toHaveProperty("hotspots");
-    expect(Array.isArray(parsed.hotspots)).toBe(true);
+    expect(parsed).toHaveProperty("rankings");
+    expect(typeof parsed.rankings).toBe("object");
   });
 
   it("should produce table output via pwsh", { timeout: 30000 }, () => {

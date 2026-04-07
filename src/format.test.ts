@@ -85,108 +85,150 @@ describe("formatReportTable", () => {
 });
 
 describe("formatHotspotsTable", () => {
-  it("formats hotspot output as a table", () => {
+  it("formats multi-ranking output with emoji tier labels", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
-      totalScore: 1000,
-      tierCounts: { danger: 1, watch: 1, stable: 0 },
-      totalHotspots: 2,
-      showing: 2,
-      hotspots: [
-        {
-          file: "src/foo.ts",
-          code: 200,
-          lines: 250,
-          complexity: 50,
-          comments: 10,
-          complexityDensity: 0.25,
-          churn: 15,
-          hotspotScore: 750,
-          percentOfTotal: 75,
-          tier: "danger",
-          defects: 3,
-          defectDensity: 0.015,
-          maxNesting: 4,
-          authors: 2,
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 1000,
+          tierCounts: { danger: 1, watch: 1, stable: 0 },
+          totalEntries: 2,
+          showing: 2,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 750,
+              percentOfTotal: 75,
+              tier: "danger",
+              churn: 15,
+              metricValue: 50,
+              metricDensity: 0.25,
+            },
+            {
+              file: "src/bar.ts",
+              score: 250,
+              percentOfTotal: 25,
+              tier: "watch",
+              churn: 10,
+              metricValue: 25,
+              metricDensity: 0.25,
+            },
+          ],
         },
-        {
-          file: "src/bar.ts",
-          code: 100,
-          lines: 150,
-          complexity: 25,
-          comments: 5,
-          complexityDensity: 0.25,
-          churn: 10,
-          hotspotScore: 250,
-          percentOfTotal: 25,
-          tier: "watch",
-          defects: 1,
-          defectDensity: 0.01,
-          maxNesting: 2,
-          authors: 1,
-        },
-      ],
+      },
     };
 
     const result = formatHotspotsTable(output);
 
     expect(result).toContain("Hotspots");
     expect(result).toContain("3 months");
+    expect(result).toContain("Complexity \u00D7 Churn");
     expect(result).toContain("1,000");
-    expect(result).toContain("1 danger");
-    expect(result).toContain("1 watch");
-    expect(result).toContain("0 stable");
-    expect(result).toContain("DANGER");
-    expect(result).toContain("WATCH");
     expect(result).toContain("src/foo.ts");
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Showing: 2 of 2");
-    expect(result).toContain("Dfcts");
-    expect(result).toContain("Nest");
-    expect(result).toContain("Auth");
-
+    // Emoji tier labels
+    expect(result).toContain("🔴");
+    expect(result).toContain("DANGER");
+    expect(result).toContain("🟡");
+    expect(result).toContain("WATCH");
+    // Column headers
+    expect(result).toContain("Cmplx");
+    expect(result).toContain("Dens");
     // Legend
-    expect(result).toContain("Score=complexity\u00D7churn");
-    expect(result).toContain("Dfcts=fix commits");
-    expect(result).toContain("Nest=max indent depth");
-    expect(result).toContain("Auth=unique authors");
     expect(result).toContain("not absolute quality grades");
     expect(result).toContain("Docs: https://github.com/wbern/obscene#metrics");
   });
 
-  it("shows stable tier label in lowercase", () => {
+  it("renders multiple ranking tables", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
-      totalScore: 100,
-      tierCounts: { danger: 0, watch: 0, stable: 1 },
-      totalHotspots: 1,
-      showing: 1,
-      hotspots: [
-        {
-          file: "src/calm.ts",
-          code: 50,
-          lines: 60,
-          complexity: 5,
-          comments: 2,
-          complexityDensity: 0.1,
-          churn: 20,
-          hotspotScore: 100,
-          percentOfTotal: 100,
-          tier: "stable",
-          defects: 0,
-          defectDensity: 0,
-          maxNesting: 0,
-          authors: 0,
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 500,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 500,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 50,
+              metricDensity: 0.25,
+            },
+          ],
         },
-      ],
+        nesting: {
+          label: "Nesting \u00D7 Churn",
+          scoreFormula: "maxNesting \u00D7 churn",
+          totalScore: 50,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 50,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 5,
+            },
+          ],
+        },
+      },
     };
 
     const result = formatHotspotsTable(output);
 
+    expect(result).toContain("Complexity \u00D7 Churn");
+    expect(result).toContain("Nesting \u00D7 Churn");
+    // Nesting table should have Nest column
+    expect(result).toContain("Nest");
+  });
+
+  it("shows stable tier with green emoji", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 100,
+          tierCounts: { danger: 0, watch: 0, stable: 1 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/calm.ts",
+              score: 100,
+              percentOfTotal: 100,
+              tier: "stable",
+              churn: 20,
+              metricValue: 5,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("🟢");
     expect(result).toContain("stable");
   });
 
@@ -195,33 +237,31 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
-      totalScore: 10000000000,
-      tierCounts: { danger: 1, watch: 0, stable: 0 },
-      totalHotspots: 1,
-      showing: 1,
-      hotspots: [
-        {
-          file: "src/big.ts",
-          code: 100000,
-          lines: 120000,
-          complexity: 100000,
-          comments: 50000,
-          complexityDensity: 1.0,
-          churn: 100000,
-          hotspotScore: 10000000000,
-          percentOfTotal: 100,
-          tier: "danger",
-          defects: 0,
-          defectDensity: 0,
-          maxNesting: 0,
-          authors: 0,
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 10000000000,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/big.ts",
+              score: 10000000000,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 100000,
+              metricValue: 100000,
+              metricDensity: 1.0,
+            },
+          ],
         },
-      ],
+      },
     };
 
     const result = formatHotspotsTable(output);
 
-    // Score "10,000,000,000" exceeds the 8-char column width
     expect(result).toContain("10,000,000,000");
     expect(result).toContain("src/big.ts");
   });
@@ -231,38 +271,207 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
-      totalScore: 500,
-      tierCounts: { danger: 1, watch: 0, stable: 0 },
-      totalHotspots: 1,
-      showing: 1,
-      hotspots: [
-        {
-          file: "src/very/deeply/nested/directory/structure/component.ts",
-          code: 100,
-          lines: 120,
-          complexity: 50,
-          comments: 5,
-          complexityDensity: 0.5,
-          churn: 10,
-          hotspotScore: 500,
-          percentOfTotal: 100,
-          tier: "danger",
-          defects: 0,
-          defectDensity: 0,
-          maxNesting: 0,
-          authors: 0,
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 500,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/very/deeply/nested/directory/structure/component.ts",
+              score: 500,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 50,
+              metricDensity: 0.5,
+            },
+          ],
         },
-      ],
+      },
     };
 
     const result = formatHotspotsTable(output);
 
     expect(result).toContain("…");
   });
+
+  it("renders defects table with DfDns column", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        defects: {
+          label: "Defects \u00D7 Churn",
+          scoreFormula: "defects \u00D7 churn",
+          totalScore: 30,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/buggy.ts",
+              score: 30,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 3,
+              metricDensity: 0.03,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Dfcts");
+    expect(result).toContain("DfDns");
+    expect(result).toContain("0.0300");
+  });
+
+  it("renders authors table with Auth column", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        authors: {
+          label: "Authors \u00D7 Churn",
+          scoreFormula: "authors \u00D7 churn",
+          totalScore: 20,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/shared.ts",
+              score: 20,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 2,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Auth");
+    expect(result).toContain("Authors \u00D7 Churn");
+  });
+
+  it("handles complexity entries without metricDensity", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity \u00D7 Churn",
+          scoreFormula: "complexity \u00D7 churn",
+          totalScore: 100,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 100,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 10,
+              metricValue: 10,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("0.00");
+  });
+
+  it("handles defects entries without metricDensity", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        defects: {
+          label: "Defects \u00D7 Churn",
+          scoreFormula: "defects \u00D7 churn",
+          totalScore: 10,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 5,
+              metricValue: 2,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("0.0000");
+  });
+
+  it("renders unknown ranking key with base columns only", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        unknown: {
+          label: "Custom Metric",
+          scoreFormula: "custom \u00D7 churn",
+          totalScore: 42,
+          tierCounts: { danger: 1, watch: 0, stable: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 42,
+              percentOfTotal: 100,
+              tier: "danger",
+              churn: 7,
+              metricValue: 6,
+            },
+          ],
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Custom Metric");
+    expect(result).toContain("Score");
+    expect(result).toContain("Tier");
+    // No metric-specific columns
+    expect(result).not.toContain("Cmplx");
+    expect(result).not.toContain("Nest");
+    expect(result).not.toContain("Auth");
+  });
 });
 
 describe("formatCouplingTable", () => {
-  it("formats coupling output with all expected content", () => {
+  it("formats coupling output with emoji tier labels", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
@@ -301,10 +510,9 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("Coupling");
     expect(result).toContain("3 months");
     expect(result).toContain("Min shared: 2");
-    expect(result).toContain("1 danger");
-    expect(result).toContain("1 watch");
-    expect(result).toContain("0 stable");
+    expect(result).toContain("🔴");
     expect(result).toContain("DANGER");
+    expect(result).toContain("🟡");
     expect(result).toContain("WATCH");
     expect(result).toContain("src/auth.ts");
     expect(result).toContain("lib/session.ts");
@@ -313,7 +521,7 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("Degree=shared/min(churn)");
   });
 
-  it("shows stable tier in lowercase", () => {
+  it("shows stable tier with green emoji", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
@@ -339,8 +547,8 @@ describe("formatCouplingTable", () => {
 
     const result = formatCouplingTable(output);
 
+    expect(result).toContain("🟢");
     expect(result).toContain("stable");
-    expect(result).not.toContain("STABLE");
   });
 
   it("truncates long file paths", () => {

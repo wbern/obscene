@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  assignTiers,
+  computeAllRankings,
   computeCoupling,
-  computeHotspots,
   getAuthors,
   getChurn,
   getCoChanges,
@@ -9,7 +10,7 @@ import {
   getNestingDepths,
   runScc,
 } from "./analyze.js";
-import type { FileMetrics } from "./types.js";
+import type { FileMetrics, Tier } from "./types.js";
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
@@ -499,7 +500,37 @@ describe("getNestingDepths", () => {
   });
 });
 
-describe("computeHotspots", () => {
+describe("assignTiers", () => {
+  it("assigns danger to items in top 50%, watch to next 30%, stable to rest", () => {
+    const items = [
+      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 100, percentOfTotal: 0, tier: "stable" as Tier },
+    ];
+
+    assignTiers(items, 400);
+
+    expect(items[0].tier).toBe("danger");
+    expect(items[1].tier).toBe("danger");
+    expect(items[2].tier).toBe("watch");
+    expect(items[3].tier).toBe("stable");
+  });
+
+  it("calculates percentOfTotal correctly", () => {
+    const items = [
+      { score: 75, percentOfTotal: 0, tier: "stable" as Tier },
+      { score: 25, percentOfTotal: 0, tier: "stable" as Tier },
+    ];
+
+    assignTiers(items, 100);
+
+    expect(items[0].percentOfTotal).toBe(75);
+    expect(items[1].percentOfTotal).toBe(25);
+  });
+});
+
+describe("computeAllRankings", () => {
   const files: FileMetrics[] = [
     {
       file: "a.ts",
@@ -535,34 +566,195 @@ describe("computeHotspots", () => {
     },
   ];
 
-  it("scores files by complexity × churn", () => {
+  it("produces complexity ranking scored by complexity × churn", () => {
     const churn = new Map([
       ["a.ts", 10],
       ["b.ts", 5],
       ["c.ts", 20],
     ]);
 
-    const result = computeHotspots(files, churn);
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
 
-    expect(result[0].file).toBe("a.ts");
-    expect(result[0].hotspotScore).toBe(500);
-    expect(result[1].file).toBe("b.ts");
-    expect(result[1].hotspotScore).toBe(100);
-    expect(result[2].file).toBe("c.ts");
-    expect(result[2].hotspotScore).toBe(100);
+    expect(result.complexity).toBeDefined();
+    expect(result.complexity.entries[0].file).toBe("a.ts");
+    expect(result.complexity.entries[0].score).toBe(500);
+    expect(result.complexity.entries[1].score).toBe(100);
+    expect(result.complexity.label).toBe("Complexity \u00D7 Churn");
   });
 
-  it("filters out files with zero churn", () => {
-    const churn = new Map([["a.ts", 5]]);
+  it("includes complexity density in complexity ranking entries", () => {
+    const churn = new Map([["a.ts", 10]]);
 
-    const result = computeHotspots(files, churn);
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
 
-    expect(result).toHaveLength(1);
-    expect(result[0].file).toBe("a.ts");
+    expect(result.complexity.entries[0].metricDensity).toBe(0.5);
   });
 
-  it("assigns danger tier to files within top 50% of cumulative score", () => {
-    // Use evenly distributed files so multiple fit within 50%
+  it("produces nesting ranking from nestingDepths map", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const nesting = new Map([
+      ["a.ts", 5],
+      ["b.ts", 3],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      nesting,
+      new Map(),
+      0,
+    );
+
+    expect(result.nesting).toBeDefined();
+    expect(result.nesting.entries[0].file).toBe("a.ts");
+    expect(result.nesting.entries[0].score).toBe(50); // 5 × 10
+    expect(result.nesting.entries[0].metricValue).toBe(5);
+  });
+
+  it("produces defects ranking with defect density", () => {
+    const churn = new Map([["a.ts", 10]]);
+    const defectMap = new Map([["a.ts", 3]]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      defectMap,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.defects).toBeDefined();
+    expect(result.defects.entries[0].score).toBe(30); // 3 × 10
+    expect(result.defects.entries[0].metricDensity).toBe(0.03); // 3/100
+  });
+
+  it("sets defect density to 0 when code is 0", () => {
+    const zeroCodeFiles: FileMetrics[] = [
+      {
+        file: "empty.ts",
+        code: 0,
+        lines: 5,
+        complexity: 1,
+        comments: 0,
+        complexityDensity: 0,
+      },
+    ];
+    const churn = new Map([["empty.ts", 2]]);
+    const defectMap = new Map([["empty.ts", 1]]);
+
+    const result = computeAllRankings(
+      zeroCodeFiles,
+      churn,
+      defectMap,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.defects.entries[0].metricDensity).toBe(0);
+  });
+
+  it("produces authors ranking", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const authorMap = new Map([
+      ["a.ts", 2],
+      ["b.ts", 4],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authorMap,
+      0,
+    );
+
+    expect(result.authors).toBeDefined();
+    expect(result.authors.entries[0].file).toBe("a.ts");
+    expect(result.authors.entries[0].score).toBe(20); // 2 × 10
+    expect(result.authors.entries[1].score).toBe(20); // 4 × 5
+  });
+
+  it("omits rankings with no scored entries", () => {
+    const churn = new Map([["a.ts", 10]]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    // Only complexity should exist since nesting/defects/authors maps are empty
+    expect(result.complexity).toBeDefined();
+    expect(result.nesting).toBeUndefined();
+    expect(result.defects).toBeUndefined();
+    expect(result.authors).toBeUndefined();
+  });
+
+  it("returns empty object when no files have churn", () => {
+    const churn = new Map<string, number>();
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(Object.keys(result)).toHaveLength(0);
+  });
+
+  it("limits entries by top parameter", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 20],
+      ["d.ts", 3],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      2,
+    );
+
+    expect(result.complexity.showing).toBe(2);
+    expect(result.complexity.entries).toHaveLength(2);
+    expect(result.complexity.totalEntries).toBe(4);
+  });
+
+  it("assigns tiers by cumulative distribution", () => {
     const evenFiles: FileMetrics[] = [
       {
         file: "x.ts",
@@ -598,11 +790,6 @@ describe("computeHotspots", () => {
       },
     ];
 
-    // All equal scores: 10 * 10 = 100 each. Total = 400.
-    // x: cumulative 100/400 = 25% → danger
-    // y: cumulative 200/400 = 50% → danger
-    // z: cumulative 300/400 = 75% → watch
-    // w: cumulative 400/400 = 100% → stable
     const churn = new Map([
       ["x.ts", 10],
       ["y.ts", 10],
@@ -610,21 +797,21 @@ describe("computeHotspots", () => {
       ["w.ts", 10],
     ]);
 
-    const result = computeHotspots(evenFiles, churn);
+    const result = computeAllRankings(
+      evenFiles,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
 
-    expect(result).toHaveLength(4);
-    expect(result[0].tier).toBe("danger");
-    expect(result[1].tier).toBe("danger");
-    expect(result[2].tier).toBe("watch");
-    expect(result[3].tier).toBe("stable");
-  });
-
-  it("returns empty array when no files have churn", () => {
-    const churn = new Map<string, number>();
-
-    const result = computeHotspots(files, churn);
-
-    expect(result).toHaveLength(0);
+    const entries = result.complexity.entries;
+    expect(entries).toHaveLength(4);
+    expect(entries[0].tier).toBe("danger");
+    expect(entries[1].tier).toBe("danger");
+    expect(entries[2].tier).toBe("watch");
+    expect(entries[3].tier).toBe("stable");
   });
 
   it("calculates percentOfTotal correctly", () => {
@@ -633,63 +820,42 @@ describe("computeHotspots", () => {
       ["b.ts", 10],
     ]);
 
-    const result = computeHotspots(files, churn);
-    const totalPercent = result.reduce((s, h) => s + h.percentOfTotal, 0);
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
 
-    // Should sum to ~100%
+    const totalPercent = result.complexity.entries.reduce(
+      (s, e) => s + e.percentOfTotal,
+      0,
+    );
     expect(totalPercent).toBeCloseTo(100, 0);
   });
 
-  it("populates defects, defectDensity, maxNesting, and authors from maps", () => {
-    const churn = new Map([["a.ts", 10]]);
-    const defects = new Map([["a.ts", 3]]);
-    const nestingDepths = new Map([["a.ts", 5]]);
-    const authors = new Map([["a.ts", 2]]);
+  it("populates tierCounts across all entries, not just shown", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 20],
+      ["d.ts", 3],
+    ]);
 
-    const result = computeHotspots(
+    const result = computeAllRankings(
       files,
       churn,
-      defects,
-      nestingDepths,
-      authors,
+      new Map(),
+      new Map(),
+      new Map(),
+      2,
     );
 
-    expect(result).toHaveLength(1);
-    expect(result[0].defects).toBe(3);
-    expect(result[0].defectDensity).toBe(0.03); // 3/100
-    expect(result[0].maxNesting).toBe(5);
-    expect(result[0].authors).toBe(2);
-  });
-
-  it("sets defectDensity to 0 when code is 0", () => {
-    const zeroCodeFiles: FileMetrics[] = [
-      {
-        file: "empty.ts",
-        code: 0,
-        lines: 5,
-        complexity: 1,
-        comments: 0,
-        complexityDensity: 0,
-      },
-    ];
-    const churn = new Map([["empty.ts", 2]]);
-    const defects = new Map([["empty.ts", 1]]);
-
-    const result = computeHotspots(zeroCodeFiles, churn, defects);
-
-    expect(result[0].defectDensity).toBe(0);
-    expect(result[0].defects).toBe(1);
-  });
-
-  it("defaults new fields to zero when maps are empty", () => {
-    const churn = new Map([["a.ts", 10]]);
-
-    const result = computeHotspots(files, churn);
-
-    expect(result[0].defects).toBe(0);
-    expect(result[0].defectDensity).toBe(0);
-    expect(result[0].maxNesting).toBe(0);
-    expect(result[0].authors).toBe(0);
+    const counts = result.complexity.tierCounts;
+    const total = counts.danger + counts.watch + counts.stable;
+    expect(total).toBe(result.complexity.totalEntries);
   });
 });
 

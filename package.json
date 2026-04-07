@@ -1,6 +1,6 @@
 {
   "name": "@wbern/obscene",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Identify hotspot files — complex code that changes frequently. Churn × complexity analysis for any git repo.",
   "type": "module",
   "bin": {
@@ -48,7 +48,8 @@
     "node": ">=18"
   },
   "dependencies": {
-    "commander": "^13.1.0"
+    "commander": "^13.1.0",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

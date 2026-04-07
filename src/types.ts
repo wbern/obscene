@@ -22,15 +22,24 @@ export interface FileMetrics {
 
 export type Tier = "danger" | "watch" | "stable";
 
-export interface HotspotEntry extends FileMetrics {
-  churn: number;
-  hotspotScore: number;
+export interface RankingEntry {
+  file: string;
+  score: number;
   percentOfTotal: number;
   tier: Tier;
-  defects: number;
-  defectDensity: number;
-  maxNesting: number;
-  authors: number;
+  churn: number;
+  metricValue: number;
+  metricDensity?: number;
+}
+
+export interface RankingOutput {
+  label: string;
+  scoreFormula: string;
+  totalScore: number;
+  tierCounts: Record<Tier, number>;
+  totalEntries: number;
+  showing: number;
+  entries: RankingEntry[];
 }
 
 export interface ReportOutput {
@@ -51,11 +60,7 @@ export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
-  totalScore: number;
-  tierCounts: Record<Tier, number>;
-  totalHotspots: number;
-  showing: number;
-  hotspots: HotspotEntry[];
+  rankings: Record<string, RankingOutput>;
 }
 
 export interface CouplingEntry {

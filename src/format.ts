@@ -1,8 +1,16 @@
+import {
+  colorRow,
+  padLeft,
+  padRight,
+  tierLabel,
+  tierSummary,
+  truncate,
+} from "./color.js";
 import type {
   CouplingOutput,
   HotspotsOutput,
+  RankingOutput,
   ReportOutput,
-  Tier,
 } from "./types.js";
 
 export function formatReportTable(output: ReportOutput): string {
@@ -48,50 +56,156 @@ export function formatReportTable(output: ReportOutput): string {
   return lines.join("\n");
 }
 
+interface RankingColumnDef {
+  header: string;
+  width: number;
+  align: "left" | "right";
+  value: (entry: RankingOutput["entries"][0]) => string;
+}
+
+function getRankingColumns(key: string): RankingColumnDef[] {
+  const base: RankingColumnDef[] = [
+    {
+      header: "File",
+      width: 50,
+      align: "left",
+      value: (e) => truncate(e.file, 48),
+    },
+    {
+      header: "Score",
+      width: 8,
+      align: "right",
+      value: (e) => e.score.toLocaleString(),
+    },
+    {
+      header: "%",
+      width: 7,
+      align: "right",
+      value: (e) => e.percentOfTotal.toFixed(1),
+    },
+    {
+      header: "Churn",
+      width: 7,
+      align: "right",
+      value: (e) => String(e.churn),
+    },
+  ];
+
+  const metricCols: Record<string, RankingColumnDef[]> = {
+    complexity: [
+      {
+        header: "Cmplx",
+        width: 7,
+        align: "right",
+        value: (e) => String(e.metricValue),
+      },
+      {
+        header: "Dens",
+        width: 7,
+        align: "right",
+        value: (e) => (e.metricDensity ?? 0).toFixed(2),
+      },
+    ],
+    nesting: [
+      {
+        header: "Nest",
+        width: 6,
+        align: "right",
+        value: (e) => String(e.metricValue),
+      },
+    ],
+    defects: [
+      {
+        header: "Dfcts",
+        width: 6,
+        align: "right",
+        value: (e) => String(e.metricValue),
+      },
+      {
+        header: "DfDns",
+        width: 7,
+        align: "right",
+        value: (e) => (e.metricDensity ?? 0).toFixed(4),
+      },
+    ],
+    authors: [
+      {
+        header: "Auth",
+        width: 6,
+        align: "right",
+        value: (e) => String(e.metricValue),
+      },
+    ],
+  };
+
+  const tierCol: RankingColumnDef = {
+    header: "Tier",
+    width: 12,
+    align: "right",
+    value: (e) => tierLabel(e.tier),
+  };
+
+  return [...base, ...(metricCols[key] ?? []), tierCol];
+}
+
+function formatRankingTable(key: string, ranking: RankingOutput): string[] {
+  const lines: string[] = [];
+  const cols = getRankingColumns(key);
+
+  lines.push(
+    `${ranking.label} — Total score: ${ranking.totalScore.toLocaleString()}`,
+  );
+  lines.push(
+    ...tierSummary(ranking.tierCounts, ranking.showing, ranking.totalEntries),
+  );
+  lines.push("");
+
+  const headerLine = cols
+    .map((c) =>
+      c.align === "left"
+        ? padRight(c.header, c.width)
+        : padLeft(c.header, c.width),
+    )
+    .join("");
+  lines.push(headerLine);
+
+  const totalWidth = cols.reduce((sum, c) => sum + c.width, 0);
+  lines.push("─".repeat(totalWidth));
+
+  for (const entry of ranking.entries) {
+    const rowParts = cols.map((c) => {
+      const val = c.value(entry);
+      return c.align === "left"
+        ? padRight(val, c.width)
+        : padLeft(val, c.width);
+    });
+    const rawRow = rowParts.join("");
+    lines.push(colorRow(entry.tier, rawRow));
+  }
+
+  return lines;
+}
+
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
-  const { tierCounts, totalScore, churnWindow, hotspots } = output;
+  const { churnWindow, rankings } = output;
 
-  lines.push(
-    `Hotspots — ${churnWindow} churn window | Total score: ${totalScore.toLocaleString()}`,
-  );
-  pushTierSummary(lines, tierCounts, output.showing, output.totalHotspots);
+  lines.push(`Hotspots — ${churnWindow} churn window`);
+  lines.push("");
 
-  lines.push(
-    padRight("File", 50) +
-      padLeft("Score", 8) +
-      padLeft("%", 7) +
-      padLeft("Churn", 7) +
-      padLeft("Cmplx", 7) +
-      padLeft("Dens", 7) +
-      padLeft("Dfcts", 6) +
-      padLeft("Nest", 6) +
-      padLeft("Auth", 6) +
-      padLeft("Tier", 8),
-  );
-  lines.push("─".repeat(112));
+  const keys = Object.keys(rankings);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    lines.push(...formatRankingTable(key, rankings[key]));
 
-  for (const h of hotspots) {
-    lines.push(
-      padRight(truncate(h.file, 48), 50) +
-        padLeft(h.hotspotScore.toLocaleString(), 8) +
-        padLeft(h.percentOfTotal.toFixed(1), 7) +
-        padLeft(String(h.churn), 7) +
-        padLeft(String(h.complexity), 7) +
-        padLeft(h.complexityDensity.toFixed(2), 7) +
-        padLeft(String(h.defects), 6) +
-        padLeft(String(h.maxNesting), 6) +
-        padLeft(String(h.authors), 6) +
-        padLeft(tierLabel(h.tier), 8),
-    );
+    if (i < keys.length - 1) {
+      lines.push("");
+    }
   }
 
   lines.push("");
   lines.push(
-    "Score=complexity\u00D7churn | Dens=complexity/code | Dfcts=fix commits | Nest=max indent depth | Auth=unique authors",
-  );
-  lines.push(
-    "Tiers are relative to THIS codebase, not absolute quality grades. A 'danger' file in a clean codebase may be fine.",
+    "Score=metric\u00D7churn | Tiers are relative to THIS codebase, not absolute quality grades.",
   );
   lines.push(
     "High scores flag review candidates, not bad code — stable complex files (parsers, engines) score high naturally.",
@@ -108,7 +222,7 @@ export function formatCouplingTable(output: CouplingOutput): string {
   lines.push(
     `Coupling — ${churnWindow} churn window | Min shared: ${output.minCochanges} | Total score: ${totalScore.toLocaleString()}`,
   );
-  pushTierSummary(lines, tierCounts, output.showing, output.totalCouplings);
+  lines.push(...tierSummary(tierCounts, output.showing, output.totalCouplings));
 
   lines.push(
     padRight("File 1", 35) +
@@ -116,19 +230,19 @@ export function formatCouplingTable(output: CouplingOutput): string {
       padLeft("Shared", 7) +
       padLeft("Degree", 8) +
       padLeft("Cmplx", 7) +
-      padLeft("Tier", 8),
+      padLeft("Tier", 12),
   );
-  lines.push("─".repeat(100));
+  lines.push("─".repeat(104));
 
   for (const c of couplings) {
-    lines.push(
+    const rawRow =
       padRight(truncate(c.file1, 33), 35) +
-        padRight(truncate(c.file2, 33), 35) +
-        padLeft(String(c.cochanges), 7) +
-        padLeft(`${c.degree.toFixed(1)}%`, 8) +
-        padLeft(String(c.totalComplexity), 7) +
-        padLeft(tierLabel(c.tier), 8),
-    );
+      padRight(truncate(c.file2, 33), 35) +
+      padLeft(String(c.cochanges), 7) +
+      padLeft(`${c.degree.toFixed(1)}%`, 8) +
+      padLeft(String(c.totalComplexity), 7) +
+      padLeft(tierLabel(c.tier), 12);
+    lines.push(colorRow(c.tier, rawRow));
   }
 
   lines.push("");
@@ -144,36 +258,4 @@ export function formatCouplingTable(output: CouplingOutput): string {
   lines.push("Docs: https://github.com/wbern/obscene#metrics");
 
   return lines.join("\n");
-}
-
-function pushTierSummary(
-  lines: string[],
-  tierCounts: Record<Tier, number>,
-  showing: number,
-  total: number,
-): void {
-  lines.push(
-    `Tiers: ${tierCounts.danger} danger, ${tierCounts.watch} watch, ${tierCounts.stable} stable`,
-  );
-  lines.push(`Showing: ${showing} of ${total}`);
-  lines.push("");
-}
-
-function tierLabel(tier: Tier): string {
-  if (tier === "danger") return "DANGER";
-  if (tier === "watch") return "WATCH";
-  return "stable";
-}
-
-function padRight(s: string, n: number): string {
-  /* v8 ignore next -- truncation ensures s < n in all call sites */
-  return s.length >= n ? s : s + " ".repeat(n - s.length);
-}
-
-function padLeft(s: string, n: number): string {
-  return s.length >= n ? s : " ".repeat(n - s.length) + s;
-}
-
-function truncate(s: string, max: number): string {
-  return s.length <= max ? s : `…${s.slice(s.length - max + 1)}`;
 }

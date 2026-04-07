@@ -2,8 +2,8 @@ declare const __VERSION__: string;
 
 import { Command } from "commander";
 import {
+  computeAllRankings,
   computeCoupling,
-  computeHotspots,
   getAuthors,
   getChurn,
   getCoChanges,
@@ -50,19 +50,17 @@ const REPORT_GUIDE: Record<string, string> = {
 };
 
 const HOTSPOTS_GUIDE: Record<string, string> = {
-  hotspotScore:
-    "complexity × churn. Ranks files by combined risk: complex code that changes often. High score does NOT mean bad code — stable high-complexity files (parsers, engines) are fine. Focus on files where score is rising over time.",
-  churn:
-    "Commit count in the time window. High churn alone is neutral — active development is normal. It becomes a signal when combined with high complexity.",
-  tier: "Relative ranking within THIS codebase (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade. A 'danger' file in a clean codebase may be perfectly fine. Compare across runs to spot trends.",
+  rankings:
+    "Four independent ranking tables, each scoring files by a different metric × churn. A file may rank high in one dimension but not others.",
+  complexity:
+    "complexity × churn. Ranks files by combined risk: complex code that changes often.",
+  nesting:
+    "maxNesting × churn. Deeply nested code that changes often is harder to reason about.",
   defects:
-    "Count of fix: conventional commits. A proxy for bug frequency — 0 does not mean bug-free, and >0 does not mean bad code. Useful for spotting files that attract repeated fixes.",
-  defectDensity:
-    "Fix commits per line of code. Normalizes defect count by file size. Only meaningful with conventional commits (fix: prefix).",
-  maxNesting:
-    "Deepest indentation level. >6 suggests complex control flow worth simplifying. Language-dependent — Python files naturally nest less than C++.",
+    "defects × churn. Files with fix: commits that also churn heavily may contain latent bugs.",
   authors:
-    "Unique committers in the time window. High author count may indicate unclear ownership. Low count is normal for specialized code. Neither value is inherently good or bad.",
+    "authors × churn. Files touched by many authors and changing often may lack clear ownership.",
+  tier: "Relative ranking within THIS codebase (top 50% = danger, next 30% = watch, bottom 20% = stable). NOT an absolute quality grade.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -174,32 +172,20 @@ function runHotspots(opts: HotspotsOpts): void {
   const defects = getDefects(months);
   const authors = getAuthors(months);
   const nestingDepths = getNestingDepths(files.map((f) => f.file));
-  const hotspots = computeHotspots(
+  const rankings = computeAllRankings(
     files,
     churn,
     defects,
     nestingDepths,
     authors,
+    top,
   );
-
-  const limited = top > 0 ? hotspots.slice(0, top) : hotspots;
-
-  const tierCounts = { danger: 0, watch: 0, stable: 0 };
-  for (const h of hotspots) {
-    tierCounts[h.tier]++;
-  }
-
-  const totalScore = hotspots.reduce((sum, h) => sum + h.hotspotScore, 0);
 
   const output: HotspotsOutput = {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
-    totalScore,
-    tierCounts,
-    totalHotspots: hotspots.length,
-    showing: limited.length,
-    hotspots: limited,
+    rankings,
   };
 
   if (opts.format === "table") {

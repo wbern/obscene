@@ -121,7 +121,7 @@ describe("CLI Integration", () => {
     },
   );
 
-  it("should produce valid JSON output in a git repo", {
+  it("should produce valid JSON output with rankings structure", {
     timeout: 30000,
   }, () => {
     // Run obscene on this repo (which is a git repo with scc-analyzable files)
@@ -136,33 +136,37 @@ describe("CLI Integration", () => {
     expect(parsed).toHaveProperty("guide");
     expect(Object.keys(parsed.guide).sort()).toEqual([
       "authors",
-      "churn",
-      "defectDensity",
+      "complexity",
       "defects",
-      "hotspotScore",
-      "maxNesting",
+      "nesting",
+      "rankings",
       "tier",
     ]);
     expect(parsed).toHaveProperty("churnWindow", "3 months");
-    expect(parsed).toHaveProperty("hotspots");
-    expect(Array.isArray(parsed.hotspots)).toBe(true);
-    expect(parsed.hotspots.length).toBeLessThanOrEqual(5);
+    expect(parsed).toHaveProperty("rankings");
+    expect(typeof parsed.rankings).toBe("object");
 
-    if (parsed.hotspots.length > 0) {
-      const first = parsed.hotspots[0];
+    // complexity ranking should always exist
+    expect(parsed.rankings).toHaveProperty("complexity");
+    const complexity = parsed.rankings.complexity;
+    expect(complexity).toHaveProperty("label");
+    expect(complexity).toHaveProperty("scoreFormula");
+    expect(complexity).toHaveProperty("totalScore");
+    expect(complexity).toHaveProperty("entries");
+    expect(Array.isArray(complexity.entries)).toBe(true);
+    expect(complexity.entries.length).toBeLessThanOrEqual(5);
+
+    if (complexity.entries.length > 0) {
+      const first = complexity.entries[0];
       expect(first).toHaveProperty("file");
-      expect(first).toHaveProperty("complexity");
+      expect(first).toHaveProperty("score");
       expect(first).toHaveProperty("churn");
-      expect(first).toHaveProperty("hotspotScore");
       expect(first).toHaveProperty("tier");
-      expect(first).toHaveProperty("defects");
-      expect(first).toHaveProperty("defectDensity");
-      expect(first).toHaveProperty("maxNesting");
-      expect(first).toHaveProperty("authors");
+      expect(first).toHaveProperty("metricValue");
     }
   });
 
-  it("should produce table output with --format table", {
+  it("should produce table output with multiple ranking tables", {
     timeout: 30000,
   }, () => {
     const result = spawnSync("node", [BIN_PATH, "--format", "table"], {
@@ -176,6 +180,8 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Score");
     expect(result.stdout).toContain("Churn");
     expect(result.stdout).toContain("Tier");
+    // Emoji presence
+    expect(result.stdout).toMatch(/[🔴🟡🟢]/u);
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
   });
 
