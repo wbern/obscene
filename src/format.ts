@@ -1,3 +1,4 @@
+import pc from "picocolors";
 import {
   colorRow,
   padLeft,
@@ -47,12 +48,16 @@ export function formatReportTable(output: ReportOutput): string {
 
   lines.push("");
   lines.push(
-    "Complexity=cyclomatic branch/loop count | Density=complexity/code | Comments=comment lines",
+    pc.dim(
+      "Complexity=cyclomatic branch/loop count | Density=complexity/code | Comments=comment lines",
+    ),
   );
   lines.push(
-    "High complexity is expected for parsers, state machines, and business logic. Compare density across files, not raw values.",
+    pc.dim(
+      "High complexity is expected for parsers, state machines, and business logic. Compare density across files, not raw values.",
+    ),
   );
-  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+  lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));
 
   return lines.join("\n");
 }
@@ -149,13 +154,32 @@ function getRankingColumns(key: string): RankingColumnDef[] {
   return [...base, ...(metricCols[key] ?? []), tierCol];
 }
 
-function formatRankingTable(key: string, ranking: RankingOutput): string[] {
+const METRIC_EMOJI: Record<string, string> = {
+  complexity: "🧬",
+  nesting: "📏",
+  defects: "🐛",
+  authors: "👥",
+};
+
+function formatRankingTable(
+  key: string,
+  ranking: RankingOutput,
+  description?: string,
+): string[] {
   const lines: string[] = [];
   const cols = getRankingColumns(key);
+  const emoji = METRIC_EMOJI[key];
+  const prefix = emoji ? `${emoji} ` : "";
 
+  const title = ranking.label.toUpperCase().replace("CHURN", "🔄 CHURN");
   lines.push(
-    `${ranking.label} — Total score: ${ranking.totalScore.toLocaleString()}`,
+    `${prefix}${title} — Total score: ${ranking.totalScore.toLocaleString()}`,
   );
+  if (description) {
+    for (const line of description.split("\n")) {
+      lines.push(pc.dim(line));
+    }
+  }
   lines.push(
     ...tierSummary(ranking.tierCounts, ranking.showing, ranking.totalEntries),
   );
@@ -197,9 +221,11 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   const keys = Object.keys(rankings);
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    lines.push(...formatRankingTable(key, rankings[key]));
+    lines.push(...formatRankingTable(key, rankings[key], output.guide[key]));
 
     if (i < keys.length - 1) {
+      lines.push("");
+      lines.push("· · ·");
       lines.push("");
     }
   }
@@ -217,12 +243,16 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
 
   lines.push("");
   lines.push(
-    "Score=metric\u00D7churn | Tiers are relative to THIS codebase, not absolute quality grades.",
+    pc.dim(
+      "Score=metric\u00D7churn | Tiers are relative to THIS codebase, not absolute quality grades.",
+    ),
   );
   lines.push(
-    "High scores flag review candidates, not bad code — stable complex files (parsers, engines) score high naturally.",
+    pc.dim(
+      "High scores flag review candidates, not bad code \u2014 stable complex files (parsers, engines) score high naturally.",
+    ),
   );
-  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+  lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));
 
   return lines.join("\n");
 }
@@ -259,15 +289,21 @@ export function formatCouplingTable(output: CouplingOutput): string {
 
   lines.push("");
   lines.push(
-    "Shared=co-changed commits | Degree=shared/min(churn)\u00D7100 | Cmplx=sum of both files",
+    pc.dim(
+      "Shared=co-changed commits | Degree=shared/min(churn)\u00D7100 | Cmplx=sum of both files",
+    ),
   );
   lines.push(
-    "Tiers are relative to THIS codebase, not absolute quality grades. High coupling may be intentional and fine.",
+    pc.dim(
+      "Tiers are relative to THIS codebase, not absolute quality grades. High coupling may be intentional and fine.",
+    ),
   );
   lines.push(
-    "Same-directory pairs excluded. Commits touching >20 files skipped. Only cross-directory dependencies shown.",
+    pc.dim(
+      "Same-directory pairs excluded. Commits touching >20 files skipped. Only cross-directory dependencies shown.",
+    ),
   );
-  lines.push("Docs: https://github.com/wbern/obscene#metrics");
+  lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));
 
   return lines.join("\n");
 }
@@ -275,8 +311,9 @@ export function formatCouplingTable(output: CouplingOutput): string {
 export function formatCompositeTable(output: CompositeOutput): string {
   const lines: string[] = [];
 
+  lines.push("═".repeat(84));
   lines.push(
-    `${output.label} — Total score: ${output.totalScore.toLocaleString()}`,
+    `★ ${output.label.toUpperCase()} — Total score: ${output.totalScore.toLocaleString()}`,
   );
   lines.push(
     ...tierSummary(output.tierCounts, output.showing, output.totalEntries),

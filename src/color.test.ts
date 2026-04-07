@@ -28,9 +28,16 @@ describe("visualWidth", () => {
 
   it("counts emoji as 2 columns wide", () => {
     expect(visualWidth("🔴")).toBe(2);
-    expect(visualWidth("🔥 HOT")).toBe(6);
+    // All tier labels should have equal visual width (7) for alignment
+    expect(visualWidth("🔥 HOT ")).toBe(7);
     expect(visualWidth("☀️ WARM")).toBe(7);
-    expect(visualWidth("🧊 cool")).toBe(7);
+    expect(visualWidth("🧊 COOL")).toBe(7);
+  });
+
+  it("treats variation selectors as zero-width", () => {
+    // U+FE0F (emoji presentation selector) should not add width
+    expect(visualWidth("☀️")).toBe(2);
+    expect(visualWidth("☀")).toBe(2);
   });
 
   it("counts CJK characters as 2 columns wide", () => {
@@ -140,7 +147,7 @@ describe("tierLabel", () => {
 
   it("returns label with emoji for cool", () => {
     const label = tierLabel("cool");
-    expect(label).toContain("cool");
+    expect(label).toContain("COOL");
     expect(label).toContain("🧊");
   });
 });
@@ -175,17 +182,17 @@ describe("tierSummary", () => {
   it("returns two lines with tier counts and showing info", () => {
     const lines = tierSummary({ hot: 2, warm: 3, cool: 5 }, 10, 20);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toContain("2 hot");
-    expect(lines[0]).toContain("3 warm");
-    expect(lines[0]).toContain("5 cool");
+    expect(lines[0]).toContain("2 HOT");
+    expect(lines[0]).toContain("3 WARM");
+    expect(lines[0]).toContain("5 COOL");
     expect(lines[1]).toBe("Showing: 10 of 20");
   });
 
   it("includes Tiers prefix in tier line", () => {
     const lines = tierSummary({ hot: 1, warm: 0, cool: 0 }, 1, 1);
     expect(lines[0]).toContain("Tiers:");
-    expect(lines[0]).toContain("1 hot");
-    expect(lines[0]).toContain("0 warm");
-    expect(lines[0]).toContain("0 cool");
+    expect(lines[0]).toContain("1 HOT");
+    expect(lines[0]).toContain("0 WARM");
+    expect(lines[0]).toContain("0 COOL");
   });
 });

@@ -10,6 +10,7 @@ import {
   getCoChanges,
   getDefects,
   getNestingDepths,
+  readIgnoreFile,
   runScc,
 } from "./analyze.js";
 import {
@@ -55,15 +56,15 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   rankings:
     "Four independent ranking tables, each scoring files by a different metric × churn. A file may rank high in one dimension but not others.",
   complexity:
-    "complexity × churn. Ranks files by combined risk: complex code that changes often.",
+    "complexity × churn. Complex code that changes often poses maintenance risk.\nSource: McCabe cyclomatic complexity (1976) via scc · Strength: objective, language-agnostic · Limit: parsers and state machines score high naturally",
   nesting:
-    "maxNesting × churn. Deeply nested code that changes often is harder to reason about.",
+    "maxNesting × churn. Deeply nested code that changes often is harder to reason about.\nSource: cognitive complexity research (SonarSource, G. Ann Campbell 2018) · Strength: catches hard-to-follow control flow · Limit: some patterns (error chains, config) legitimately nest deep",
   defects:
-    "defects × churn. Files with fix: commits that also churn heavily may contain latent bugs.",
+    "defects × churn. Files with fix: commits that also churn heavily may harbor latent bugs.\nSource: defect prediction via conventional commits (fix: prefix) · Strength: direct bug-history signal · Limit: requires consistent fix: convention to be accurate",
   authors:
-    "authors × churn. Files touched by many authors and changing often may lack clear ownership.",
+    "authors × churn. Files touched by many authors and changing often may lack clear ownership.\nSource: code ownership research (Bird et al. 2011, Microsoft) · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
   composite:
-    "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.",
+    "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nSource: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
 };
 
@@ -131,9 +132,14 @@ addSharedOptions(
     }
   });
 
+function resolveExcludes(cliExcludes?: string[]): string[] {
+  return [...readIgnoreFile(), ...(cliExcludes ?? [])];
+}
+
 function runReport(opts: SharedOpts): void {
   const top = parseInt(opts.top, 10);
-  const files = runScc(opts.exclude);
+  const allExcludes = resolveExcludes(opts.exclude);
+  const files = runScc(allExcludes);
 
   const totals = files.reduce(
     (acc, f) => ({
@@ -171,7 +177,8 @@ function runReport(opts: SharedOpts): void {
 function runHotspots(opts: HotspotsOpts): void {
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
-  const files = runScc(opts.exclude);
+  const allExcludes = resolveExcludes(opts.exclude);
+  const files = runScc(allExcludes);
   const churn = getChurn(months);
   const defects = getDefects(months);
   const authors = getAuthors(months);
@@ -210,9 +217,10 @@ function runCoupling(opts: CouplingOpts): void {
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const minCochanges = parseInt(opts.minCochanges, 10);
-  const files = runScc(opts.exclude);
+  const allExcludes = resolveExcludes(opts.exclude);
+  const files = runScc(allExcludes);
   const churn = getChurn(months);
-  const cochanges = getCoChanges(months, opts.exclude);
+  const cochanges = getCoChanges(months, allExcludes);
 
   const complexityMap = new Map<string, number>();
   for (const f of files) {

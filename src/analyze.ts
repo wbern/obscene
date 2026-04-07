@@ -12,6 +12,27 @@ import type {
   Tier,
 } from "./types.js";
 
+const IGNORE_FILES = [".obsignore", ".obsceneignore"];
+
+/**
+ * Read exclusion patterns from .obsignore or .obsceneignore file.
+ * First file found wins. Returns empty array if neither exists.
+ */
+export function readIgnoreFile(): string[] {
+  for (const name of IGNORE_FILES) {
+    try {
+      const content = readFileSync(name, "utf-8");
+      return content
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "" && !line.startsWith("#"));
+    } catch {
+      // file not found, try next
+    }
+  }
+  return [];
+}
+
 const DEFAULT_EXCLUDES = [
   /\.test\./,
   /\.spec\./,
@@ -171,7 +192,7 @@ export function getAuthors(months: number): Map<string, number> {
     if (!block.trim()) continue;
     const lines = block.split("\n");
     const author = lines[0].trim();
-    if (!author) continue;
+    if (!author || author.endsWith("[bot]")) continue;
     for (let i = 1; i < lines.length; i++) {
       const file = normalizePath(lines[i].trim());
       if (!file) continue;

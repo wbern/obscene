@@ -188,8 +188,8 @@ describe("CLI Integration", () => {
     // Emoji presence
     expect(result.stdout).toMatch(/🔥|☀️|🧊/u);
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
-    // Combined table
-    expect(result.stdout).toContain("Combined");
+    // Combined table with emphasis
+    expect(result.stdout).toContain("★ COMBINED");
     expect(result.stdout).toContain("Dims");
   });
 

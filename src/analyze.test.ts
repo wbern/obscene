@@ -9,6 +9,7 @@ import {
   getCoChanges,
   getDefects,
   getNestingDepths,
+  readIgnoreFile,
   runScc,
 } from "./analyze.js";
 import type { FileMetrics, Tier } from "./types.js";
@@ -29,6 +30,75 @@ const mockReadFileSync = vi.mocked(readFileSync);
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("readIgnoreFile", () => {
+  it("reads patterns from .obsignore", () => {
+    mockReadFileSync.mockImplementation((path: unknown) => {
+      if (path === ".obsignore") return "*.generated.*\nvendor/**\n";
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual(["*.generated.*", "vendor/**"]);
+  });
+
+  it("falls back to .obsceneignore when .obsignore is missing", () => {
+    mockReadFileSync.mockImplementation((path: unknown) => {
+      if (path === ".obsceneignore") return "dist/**\n";
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual(["dist/**"]);
+  });
+
+  it("returns empty array when neither file exists", () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual([]);
+  });
+
+  it("skips comment lines and blank lines", () => {
+    mockReadFileSync.mockImplementation((path: unknown) => {
+      if (path === ".obsignore")
+        return "# This is a comment\n\n  \n*.gen.*\n# Another comment\nvendor/**\n";
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual(["*.gen.*", "vendor/**"]);
+  });
+
+  it("trims leading and trailing whitespace from patterns", () => {
+    mockReadFileSync.mockImplementation((path: unknown) => {
+      if (path === ".obsignore") return "  *.gen.*  \n  vendor/**  \n";
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual(["*.gen.*", "vendor/**"]);
+  });
+
+  it("uses .obsignore when both files exist", () => {
+    mockReadFileSync.mockImplementation((path: unknown) => {
+      if (path === ".obsignore") return "from-obsignore\n";
+      if (path === ".obsceneignore") return "from-obsceneignore\n";
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+
+    const result = readIgnoreFile();
+
+    expect(result).toEqual(["from-obsignore"]);
+  });
 });
 
 describe("runScc", () => {
@@ -384,6 +454,28 @@ describe("getAuthors", () => {
 
     expect(result.get("src/foo.ts")).toBe(2);
     expect(result.get("src/bar.ts")).toBe(1);
+  });
+
+  it("excludes bot authors from count", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\nsrc/foo.ts\nCOMMIT_SEP\nsemantic-release[bot]\nsrc/foo.ts\npackage.json\nCOMMIT_SEP\nBob\npackage.json\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    // semantic-release[bot] excluded: foo has 1 author, package.json has 1
+    expect(result.get("src/foo.ts")).toBe(1);
+    expect(result.get("package.json")).toBe(1);
+  });
+
+  it("omits files only touched by bots", () => {
+    const gitOutput =
+      "COMMIT_SEP\ndependabot[bot]\npackage.json\nCOMMIT_SEP\nrenovate[bot]\npackage.json\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthors(3);
+
+    expect(result.has("package.json")).toBe(false);
   });
 
   it("returns 1 for single-author file", () => {

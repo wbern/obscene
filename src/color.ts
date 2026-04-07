@@ -23,6 +23,8 @@ function isWide(cp: number): boolean {
     // Fullwidth Forms (U+FF01–U+FF60, U+FFE0–U+FFE6)
     (cp >= 0xff01 && cp <= 0xff60) ||
     (cp >= 0xffe0 && cp <= 0xffe6) ||
+    // Miscellaneous Symbols (U+2600–U+26FF) — includes ☀, ⚡, etc.
+    (cp >= 0x2600 && cp <= 0x26ff) ||
     // Emoji and symbol blocks in supplementary planes (U+1F300–U+1FAFF)
     (cp >= 0x1f300 && cp <= 0x1faff) ||
     // CJK Extension B+ and supplementary ideographs (U+20000–U+2FA1F)
@@ -34,10 +36,10 @@ export function visualWidth(s: string): number {
   const stripped = s.replace(ANSI_RE, "");
   let width = 0;
   for (const ch of stripped) {
-    const cp = ch.codePointAt(0);
-    if (cp !== undefined) {
-      width += isWide(cp) ? 2 : 1;
-    }
+    const cp = ch.codePointAt(0)!;
+    // Variation selectors are zero-width (U+FE0E text, U+FE0F emoji)
+    if (cp === 0xfe0e || cp === 0xfe0f) continue;
+    width += isWide(cp) ? 2 : 1;
   }
   return width;
 }
@@ -57,15 +59,15 @@ export function truncate(s: string, max: number): string {
 }
 
 export function tierLabel(tier: Tier): string {
-  if (tier === "hot") return pc.red("🔥 HOT");
+  if (tier === "hot") return pc.red("🔥 HOT ");
   if (tier === "warm") return pc.yellow("☀️ WARM");
-  return pc.green("🧊 cool");
+  return pc.blue("🧊 COOL");
 }
 
 export function colorRow(tier: Tier, text: string): string {
   if (tier === "hot") return pc.red(text);
   if (tier === "warm") return pc.yellow(text);
-  return pc.green(text);
+  return pc.blue(text);
 }
 
 export function tierSummary(
@@ -75,7 +77,7 @@ export function tierSummary(
 ): string[] {
   const lines: string[] = [];
   lines.push(
-    `Tiers: ${pc.red(`${tierCounts.hot} hot`)}, ${pc.yellow(`${tierCounts.warm} warm`)}, ${pc.green(`${tierCounts.cool} cool`)}`,
+    `Tiers: ${pc.red(`${tierCounts.hot} HOT`)}, ${pc.yellow(`${tierCounts.warm} WARM`)}, ${pc.blue(`${tierCounts.cool} COOL`)}`,
   );
   lines.push(`Showing: ${showing} of ${total}`);
   return lines;

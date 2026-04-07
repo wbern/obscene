@@ -94,7 +94,10 @@ describe("formatHotspotsTable", () => {
   it("formats multi-ranking output with emoji tier labels", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
-      guide: {},
+      guide: {
+        complexity:
+          "complexity × churn. Ranks files by combined risk: complex code that changes often.",
+      },
       churnWindow: "3 months",
       rankings: {
         complexity: {
@@ -132,11 +135,14 @@ describe("formatHotspotsTable", () => {
 
     expect(result).toContain("Hotspots");
     expect(result).toContain("3 months");
-    expect(result).toContain("Complexity \u00D7 Churn");
+    // Section headers are uppercased with metric emojis
+    expect(result).toContain("🧬 COMPLEXITY \u00D7 🔄 CHURN");
     expect(result).toContain("1,000");
     expect(result).toContain("src/foo.ts");
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Showing: 2 of 2");
+    // Guide description appears under section header
+    expect(result).toContain("Ranks files by combined risk");
     // Emoji tier labels
     expect(result).toContain("🔥");
     expect(result).toContain("HOT");
@@ -198,10 +204,13 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("Complexity \u00D7 Churn");
-    expect(result).toContain("Nesting \u00D7 Churn");
+    // Section headers are uppercased with metric emojis
+    expect(result).toContain("🧬 COMPLEXITY \u00D7 🔄 CHURN");
+    expect(result).toContain("📏 NESTING \u00D7 🔄 CHURN");
     // Nesting table should have Nest column
     expect(result).toContain("Nest");
+    // Visual separator between ranking tables
+    expect(result).toContain("· · ·");
   });
 
   it("shows cool tier with green emoji", () => {
@@ -235,7 +244,7 @@ describe("formatHotspotsTable", () => {
     const result = formatHotspotsTable(output);
 
     expect(result).toContain("🧊");
-    expect(result).toContain("cool");
+    expect(result).toContain("COOL");
   });
 
   it("handles large scores that overflow column width", () => {
@@ -370,7 +379,7 @@ describe("formatHotspotsTable", () => {
     const result = formatHotspotsTable(output);
 
     expect(result).toContain("Auth");
-    expect(result).toContain("Authors \u00D7 Churn");
+    expect(result).toContain("👥 AUTHORS \u00D7 🔄 CHURN");
   });
 
   it("handles complexity entries without metricDensity", () => {
@@ -466,7 +475,7 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("Custom Metric");
+    expect(result).toContain("CUSTOM METRIC");
     expect(result).toContain("Score");
     expect(result).toContain("Tier");
     // No metric-specific columns
@@ -597,7 +606,7 @@ describe("formatCouplingTable", () => {
     const result = formatCouplingTable(output);
 
     expect(result).toContain("🧊");
-    expect(result).toContain("cool");
+    expect(result).toContain("COOL");
   });
 
   it("truncates long file paths", () => {
@@ -662,7 +671,8 @@ describe("formatCompositeTable", () => {
 
     const result = formatCompositeTable(output);
 
-    expect(result).toContain("Combined");
+    // Star prefix + uppercase label for composite emphasis
+    expect(result).toContain("★ COMBINED");
     expect(result).toContain("src/foo.ts");
     expect(result).toContain("src/bar.ts");
     expect(result).toContain("Dims");
@@ -671,5 +681,7 @@ describe("formatCompositeTable", () => {
     expect(result).toContain("☀️");
     expect(result).toContain("WARM");
     expect(result).toContain("Showing: 2 of 2");
+    // Emphasis separator line before composite header
+    expect(result).toContain("═");
   });
 });
