@@ -25,6 +25,46 @@ describe("visualWidth", () => {
   it("returns 0 for empty string", () => {
     expect(visualWidth("")).toBe(0);
   });
+
+  it("counts emoji as 2 columns wide", () => {
+    expect(visualWidth("🔴")).toBe(2);
+    expect(visualWidth("🔴 DANGER")).toBe(9);
+    expect(visualWidth("🟡 WATCH")).toBe(8);
+    expect(visualWidth("🟢 stable")).toBe(9);
+  });
+
+  it("counts CJK characters as 2 columns wide", () => {
+    expect(visualWidth("中")).toBe(2);
+    expect(visualWidth("中文")).toBe(4);
+    expect(visualWidth("hello中")).toBe(7);
+  });
+
+  it("counts fullwidth characters as 2 columns wide", () => {
+    expect(visualWidth("Ａ")).toBe(2); // Fullwidth A (U+FF21)
+    expect(visualWidth("ＡＢ")).toBe(4);
+  });
+
+  it("counts Hangul syllables as 2 columns wide", () => {
+    expect(visualWidth("한")).toBe(2); // U+D55C
+  });
+
+  it("counts CJK compatibility ideographs as 2 columns wide", () => {
+    expect(visualWidth("\uF900")).toBe(2); // U+F900
+  });
+
+  it("counts fullwidth currency symbols as 2 columns wide", () => {
+    expect(visualWidth("￥")).toBe(2); // U+FFE5 fullwidth yen
+  });
+
+  it("counts supplementary emoji as 2 columns wide", () => {
+    expect(visualWidth("😀")).toBe(2); // U+1F600 Emoticon
+    expect(visualWidth("🚀")).toBe(2); // U+1F680 Transport
+    expect(visualWidth("🧩")).toBe(2); // U+1F9E9 Supplemental symbol
+  });
+
+  it("counts CJK Extension B characters as 2 columns wide", () => {
+    expect(visualWidth("\u{20000}")).toBe(2); // U+20000
+  });
 });
 
 describe("padRight", () => {
