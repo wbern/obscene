@@ -1,10 +1,13 @@
 declare const __VERSION__: string;
 
+import { existsSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import {
   computeAllRankings,
   computeComposite,
   computeCoupling,
+  detectIgnorePatterns,
+  formatIgnoreFile,
   getAuthors,
   getChurn,
   getCoChanges,
@@ -127,6 +130,18 @@ addSharedOptions(
   .action((opts: CouplingOpts) => {
     try {
       runCoupling(opts);
+    } catch (err: unknown) {
+      exitWithError(err);
+    }
+  });
+
+// init command
+program
+  .command("init")
+  .description("generate a starter .obsignore based on project structure")
+  .action(() => {
+    try {
+      runInit();
     } catch (err: unknown) {
       exitWithError(err);
     }
@@ -259,6 +274,36 @@ function runCoupling(opts: CouplingOpts): void {
     process.stdout.write(`${formatCouplingTable(output)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  }
+}
+
+function runInit(): void {
+  if (existsSync(".obsignore")) {
+    throw new Error(
+      ".obsignore already exists. Remove it first to regenerate.",
+    );
+  }
+  if (existsSync(".obsceneignore")) {
+    throw new Error(
+      ".obsceneignore already exists. Remove it first to regenerate.",
+    );
+  }
+
+  const patterns = detectIgnorePatterns();
+  const content = formatIgnoreFile(patterns);
+  writeFileSync(".obsignore", content);
+
+  if (patterns.length === 0) {
+    process.stderr.write(
+      "Created .obsignore (no project-specific patterns detected)\n",
+    );
+  } else {
+    process.stderr.write(
+      `Created .obsignore with ${patterns.length} patterns:\n`,
+    );
+    for (const p of patterns) {
+      process.stderr.write(`  ${p.pattern.padEnd(20)} ${p.comment}\n`);
+    }
   }
 }
 
