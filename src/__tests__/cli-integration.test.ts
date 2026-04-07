@@ -83,10 +83,10 @@ describe("CLI Integration", () => {
       const tarball = files.find((f) => f.endsWith(".tgz"));
       expect(tarball).toBeDefined();
 
-      // Check tarball size — should be small (uncompressed ~25KB, allow up to 55KB)
+      // Check tarball size — should be small (uncompressed ~30KB, allow up to 60KB)
       const stats = fs.statSync(path.join(tempDir, tarball!));
       const sizeKB = stats.size / 1024;
-      expect(sizeKB).toBeLessThan(55);
+      expect(sizeKB).toBeLessThan(60);
 
       // Extract it
       const extractDir = path.join(tempDir, "extracted");

@@ -76,15 +76,19 @@ Produces **four independent ranking tables**, each scoring files by a different 
 | Defects × Churn | `defects × churn` | Dfcts, DfDns |
 | Authors × Churn | `authors × churn` | Auth |
 
+Plus a **Combined** ranking using [Reciprocal Rank Fusion](https://doi.org/10.1145/1571941.1572114) (RRF) across all dimensions — files appearing near the top of multiple rankings score highest.
+
 Each table has its own tier assignment by cumulative score distribution:
 
 | Tier | Range | Meaning |
 |------|-------|---------|
-| **danger** | top 50% of total score | Refactor candidates |
-| **watch** | next 30% (50–80%) | Keep an eye on these |
-| **stable** | bottom 20% | Low risk |
+| 🔥 **hot** | top 50% of total score | Highest churn × metric load |
+| ☀️ **warm** | next 30% (50–80%) | Moderate load |
+| 🧊 **cool** | bottom 20% | Low load |
 
-A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Tables with no scored entries are omitted.
+Tiers are relative to THIS codebase, not absolute quality grades. A "hot" file is under heavy load, not necessarily broken.
+
+A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Rankings with insufficient data are skipped with an explanation (e.g. defects ranking requires 5+ `fix:` commits across 3+ files). Bot authors (`[bot]` suffix) are filtered automatically.
 
 ### `obscene coupling`
 
@@ -110,7 +114,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--months <n>` | `3` | Churn window in months |
 | `--format <type>` | `json` | `json` or `table` |
 | `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
-| `--exclude <patterns...>` | — | Additional exclusion patterns |
+| `--exclude <patterns...>` | — | Additional exclusion patterns (also reads `.obsignore` / `.obsceneignore`) |
 
 ## Metrics
 
@@ -146,7 +150,7 @@ Maximum indentation level (tab stops) in the file. Deep nesting correlates with 
 
 #### Unique authors (`Auth`)
 
-Number of distinct git authors who committed to the file within the churn window. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
+Number of distinct git authors who committed to the file within the churn window. Bot authors (names ending in `[bot]`, e.g. `dependabot[bot]`) are excluded automatically. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
 
 ### Coupling metrics
 
@@ -168,38 +172,55 @@ Cumulative score distribution bucket:
 
 | Tier | Range | Meaning |
 |------|-------|---------|
-| **danger** | top 50% of total score | Refactor candidates |
-| **watch** | next 30% (50–80%) | Keep an eye on these |
-| **stable** | bottom 20% | Low risk |
+| 🔥 **hot** | top 50% of total score | Highest coupling load |
+| ☀️ **warm** | next 30% (50–80%) | Moderate coupling |
+| 🧊 **cool** | bottom 20% | Low coupling |
 
 ## Example output
 
 ```
 Hotspots — 3 months churn window
 
-Complexity × Churn — Total score: 35,452
-Tiers: 3 danger, 13 watch, 194 stable
+🧬 COMPLEXITY × 🔄 CHURN — Total score: 35,452
+complexity × churn. Complex code that changes often poses maintenance risk.
+Tiers: 3 HOT, 13 WARM, 194 COOL
 Showing: 5 of 210
 
 File                                                Score       %  Churn  Cmplx   Dens        Tier
 ──────────────────────────────────────────────────────────────────────────────────────────────────
-src/utils/effect-generator.ts                       8,296    23.4     68    122   0.12  🔴 DANGER
-src/services/game-engine.ts                         4,284    12.1     51     84   0.09  🔴 DANGER
-src/components/board-renderer.tsx                   2,940     8.3     42     70   0.11  🔴 DANGER
-src/hooks/use-game-state.ts                         1,320     3.7     33     40   0.08   🟡 WATCH
-src/utils/move-validator.ts                           945     2.7     27     35   0.06   🟡 WATCH
+src/utils/effect-generator.ts                       8,296    23.4     68    122   0.12  🔥 HOT
+src/services/game-engine.ts                         4,284    12.1     51     84   0.09  🔥 HOT
+src/components/board-renderer.tsx                   2,940     8.3     42     70   0.11  🔥 HOT
+src/hooks/use-game-state.ts                         1,320     3.7     33     40   0.08  ☀️ WARM
+src/utils/move-validator.ts                           945     2.7     27     35   0.06  ☀️ WARM
 
-Nesting × Churn — Total score: 1,284
-Tiers: 2 danger, 5 watch, 203 stable
+· · ·
+
+📏 NESTING × 🔄 CHURN — Total score: 1,284
+maxNesting × churn. Deeply nested code that changes often is harder to reason about.
+Tiers: 2 HOT, 5 WARM, 203 COOL
 Showing: 5 of 210
 
 File                                                Score       %  Churn  Nest        Tier
 ────────────────────────────────────────────────────────────────────────────────────────
-src/utils/effect-generator.ts                         408    31.8     68     6  🔴 DANGER
-src/services/game-engine.ts                           255    19.8     51     5  🔴 DANGER
-src/components/board-renderer.tsx                     210    16.4     42     5   🟡 WATCH
-src/hooks/use-game-state.ts                            99     7.7     33     3   🟡 WATCH
-src/utils/move-validator.ts                            54     4.2     27     2   🟡 WATCH
+src/utils/effect-generator.ts                         408    31.8     68     6  🔥 HOT
+src/services/game-engine.ts                           255    19.8     51     5  🔥 HOT
+src/components/board-renderer.tsx                     210    16.4     42     5  ☀️ WARM
+src/hooks/use-game-state.ts                            99     7.7     33     3  ☀️ WARM
+src/utils/move-validator.ts                            54     4.2     27     2  ☀️ WARM
+
+════════════════════════════════════════════════════════════════════════════════════
+★ COMBINED — Total score: 1.2345
+Tiers: 3 HOT, 5 WARM, 202 COOL
+Showing: 5 of 210
+
+File                                                Score       %  Churn  Dims        Tier
+────────────────────────────────────────────────────────────────────────────────────────
+src/utils/effect-generator.ts                      0.2727    22.1     68     4  🔥 HOT
+src/services/game-engine.ts                        0.1667    13.5     51     3  🔥 HOT
+src/components/board-renderer.tsx                   0.127    10.3     42     3  🔥 HOT
+src/hooks/use-game-state.ts                        0.0769     6.2     33     2  ☀️ WARM
+src/utils/move-validator.ts                        0.0667     5.4     27     2  ☀️ WARM
 
 Score=metric×churn | Tiers are relative to THIS codebase, not absolute quality grades.
 High scores flag review candidates, not bad code — stable complex files (parsers, engines) score high naturally.
@@ -210,18 +231,20 @@ Docs: https://github.com/wbern/obscene#metrics
 
 ```
 Coupling — 6 months churn window | Min shared: 3 | Total score: 91
-Tiers: 10 danger, 7 watch, 7 stable
+Tiers: 10 HOT, 7 WARM, 7 COOL
 Showing: 5 of 24
 
-File 1                             File 2                              Shared  Degree  Cmplx    Tier
-────────────────────────────────────────────────────────────────────────────────────────────────────
-…ePlayer/hooks/useChessEffects.ts  src/utils/effect-generator.ts            6   46.2%    261  DANGER
-…ePlayer/hooks/useChessEffects.ts  src/utils/pgn-types.ts                   6   50.0%    121  DANGER
-src/test/pgn-fixtures.ts           src/utils/pgn-parser.server.ts           5   71.4%      3  DANGER
-src/test/pgn-fixtures.ts           src/utils/effect-generator.ts            4   57.1%    145  DANGER
-src/test/pgn-fixtures.ts           src/utils/pgn-types.ts                   4   57.1%      5  DANGER
+File 1                             File 2                              Shared  Degree  Cmplx      Tier
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+…ePlayer/hooks/useChessEffects.ts  src/utils/effect-generator.ts            6   46.2%    261  🔥 HOT
+…ePlayer/hooks/useChessEffects.ts  src/utils/pgn-types.ts                   6   50.0%    121  🔥 HOT
+src/test/pgn-fixtures.ts           src/utils/pgn-parser.server.ts           5   71.4%      3  🔥 HOT
+src/test/pgn-fixtures.ts           src/utils/effect-generator.ts            4   57.1%    145  🔥 HOT
+src/test/pgn-fixtures.ts           src/utils/pgn-types.ts                   4   57.1%      5  🔥 HOT
 
 Shared=co-changed commits | Degree=shared/min(churn)×100 | Cmplx=sum of both files
+Tiers are relative to THIS codebase, not absolute quality grades. High coupling may be intentional and fine.
+Same-directory pairs excluded. Commits touching >20 files skipped. Only cross-directory dependencies shown.
 Docs: https://github.com/wbern/obscene#metrics
 ```
 
@@ -232,6 +255,25 @@ Any language [scc supports](https://github.com/boyter/scc#features) — 200+ lan
 ## Default exclusions
 
 Test and generated files are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, and similar patterns. scc also skips generated files by default (`--no-gen`).
+
+## Ignore files
+
+Create a `.obsignore` or `.obsceneignore` file in your project root to persist exclusion patterns:
+
+```
+# vendored code
+vendor/**
+
+# generated API clients
+*.generated.*
+src/api/generated/**
+```
+
+- One glob pattern per line (same syntax as `--exclude`)
+- Lines starting with `#` are comments
+- Empty lines are ignored
+- `.obsignore` takes priority if both files exist (they are not merged)
+- CLI `--exclude` patterns are additive on top of ignore file patterns
 
 ## Why churn x complexity?
 
