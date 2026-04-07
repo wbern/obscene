@@ -241,6 +241,77 @@ describe("runScc", () => {
     expect(result[0].file).toBe("src/real.ts");
   });
 
+  it("excludes lock files and package manifests by default", () => {
+    const sccOutput = JSON.stringify([
+      {
+        Name: "JSON",
+        Files: [
+          {
+            Location: "package.json",
+            Code: 30,
+            Lines: 40,
+            Complexity: 0,
+            Comment: 0,
+          },
+          {
+            Location: "libs/ui/package.json",
+            Code: 20,
+            Lines: 25,
+            Complexity: 0,
+            Comment: 0,
+          },
+          {
+            Location: "package-lock.json",
+            Code: 5000,
+            Lines: 6000,
+            Complexity: 0,
+            Comment: 0,
+          },
+          {
+            Location: "pnpm-lock.yaml",
+            Code: 3000,
+            Lines: 4000,
+            Complexity: 0,
+            Comment: 0,
+          },
+          {
+            Location: "yarn.lock",
+            Code: 4000,
+            Lines: 5000,
+            Complexity: 0,
+            Comment: 0,
+          },
+          {
+            Location: "bun.lock",
+            Code: 2000,
+            Lines: 3000,
+            Complexity: 0,
+            Comment: 0,
+          },
+        ],
+      },
+      {
+        Name: "TypeScript",
+        Files: [
+          {
+            Location: "src/real.ts",
+            Code: 100,
+            Lines: 120,
+            Complexity: 10,
+            Comment: 5,
+          },
+        ],
+      },
+    ]);
+
+    mockExecSync.mockReturnValue(Buffer.from(sccOutput));
+
+    const result = runScc();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].file).toBe("src/real.ts");
+  });
+
   it("applies custom exclude patterns", () => {
     const sccOutput = JSON.stringify([
       {
@@ -1143,6 +1214,22 @@ describe("getCoChanges", () => {
     for (const key of result.keys()) {
       expect(key).not.toContain("foo.test.ts");
     }
+  });
+
+  it("excludes lock files and package manifests by default", () => {
+    const gitOutput =
+      "COMMIT_SEP\npackage.json\npnpm-lock.yaml\nsrc/real.ts\nlib/bar.ts\nCOMMIT_SEP\npackage-lock.json\nyarn.lock\nbun.lock\nlibs/ui/package.json\nsrc/real.ts\nlib/bar.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getCoChanges(3);
+
+    for (const key of result.keys()) {
+      expect(key).not.toMatch(
+        /package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lock/,
+      );
+    }
+    // src/real.ts ↔ lib/bar.ts should still be present
+    expect(result.get("lib/bar.ts\0src/real.ts")).toBe(2);
   });
 
   it("applies custom exclude patterns", () => {

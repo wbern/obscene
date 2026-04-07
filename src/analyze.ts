@@ -52,6 +52,11 @@ const DEFAULT_EXCLUDES = [
   /__mocks__\//,
   /\.stories\./,
   /\.d\.ts$/,
+  /(?:^|\/)package\.json$/,
+  /(?:^|\/)package-lock\.json$/,
+  /(?:^|\/)pnpm-lock\.yaml$/,
+  /(?:^|\/)yarn\.lock$/,
+  /(?:^|\/)bun\.lock$/,
 ];
 
 // Cumulative score tiers — based on share of total hotspot burden.

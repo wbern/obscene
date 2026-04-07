@@ -254,7 +254,7 @@ Any language [scc supports](https://github.com/boyter/scc#features) — 200+ lan
 
 ## Default exclusions
 
-Test and generated files are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, and similar patterns. scc also skips generated files by default (`--no-gen`).
+Test files, lock files, and package manifests are excluded automatically: `*.test.*`, `*.spec.*`, `__tests__/`, `__mocks__/`, `*.stories.*`, `*.d.ts`, `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `bun.lock`, and similar patterns. scc also skips generated files by default (`--no-gen`).
 
 ## Ignore files
 
