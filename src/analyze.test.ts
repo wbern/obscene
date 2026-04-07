@@ -88,6 +88,16 @@ describe("readIgnoreFile", () => {
     expect(result).toEqual(["*.gen.*", "vendor/**"]);
   });
 
+  it("rethrows non-ENOENT errors", () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw Object.assign(new Error("EACCES: permission denied"), {
+        code: "EACCES",
+      });
+    });
+
+    expect(() => readIgnoreFile()).toThrow("EACCES: permission denied");
+  });
+
   it("uses .obsignore when both files exist", () => {
     mockReadFileSync.mockImplementation((path: unknown) => {
       if (path === ".obsignore") return "from-obsignore\n";

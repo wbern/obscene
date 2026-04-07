@@ -26,8 +26,16 @@ export function readIgnoreFile(): string[] {
         .split("\n")
         .map((line) => line.trim())
         .filter((line) => line !== "" && !line.startsWith("#"));
-    } catch {
-      // file not found, try next
+    } catch (err: unknown) {
+      if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "ENOENT"
+      ) {
+        continue;
+      }
+      throw err;
     }
   }
   return [];

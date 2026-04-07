@@ -84,7 +84,7 @@ function addSharedOptions(cmd: Command): Command {
     .option("--format <type>", "output format: json | table", "json")
     .option(
       "--exclude <patterns...>",
-      "additional file patterns to exclude (e.g. *.generated.*)",
+      "additional file patterns to exclude (also reads .obsignore / .obsceneignore)",
     );
 }
 
