@@ -283,10 +283,18 @@ export function formatCouplingTable(output: CouplingOutput): string {
   );
   lines.push("─".repeat(104));
 
+  let anyDeleted = false;
   for (const c of couplings) {
+    if (c.file1Deleted || c.file2Deleted) anyDeleted = true;
+    const file1Cell = c.file1Deleted
+      ? `\u2020 ${truncate(c.file1, 31)}`
+      : truncate(c.file1, 33);
+    const file2Cell = c.file2Deleted
+      ? `\u2020 ${truncate(c.file2, 31)}`
+      : truncate(c.file2, 33);
     const rawRow =
-      padRight(truncate(c.file1, 33), 35) +
-      padRight(truncate(c.file2, 33), 35) +
+      padRight(file1Cell, 35) +
+      padRight(file2Cell, 35) +
       padLeft(String(c.cochanges), 7) +
       padLeft(`${c.degree.toFixed(1)}%`, 8) +
       padLeft(String(c.totalComplexity), 7) +
@@ -300,6 +308,11 @@ export function formatCouplingTable(output: CouplingOutput): string {
       "Shared=co-changed commits | Degree=shared/min(churn)\u00D7100 | Cmplx=sum of both files",
     ),
   );
+  if (anyDeleted) {
+    lines.push(
+      pc.dim("\u2020 = file no longer present at HEAD (deleted or renamed)"),
+    );
+  }
   lines.push(
     pc.dim(
       "Tiers are relative to THIS codebase, not absolute quality grades. High coupling may be intentional and fine.",

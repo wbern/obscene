@@ -11,6 +11,7 @@ import {
   getCoChanges,
   getDefects,
   getNestingDepths,
+  getTrackedFiles,
   readIgnoreFile,
   runScc,
   UNIVERSAL_IGNORE_GROUPS,
@@ -1438,6 +1439,32 @@ describe("computeCoupling", () => {
 
     expect(totalPercent).toBeCloseTo(100, 0);
   });
+
+  it("flags entries whose files are absent from the tracked set", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 3],
+      ["c.ts\0lib/d.ts", 2],
+    ]);
+    const tracked = new Set(["a.ts", "lib/b.ts"]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 1, tracked);
+
+    const ab = result.find((e) => e.file1 === "a.ts");
+    const cd = result.find((e) => e.file1 === "c.ts");
+    expect(ab?.file1Deleted).toBeUndefined();
+    expect(ab?.file2Deleted).toBeUndefined();
+    expect(cd?.file1Deleted).toBe(true);
+    expect(cd?.file2Deleted).toBe(true);
+  });
+
+  it("does not set deletion flags when trackedFiles is omitted", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 3]]);
+
+    const result = computeCoupling(cochanges, new Map(), new Map(), 1);
+
+    expect(result[0].file1Deleted).toBeUndefined();
+    expect(result[0].file2Deleted).toBeUndefined();
+  });
 });
 
 describe("computeComposite", () => {
@@ -1527,6 +1554,39 @@ describe("computeComposite", () => {
     const bEntry = result.entries.find((e) => e.file === "b.ts");
     expect(aEntry?.dimensionCount).toBe(3);
     expect(bEntry?.dimensionCount).toBe(2);
+  });
+});
+
+describe("getTrackedFiles", () => {
+  it("returns a normalized set from git ls-files output", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from("src/a.ts\n./src/b.ts\nlib\\nested\\c.ts\n"),
+    );
+
+    const result = getTrackedFiles();
+
+    expect(result.has("src/a.ts")).toBe(true);
+    expect(result.has("src/b.ts")).toBe(true);
+    expect(result.has("lib/nested/c.ts")).toBe(true);
+  });
+
+  it("ignores blank lines", () => {
+    mockExecSync.mockReturnValue(Buffer.from("\nsrc/a.ts\n\n"));
+
+    const result = getTrackedFiles();
+
+    expect(result.size).toBe(1);
+    expect(result.has("src/a.ts")).toBe(true);
+  });
+
+  it("throws when git is not available", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("git not found");
+    });
+
+    expect(() => getTrackedFiles()).toThrow(
+      "Not a git repository or git is not installed.",
+    );
   });
 });
 

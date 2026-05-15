@@ -99,6 +99,8 @@ export interface CouplingEntry {
   couplingScore: number;
   percentOfTotal: number;
   tier: Tier;
+  file1Deleted?: boolean;
+  file2Deleted?: boolean;
 }
 
 export interface CouplingOutput {

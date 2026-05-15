@@ -489,6 +489,29 @@ export function computeAllRankings(
 }
 
 /**
+ * List files currently tracked at HEAD. Used to flag coupling pairs whose
+ * members no longer exist (renamed away, deleted) so they aren't presented as
+ * actionable hotspots.
+ */
+export function getTrackedFiles(): Set<string> {
+  let raw: Buffer;
+  try {
+    raw = execSync("git ls-files", {
+      maxBuffer: 50 * 1024 * 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+  const set = new Set<string>();
+  for (const line of raw.toString().split("\n")) {
+    const trimmed = normalizePath(line.trim());
+    if (trimmed) set.add(trimmed);
+  }
+  return set;
+}
+
+/**
  * Score file pairs by co-change frequency and assign tiers.
  */
 export function computeCoupling(
@@ -496,6 +519,7 @@ export function computeCoupling(
   churn: Map<string, number>,
   complexityMap: Map<string, number>,
   minCochanges: number,
+  trackedFiles?: Set<string>,
 ): CouplingEntry[] {
   const entries: CouplingEntry[] = [];
 
@@ -508,7 +532,7 @@ export function computeCoupling(
     const totalComplexity =
       (complexityMap.get(file1) ?? 0) + (complexityMap.get(file2) ?? 0);
 
-    entries.push({
+    const entry: CouplingEntry = {
       file1,
       file2,
       cochanges: count,
@@ -517,7 +541,12 @@ export function computeCoupling(
       couplingScore: count,
       percentOfTotal: 0,
       tier: "cool",
-    });
+    };
+    if (trackedFiles) {
+      if (!trackedFiles.has(file1)) entry.file1Deleted = true;
+      if (!trackedFiles.has(file2)) entry.file2Deleted = true;
+    }
+    entries.push(entry);
   }
 
   entries.sort((a, b) => b.couplingScore - a.couplingScore);
@@ -683,22 +712,7 @@ const INIT_FILE_RULES: { test: RegExp; pattern: string; comment: string }[] = [
  * that should be excluded from hotspot analysis.
  */
 export function detectIgnorePatterns(): IgnorePattern[] {
-  let raw: Buffer;
-  try {
-    raw = execSync("git ls-files", {
-      maxBuffer: 50 * 1024 * 1024,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  } catch {
-    throw new Error("Not a git repository or git is not installed.");
-  }
-
-  const trackedFiles = raw
-    .toString()
-    .split("\n")
-    .map((l) => normalizePath(l.trim()))
-    .filter(Boolean);
-
+  const trackedFiles = getTrackedFiles();
   const patterns: IgnorePattern[] = [];
 
   const topDirs = new Set<string>();
@@ -714,8 +728,11 @@ export function detectIgnorePatterns(): IgnorePattern[] {
   }
 
   for (const rule of INIT_FILE_RULES) {
-    if (trackedFiles.some((f) => rule.test.test(f))) {
-      patterns.push({ pattern: rule.pattern, comment: rule.comment });
+    for (const f of trackedFiles) {
+      if (rule.test.test(f)) {
+        patterns.push({ pattern: rule.pattern, comment: rule.comment });
+        break;
+      }
     }
   }
 

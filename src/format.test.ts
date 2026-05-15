@@ -627,6 +627,79 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("COOL");
   });
 
+  it("marks deleted files with a dagger and includes legend", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 8,
+      tierCounts: { hot: 1, warm: 0, cool: 1 },
+      totalCouplings: 2,
+      showing: 2,
+      couplings: [
+        {
+          file1: "src/old-removed.ts",
+          file2: "lib/current.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 0,
+          couplingScore: 5,
+          percentOfTotal: 62.5,
+          tier: "hot",
+          file1Deleted: true,
+        },
+        {
+          file1: "src/live-a.ts",
+          file2: "src/gone-b.ts",
+          cochanges: 3,
+          degree: 30.0,
+          totalComplexity: 10,
+          couplingScore: 3,
+          percentOfTotal: 37.5,
+          tier: "cool",
+          file2Deleted: true,
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).toContain("† src/old-removed.ts");
+    expect(result).toContain("† src/gone-b.ts");
+    expect(result).toContain("file no longer present at HEAD");
+  });
+
+  it("omits the deleted-file legend when no file is deleted", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      couplings: [
+        {
+          file1: "src/a.ts",
+          file2: "src/b.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 20,
+          couplingScore: 5,
+          percentOfTotal: 100,
+          tier: "hot",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).not.toContain("no longer present at HEAD");
+    expect(result).not.toContain("†");
+  });
+
   it("truncates long file paths", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",

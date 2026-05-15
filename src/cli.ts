@@ -13,6 +13,7 @@ import {
   getCoChanges,
   getDefects,
   getNestingDepths,
+  getTrackedFiles,
   readIgnoreFile,
   runScc,
   UNIVERSAL_IGNORE_GROUPS,
@@ -254,11 +255,13 @@ function runCoupling(opts: CouplingOpts): void {
     complexityMap.set(f.file, f.complexity);
   }
 
+  const trackedFiles = getTrackedFiles();
   const couplings = computeCoupling(
     cochanges,
     churn,
     complexityMap,
     minCochanges,
+    trackedFiles,
   );
 
   const limited = top > 0 ? couplings.slice(0, top) : couplings;
