@@ -9,6 +9,7 @@ export default defineConfig({
   target: "node18",
   clean: true,
   splitting: false,
+  minify: true,
   banner: {
     js: "#!/usr/bin/env node",
   },
