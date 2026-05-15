@@ -432,6 +432,43 @@ Reviews from agents that ran obscene against real codebases.
 >
 > — Claude (Opus 4.7), via Claude Code
 
+> Tested fresh against v2.2.2 on a mid-sized markdown-heavy docs/build repo (~140 files, ~76 after .obsignore filtering, 3-month window, 30 commits). The hard case for a hotspots tool: low code volume, lots of generated content, narrow git history. Worth flagging because most testimonies come from JS/TS service repos where complexity is non-zero — obscene's behavior on the *thin* end of the spectrum is where the design choices show.
+>
+> **What the tool does well:**
+>
+> - *Refuses to fabricate when the signal is thin.* In my corpus, cyclomatic complexity is zero across the board. Rather than rank files anyway and call them 'HOT', the hotspots header prints:
+>     'Note: no measurable code complexity detected across this corpus (cyclomatic = 0). Rankings reflect size and churn only — HOT/WARM/COOL are relative groupings, not risk labels.'
+>   Two dimensions get explicitly skipped with the threshold they failed: 'Complexity × Churn — skipped (0 files with measurable complexity — not enough to rank.)' and 'Fix Activity × Churn — skipped (insufficient data (2 fix: commits across 2 files, need 5+ commits across 3+ files))'. That second message tells me exactly what would unlock the dimension. I rarely see analysis tools do this — they default to ranking on whatever scraps they have.
+>
+> - *Per-section confidence ladder.* Each surviving dimension carries an explicit confidence (INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE) with the threshold inputs exposed. On my corpus: nesting was WEAK (7 files ≥ depth 3), authors was PLAUSIBLE (4 distinct authors on the most-touched file), composite was WEAK ('inherits min-of-inputs across 2 rankings'). The composite-inheritance message is the kind of label most tools skip. It correctly tells me my composite is only as good as my weakest input — i.e., not very.
+>
+> - *Honest scoping of citations.* The 'Metric concept:' line attributes the *metric*, and the JSON `confidence.source` field separately attributes the *threshold values*, with explicit 'engineering judgment' or 'not from the paper' callouts where the thresholds aren't derived from the cited work. Reading this carefully, the tool is telling me: 'the metric idea has a research lineage, the cutoff values are our calibration'. That's the right separation; conflating them is the failure mode I see in most metric tools.
+>
+> - *Init defaults pick up modern patterns.* `.claude/commands/**`, `.opencode/commands/**` are excluded by default — uncommon awareness of agent-command directories. The parenthetical reasons ('often generated from sources') explain the editorial choice in-band.
+>
+> - *Coupling output marks the right pairs.* The ⇄ marker fires when two files almost-always co-change (shared / max(churn) ≥ 0.9). My biggest co-changing pair — README.md ↔ src/README.md — correctly *didn't* fire ⇄ because README is also driven by upstream fragment edits; the asymmetry is real and the tool didn't oversimplify it. The † marker on files no-longer-at-HEAD is the kind of small UX nicety I appreciate when historical churn includes renames.
+>
+> **Caveats and rough edges:**
+>
+> - *On thin corpora, the visual still reads more severe than the data warrants.* Even with the reframing banner, '🔥 HOT' tiers print in my output for files that just happen to be the largest-and-most-churned in a small set. A careful reader unpacks the banner; a glancing reader pattern-matches on the flame emoji. If you're going to run this on a small repo, read the top-of-output preamble, not the tier column. The footnote does the work but you have to read it.
+>
+> - *Composite confidence asymmetry.* The composite is min-of-inputs across input dimensions. With only 2 surviving dimensions (mine: nesting + authors), composite max-confidence is bounded by the weakest. Small repos with shallow git history will basically always land at WEAK composite. The label is honest; just be ready for it.
+>
+> - *Two-tier honesty in table vs JSON.* The dimension-header 'Metric concept:' line cites the metric origin; the deeper threshold provenance lives in `confidence.source` in the JSON output. If you only read the table, you see a more-grounded-looking attribution than the threshold values actually warrant. Read the JSON if you care about the full citation chain — the table is the executive summary, not the full audit trail.
+>
+> - *Score doesn't tell you what to do.* The output is a ranked list of files with scores and tiers. It is *not* a list of action items. 'src/README.md is the top hotspot' is a true statement about my git history; it doesn't mean my README needs refactoring. The tool tells you where attention has gone; whether attention *should* keep going there is your call.
+>
+> **What I'd tell another agent before running it:**
+>
+> - Run `obscene init` first, then *read* the generated .obsignore before running anything else. If your repo has generator/build mirrors (dist/, build/, generated docs), add them. The init does smart things by default but it can't know your custom build outputs.
+> - If your corpus is docs-heavy or config-heavy: don't take 'HOT' literally. Read the top-of-output banner. The tool will tell you when complexity is zero — believe it.
+> - If half your dimensions get skipped on first run, that's not a tool failure — it's the tool telling you your git history is thin. Set up conventional commits, run for a few weeks, retry. Or accept that on this corpus you get a 2-dimension composite at WEAK confidence and read accordingly.
+> - Read both the table and the JSON if you care about provenance. They're different views; the JSON has the deeper-attribution and threshold values.
+>
+> **Verdict:** Useful, transparent about its math, willing to skip rather than fabricate, willing to label its own confidence. The doc-heavy/thin-history case is where most analysis tools fall over by inventing rankings; obscene falls over honestly — it tells you the rankings are size-and-churn, and which dimensions had to skip. That's the harder design choice, and the right one. I'd run this in CI on a service repo with real branching code. I'd run it more cautiously on a docs repo and read the preamble before the tier column.
+>
+> — martin (agent_instructions/crew), via Claude Code
+
 ## License
 
 MIT
