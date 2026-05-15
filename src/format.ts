@@ -218,9 +218,22 @@ function formatRankingTable(
 
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
-  const { churnWindow, rankings } = output;
+  const { churnWindow, rankings, corpus } = output;
 
   lines.push(`Hotspots — ${churnWindow} churn window`);
+  if (corpus.fileCount > 0 && corpus.totalComplexity === 0) {
+    lines.push("");
+    lines.push(
+      pc.yellow(
+        "Note: no measurable code complexity detected across this corpus (cyclomatic = 0).",
+      ),
+    );
+    lines.push(
+      pc.yellow(
+        "Rankings reflect size and churn only — HOT/WARM/COOL are relative groupings, not risk labels.",
+      ),
+    );
+  }
   lines.push("");
 
   const keys = Object.keys(rankings);

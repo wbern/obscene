@@ -129,6 +129,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -200,6 +201,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -239,6 +241,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -273,6 +276,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -307,6 +311,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -340,6 +345,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -374,6 +380,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -407,6 +414,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -439,6 +447,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -457,6 +466,7 @@ describe("formatHotspotsTable", () => {
           reason: "insufficient data",
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -489,6 +499,7 @@ describe("formatHotspotsTable", () => {
           ],
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -535,6 +546,7 @@ describe("formatHotspotsTable", () => {
             "Adopt conventional commits with fix: prefix. See conventionalcommits.org",
         },
       },
+      corpus: { fileCount: 1, totalComplexity: 50 },
     };
 
     const result = formatHotspotsTable(output);
@@ -543,6 +555,89 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("skipped");
     expect(result).toContain("fix:");
     expect(result).toContain("conventionalcommits.org");
+  });
+
+  it("emits a soft-framing banner when the corpus has zero complexity", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "README.md",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 10,
+              metricValue: 0,
+              metricDensity: 0,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 5, totalComplexity: 0 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("no measurable code complexity");
+    expect(result).toContain("not risk labels");
+  });
+
+  it("omits the soft-framing banner when complexity is present", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          entries: [
+            {
+              file: "src/foo.ts",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 5, totalComplexity: 120 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).not.toContain("no measurable code complexity");
+  });
+
+  it("omits the soft-framing banner when corpus has no files", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+      corpus: { fileCount: 0, totalComplexity: 0 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).not.toContain("no measurable code complexity");
   });
 });
 

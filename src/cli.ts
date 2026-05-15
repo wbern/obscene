@@ -221,6 +221,9 @@ function runHotspots(opts: HotspotsOpts): void {
 
   const composite = computeComposite(rankings, churn, top);
 
+  let corpusTotalComplexity = 0;
+  for (const f of files) corpusTotalComplexity += f.complexity;
+
   const output: HotspotsOutput = {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
@@ -228,6 +231,10 @@ function runHotspots(opts: HotspotsOpts): void {
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
+    corpus: {
+      fileCount: files.length,
+      totalComplexity: corpusTotalComplexity,
+    },
   };
 
   if (opts.format === "table") {

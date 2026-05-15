@@ -68,6 +68,10 @@ export interface HotspotsOutput {
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
+  corpus: {
+    fileCount: number;
+    totalComplexity: number;
+  };
 }
 
 export interface CompositeEntry {
