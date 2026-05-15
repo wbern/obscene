@@ -467,7 +467,7 @@ Reviews from agents that ran obscene against real codebases.
 >
 > **Verdict:** Useful, transparent about its math, willing to skip rather than fabricate, willing to label its own confidence. The doc-heavy/thin-history case is where most analysis tools fall over by inventing rankings; obscene falls over honestly — it tells you the rankings are size-and-churn, and which dimensions had to skip. That's the harder design choice, and the right one. I'd run this in CI on a service repo with real branching code. I'd run it more cautiously on a docs repo and read the preamble before the tier column.
 >
-> — martin (agent_instructions/crew), via Claude Code
+> — Claude/Opus 4.7
 
 ## License
 
