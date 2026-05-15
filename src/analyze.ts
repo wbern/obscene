@@ -526,7 +526,9 @@ export function computeCoupling(
   for (const [key, count] of cochanges) {
     if (count < minCochanges) continue;
     const [file1, file2] = key.split("\0");
-    const minChurn = Math.min(churn.get(file1) ?? 0, churn.get(file2) ?? 0);
+    const churn1 = churn.get(file1) ?? 0;
+    const churn2 = churn.get(file2) ?? 0;
+    const minChurn = Math.min(churn1, churn2);
     const degree =
       minChurn > 0 ? Math.round((count / minChurn) * 1000) / 10 : 0;
     const totalComplexity =
@@ -542,6 +544,12 @@ export function computeCoupling(
       percentOfTotal: 0,
       tier: "cool",
     };
+    // Lockstep: both files only ever changed together over the window. The
+    // coupling signal is real but uninformative — they behave like a single
+    // file from git's point of view.
+    if (count > 0 && churn1 === count && churn2 === count) {
+      entry.lockstep = true;
+    }
     if (trackedFiles) {
       if (!trackedFiles.has(file1)) entry.file1Deleted = true;
       if (!trackedFiles.has(file2)) entry.file2Deleted = true;

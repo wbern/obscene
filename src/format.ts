@@ -297,19 +297,24 @@ export function formatCouplingTable(output: CouplingOutput): string {
   lines.push("─".repeat(104));
 
   let anyDeleted = false;
+  let anyLockstep = false;
   for (const c of couplings) {
     if (c.file1Deleted || c.file2Deleted) anyDeleted = true;
+    if (c.lockstep) anyLockstep = true;
     const file1Cell = c.file1Deleted
       ? `\u2020 ${truncate(c.file1, 31)}`
       : truncate(c.file1, 33);
     const file2Cell = c.file2Deleted
       ? `\u2020 ${truncate(c.file2, 31)}`
       : truncate(c.file2, 33);
+    const degreeText = c.lockstep
+      ? `${c.degree.toFixed(1)}\u21c4`
+      : `${c.degree.toFixed(1)}%`;
     const rawRow =
       padRight(file1Cell, 35) +
       padRight(file2Cell, 35) +
       padLeft(String(c.cochanges), 7) +
-      padLeft(`${c.degree.toFixed(1)}%`, 8) +
+      padLeft(degreeText, 8) +
       padLeft(String(c.totalComplexity), 7) +
       padLeft(tierLabel(c.tier), 12);
     lines.push(colorRow(c.tier, rawRow));
@@ -324,6 +329,13 @@ export function formatCouplingTable(output: CouplingOutput): string {
   if (anyDeleted) {
     lines.push(
       pc.dim("\u2020 = file no longer present at HEAD (deleted or renamed)"),
+    );
+  }
+  if (anyLockstep) {
+    lines.push(
+      pc.dim(
+        "\u21c4 = lockstep pair (both files only ever changed together \u2014 signal is real but uninformative)",
+      ),
     );
   }
   lines.push(

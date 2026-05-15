@@ -1465,6 +1465,30 @@ describe("computeCoupling", () => {
     expect(result[0].file1Deleted).toBeUndefined();
     expect(result[0].file2Deleted).toBeUndefined();
   });
+
+  it("flags lockstep pairs (both files only ever co-changed)", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
+    const churn = new Map([
+      ["a.ts", 4],
+      ["lib/b.ts", 4],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBe(true);
+  });
+
+  it("does not flag lockstep when one file changed outside the pair", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
+    const churn = new Map([
+      ["a.ts", 4],
+      ["lib/b.ts", 5],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBeUndefined();
+  });
 });
 
 describe("computeComposite", () => {

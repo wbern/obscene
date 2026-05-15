@@ -765,6 +765,37 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("file no longer present at HEAD");
   });
 
+  it("marks lockstep pairs with an arrow and includes legend", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 4,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      couplings: [
+        {
+          file1: "src/twin-a.ts",
+          file2: "src/twin-b.ts",
+          cochanges: 4,
+          degree: 100,
+          totalComplexity: 10,
+          couplingScore: 4,
+          percentOfTotal: 100,
+          tier: "hot",
+          lockstep: true,
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).toContain("⇄");
+    expect(result).toContain("lockstep pair");
+  });
+
   it("omits the deleted-file legend when no file is deleted", () => {
     const output: CouplingOutput = {
       generated: "2026-01-01T00:00:00.000Z",

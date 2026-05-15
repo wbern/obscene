@@ -105,6 +105,7 @@ export interface CouplingEntry {
   tier: Tier;
   file1Deleted?: boolean;
   file2Deleted?: boolean;
+  lockstep?: boolean;
 }
 
 export interface CouplingOutput {
