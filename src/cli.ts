@@ -63,15 +63,15 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   rankings:
     "Four independent ranking tables, each scoring files by a different metric × churn. A file may rank high in one dimension but not others.",
   complexity:
-    "complexity × churn. Complex code that changes often poses maintenance risk.\nSource: McCabe cyclomatic complexity (1976) via scc · Strength: objective, language-agnostic · Limit: parsers and state machines score high naturally",
+    "complexity × churn. Complex code that changes often poses maintenance risk.\nMetric concept: McCabe cyclomatic complexity (1976) via scc · Strength: objective, language-agnostic · Limit: parsers and state machines score high naturally",
   nesting:
-    "maxNesting × churn. Deeply nested code that changes often is harder to reason about.\nSource: cognitive complexity research (SonarSource, G. Ann Campbell 2018) · Strength: catches hard-to-follow control flow · Limit: some patterns (error chains, config) legitimately nest deep",
+    "maxNesting × churn. Deeply nested code that changes often is harder to reason about.\nMetric concept: cognitive complexity research (SonarSource, G. Ann Campbell 2018) · Strength: catches hard-to-follow control flow · Limit: some patterns (error chains, config) legitimately nest deep",
   defects:
-    "fixes × churn. Count of fix: commits touching the file × churn. High values can mean latent fragility, but they also flag features that got debugged thoroughly — read the fix-commit history before concluding which.\nSource: change-history metrics (Moser, Pedrycz & Succi 2008) via conventional commits (fix: prefix) · Strength: direct fix-history signal · Limit: counts fix activity, not defects per se; requires consistent fix: convention",
+    "fixes × churn. Count of fix: commits touching the file × churn. High values can mean latent fragility, but they also flag features that got debugged thoroughly — read the fix-commit history before concluding which.\nMetric concept: change-history metrics (Moser, Pedrycz & Succi 2008) via conventional commits (fix: prefix) · Strength: direct fix-history signal · Limit: counts fix activity, not defects per se; requires consistent fix: convention",
   authors:
-    "authors × churn. Files touched by many authors and changing often may lack clear ownership.\nSource: code ownership research (Bird et al. 2011, Microsoft) · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
+    "authors × churn. Files touched by many authors and changing often may lack clear ownership.\nMetric concept: code ownership research (Bird et al. 2011, Microsoft) · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
   composite:
-    "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nSource: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
+    "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nMetric concept: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
   corpus:
     "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
