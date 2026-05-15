@@ -331,43 +331,31 @@ Files that change together but live in different directories reveal implicit dep
 
 ## Field reports
 
-Reviews from agents that ran obscene against real codebases. Unedited.
+Reviews from agents that ran obscene against real codebases.
 
-> I ran obscene against a mid-sized polyglot codebase (web frontend + Python service + IaC, ~150 files, ~4 months of active history) right after a session of structural refactors. Honest take:
+> I ran obscene against a mid-sized polyglot codebase (web frontend + Python service + IaC, ~150 files, ~4 months of active history). Honest take:
 >
-> What actually surfaced new information:
+> What surfaced new information from the hotspots view:
 >
-> - The defect-density column (fix-commits per change) flagged a fragile component I would not have prioritized from reading the code alone — ~10 fix-commits over ~14 changes is a "this feature keeps breaking" signal you don't get from raw line counts or complexity.
-> - A nesting outlier (one handler scoring ~30-deep in a repo whose median was 4–7). Extreme enough that no amount of churn-weighting could hide it.
+> - The Fix Activity column (fix-commits × churn) flagged a component I would not have prioritized from reading the code alone — ~10 fix-commits over ~14 changes. As the legend says, that can mean latent fragility *or* a feature that got debugged thoroughly; either way it's a prompt to read the fix history, which is what I did, and the answer was informative.
+> - A nesting outlier (one handler scoring ~15-deep in a repo whose median was 4–7). The README is explicit that Nest measures whitespace-indent depth, not AST nesting — deep hanging indents from docstrings or chained calls will inflate the column relative to control-flow depth. With that caveat in hand, the signal is still useful for finding the worst offenders.
+>
+> What `obscene coupling` added on a second run:
+>
+> - The headline finding: the top co-change pair (~21 shared commits, ~70% degree) was a service module and its corresponding configuration-management playbook. The repo's own developer docs spent ~200 words explicitly warning that those two paths *must* produce identical state because they had already drifted twice in the project's history. The tool independently surfaced exactly the pair the human author had to document by hand as the #1 operational hazard. Temporal coupling (co-change history, not structural / type-level coupling) catches a class of risk — "two paths must move in lockstep" — that complexity and churn cannot, by construction.
+> - Second-tier signal: cross-stack pairs (frontend SPA + backend API, ~8 co-changes) flagged which abstraction boundaries actually leak in practice. Useful prompt for "if I touch endpoint X, what else am I likely to need to touch?"
 >
 > Worth setting expectations on:
 >
-> - It's a churn × complexity instrument, so it *temporarily penalizes* refactoring — moving code out of a hot file shows up as more commits on that file, inflating the score before the new structure pays off in stability. The hottest file in our run was hottest partly because we'd touched it that day.
+> - It's a churn × complexity instrument, so it *temporarily penalizes* refactoring — moving code out of a hot file shows up as more commits on that file, inflating the score before the new structure pays off in stability.
 > - McCabe complexity doesn't distinguish "one giant function" from "many small ones in the same file." A score tells you the size of the badness, not the shape.
 > - HOT/WARM/COOL tiers are relative to the repo, so *something* will always be HOT. Useful for "what's worst here," not a portable quality grade.
-> - It can't see the failure modes that actually bite at runtime: coupling, type confusion, missing tests, brittle integration seams, hidden globals.
+> - Documentation files (CLAUDE.md, READMEs) co-changing with code shows up high in coupling but reads as hygiene — docs co-evolving with the surface they describe, not a coupling smell.
+> - `Degree` is asymmetric (`shared / min(churn)`, so it measures how entangled the *less-churned* file is with the other), but the file-pair display is symmetric. No visible indicator of which file is the "captured" one without cross-referencing per-file churn.
+> - Small-absolute / high-degree pairs (e.g. 5 co-changes at 83%) appear near the top at defaults. `--min-cochanges 5` filters these out cleanly.
+> - Tier inflation in coupling: a sizable fraction of pairs end up HOT at defaults. Same critique as the hotspot tiers — when ~30% of a population is HOT, the tier stops being signal.
 >
-> Verdict: a 60-second sanity check that mostly ranks what reading the codebase already tells you, plus one or two findings you'd otherwise miss. Treat the defect-density column as the most signal-dense, run it quarterly, and don't optimize against the leaderboard — it's a magnifying glass, not a scoreboard.
->
-> — Claude (Opus 4.7), via Claude Code
-
-**Coupling addendum** — a separate run of `obscene coupling` against the same codebase a few weeks later, at the maintainer's request.
-
-> What landed:
->
-> - The headline finding: the top co-change pair (~21 shared commits, ~70% degree) was a service module and its corresponding configuration-management playbook. The repo's own developer docs spent ~200 words explicitly warning that those two paths *must* produce identical state because they had already drifted twice in the project's history. The tool independently surfaced exactly the pair the human author had to document by hand as the #1 operational hazard. That's a real find — temporal coupling catches a class of risk ("two paths must move in lockstep") that complexity and churn cannot, by construction.
-> - Second-tier signal that earned its keep: cross-stack pairs (frontend SPA + backend API, ~8 co-changes) flagged which abstraction boundaries actually leak in practice. Useful prompt for "if I touch endpoint X, what else am I likely to need to touch?"
-> - Worth saying explicitly: the original testament's line "can't see coupling" was unfair as written. I meant *structural* coupling — the static-analysis question of "if I rename this field, what breaks?". `obscene coupling` measures *temporal* coupling (co-change history). Different sense of the word, and for the failure mode I was implicitly thinking of ("two things must stay in sync") the temporal lens is arguably more diagnostic than the structural one would have been.
->
-> Where the friction was:
->
-> - Documentation files (CLAUDE.md, READMEs) co-changing with code shows up high but reads as hygiene — docs co-evolving with the surface they describe, not a coupling smell. Worth either a default exclusion for markdown or an explicit callout in the legend.
-> - The `Degree` metric is asymmetric (`shared / min(churn)`, so it measures how entangled the *less-churned* file is with the other), but the file-pair display is symmetric. No visible indicator of which file is the "captured" one without cross-referencing per-file churn. Adding directionality to the printout would read more clearly.
-> - Small-absolute / high-degree pairs (e.g. 5 co-changes at 83%) appeared near the top at defaults. `--min-cochanges 5` filtered these out cleanly, but the defaults need either a sane minimum or a confidence-shaped column.
-> - The combined-complexity column on each row didn't add much — a sum of two unrelated complexities has no clean interpretation, and the hotspots report already covers per-file complexity well.
-> - Tier inflation again: ~68 HOT pairs out of ~231 at defaults. Same critique as the hotspot tiers — when ~30% of a population is HOT, the tier stops being signal.
->
-> Verdict: `obscene coupling` complements the hotspot view rather than overlapping with it. Hotspots ask "what file is the worst?"; coupling asks "what files must I keep in sync?" — distinct questions, and a repo whose dominant bug class is the second will get more out of coupling than out of complexity-based rankings. For this codebase, coupling rediscovered an institutional hazard the human author had felt compelled to document in prose. Worth running alongside hotspots, not in place of either lens. Same quarterly cadence applies; treat the cross-stack and cross-path pairs as the most action-shaped output.
+> Verdict: hotspots and coupling are complementary, not redundant. Hotspots ask "what file is the worst?"; coupling asks "what files must I keep in sync?" — distinct questions, and a repo whose dominant bug class is the second will get more out of coupling than out of complexity-based rankings. A 60-second sanity check that mostly ranks what reading the codebase already tells you, plus one or two findings you'd otherwise miss. Treat Fix Activity as a prompt to investigate (not a verdict), run it quarterly, and don't optimize against the leaderboard — it's a magnifying glass, not a scoreboard.
 >
 > — Claude (Opus 4.7), via Claude Code
 
