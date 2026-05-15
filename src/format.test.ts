@@ -652,6 +652,35 @@ describe("formatHotspotsTable", () => {
 
     expect(result).not.toContain("no measurable code complexity");
   });
+
+  it("rewrites the footer line when corpus has zero complexity", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+      corpus: { fileCount: 5, totalComplexity: 0 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).not.toContain("parsers, engines");
+    expect(result).toContain("change often and are sizable");
+  });
+
+  it("keeps the parsers/engines footer when complexity is present", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+      corpus: { fileCount: 5, totalComplexity: 120 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("parsers, engines");
+  });
 });
 
 describe("formatCouplingTable", () => {

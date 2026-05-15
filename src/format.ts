@@ -267,9 +267,15 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
       "Score=metric\u00D7churn | Tiers are relative to THIS codebase, not absolute quality grades.",
     ),
   );
+  const zeroComplexityCorpus =
+    corpus !== undefined &&
+    corpus.fileCount > 0 &&
+    corpus.totalComplexity === 0;
   lines.push(
     pc.dim(
-      "High scores flag review candidates, not bad code \u2014 stable complex files (parsers, engines) score high naturally.",
+      zeroComplexityCorpus
+        ? "High scores flag files that change often and are sizable \u2014 neither is bad in itself."
+        : "High scores flag review candidates, not bad code \u2014 stable complex files (parsers, engines) score high naturally.",
     ),
   );
   lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));

@@ -185,7 +185,7 @@ The coupling table annotates entries that need framing:
 | Marker | JSON field | Meaning |
 |--------|------------|---------|
 | `†` next to a path | `file1Deleted` / `file2Deleted` | File is no longer present at HEAD (deleted or renamed away). The coupling signal is historical; the pair is not actionable in the current tree. |
-| `⇄` next to the Degree value | `lockstep` | Both files' total churn equals their co-change count over the window — they only ever changed together. The 100% degree is real but uninformative; treat the pair as a single unit from git's perspective. |
+| `⇄` next to the Degree value | `lockstep` | Shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (`README.md` ↔ `src/README.md`, `*.pb.go` ↔ `*.proto`). Treat the pair as a single unit from git's perspective. |
 
 ### Corpus framing
 

@@ -544,10 +544,12 @@ export function computeCoupling(
       percentOfTotal: 0,
       tier: "cool",
     };
-    // Lockstep: both files only ever changed together over the window. The
-    // coupling signal is real but uninformative — they behave like a single
-    // file from git's point of view.
-    if (count > 0 && churn1 === count && churn2 === count) {
+    // Near-lockstep: shared / max(churn) ≥ 0.9 means both files almost always
+    // change together — typical of generator/mirror pairs (README ↔ src/README,
+    // *.pb.go ↔ *.proto). Symmetric ratio rejects asymmetric dependents where
+    // only one side is saturated.
+    const maxChurn = Math.max(churn1, churn2);
+    if (count > 0 && maxChurn > 0 && count / maxChurn >= 0.9) {
       entry.lockstep = true;
     }
     if (trackedFiles) {

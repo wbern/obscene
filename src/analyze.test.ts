@@ -1478,7 +1478,47 @@ describe("computeCoupling", () => {
     expect(result[0].lockstep).toBe(true);
   });
 
-  it("does not flag lockstep when one file changed outside the pair", () => {
+  it("flags near-lockstep pairs at the 0.9 ratio threshold (generator drift)", () => {
+    // README.md ↔ src/README.md: 9 shared / 10 max churn = 0.9 → lockstep
+    const cochanges = new Map([["README.md\0src/README.md", 9]]);
+    const churn = new Map([
+      ["README.md", 10],
+      ["src/README.md", 10],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBe(true);
+  });
+
+  it("flags asymmetric near-lockstep when shared / max(churn) ≥ 0.9", () => {
+    // 9 shared / max(9, 10) = 0.9 → lockstep
+    const cochanges = new Map([["a.ts\0lib/b.ts", 9]]);
+    const churn = new Map([
+      ["a.ts", 9],
+      ["lib/b.ts", 10],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBe(true);
+  });
+
+  it("does not flag lockstep when ratio is below 0.9", () => {
+    // 8 shared / max(10, 10) = 0.8 → not lockstep
+    const cochanges = new Map([["a.ts\0lib/b.ts", 8]]);
+    const churn = new Map([
+      ["a.ts", 10],
+      ["lib/b.ts", 10],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBeUndefined();
+  });
+
+  it("does not flag lockstep when one file changed substantially outside the pair", () => {
+    // 4 shared / max(4, 5) = 0.8 → not lockstep
     const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
     const churn = new Map([
       ["a.ts", 4],
@@ -1490,7 +1530,8 @@ describe("computeCoupling", () => {
     expect(result[0].lockstep).toBeUndefined();
   });
 
-  it("does not flag lockstep when the other side changed outside the pair", () => {
+  it("does not flag lockstep when the other side changed substantially outside the pair", () => {
+    // 4 shared / max(6, 4) = 0.67 → not lockstep
     const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
     const churn = new Map([
       ["a.ts", 6],

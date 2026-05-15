@@ -86,7 +86,7 @@ const COUPLING_GUIDE: Record<string, string> = {
   deleted:
     "file1Deleted / file2Deleted are set when the file is no longer present at HEAD (deleted or renamed away). The coupling signal is historical — the pair is not actionable in the current tree.",
   lockstep:
-    "Set when both files' total churn equals their co-change count over the window — i.e. they only ever changed together. The 100% degree is real but uninformative; treat the pair as a single unit from git's perspective.",
+    "Set when shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (README ↔ src/README, *.pb.go ↔ *.proto). The coupling signal is real but uninformative; treat the pair as a single unit from git's perspective.",
 };
 
 function addSharedOptions(cmd: Command): Command {

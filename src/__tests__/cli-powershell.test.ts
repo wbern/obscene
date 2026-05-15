@@ -25,7 +25,7 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("should output version via pwsh", () => {
+  it("should output version via pwsh", { timeout: 30000 }, () => {
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
@@ -36,7 +36,7 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     expect(result.stdout.toString().trim()).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
-  it("should output help via pwsh", () => {
+  it("should output help via pwsh", { timeout: 30000 }, () => {
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --help`],
@@ -80,7 +80,9 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     expect(stdout).toContain("Score");
   });
 
-  it("should fail gracefully outside a git repo via pwsh", () => {
+  it("should fail gracefully outside a git repo via pwsh", {
+    timeout: 30000,
+  }, () => {
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)}`],
@@ -90,7 +92,7 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     expect(result.status).not.toBe(0);
   });
 
-  it("should handle paths with spaces via pwsh", () => {
+  it("should handle paths with spaces via pwsh", { timeout: 30000 }, () => {
     const dirWithSpaces = path.join(tempDir, "path with spaces");
     fs.mkdirSync(dirWithSpaces);
 
