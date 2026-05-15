@@ -4,11 +4,13 @@ import {
   computeAllRankings,
   computeComposite,
   computeCoupling,
+  couplingConfidence,
   detectIgnorePatterns,
   formatIgnoreFile,
   getAuthors,
   getChurn,
   getCoChanges,
+  getCommitsInWindow,
   getDefects,
   getNestingDepths,
   getTrackedFiles,
@@ -16,7 +18,12 @@ import {
   runScc,
   UNIVERSAL_IGNORE_GROUPS,
 } from "./analyze.js";
-import type { FileMetrics, Tier } from "./types.js";
+import type {
+  ConfidenceInfo,
+  FileMetrics,
+  RankingOutput,
+  Tier,
+} from "./types.js";
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
@@ -824,10 +831,14 @@ describe("computeAllRankings", () => {
     const churn = new Map([
       ["a.ts", 10],
       ["b.ts", 5],
+      ["c.ts", 4],
+      ["d.ts", 2],
     ]);
     const nesting = new Map([
       ["a.ts", 5],
       ["b.ts", 3],
+      ["c.ts", 4],
+      ["e.ts", 6],
     ]);
 
     const result = computeAllRankings(
@@ -1545,17 +1556,42 @@ describe("computeCoupling", () => {
 });
 
 describe("computeComposite", () => {
+  const STUB_RANKING_CONFIDENCE: ConfidenceInfo = {
+    level: "plausible",
+    reason: "stub",
+    inputs: {
+      metric: "stub",
+      value: 10,
+      thresholds: { weak: 3, plausible: 10, acceptable: 30 },
+    },
+    source: "stub",
+  };
+
+  function makeRanking(files: string[]): RankingOutput {
+    return {
+      label: "Stub",
+      scoreFormula: "stub",
+      totalScore: files.length,
+      tierCounts: { hot: 0, warm: 0, cool: files.length },
+      totalEntries: files.length,
+      showing: files.length,
+      confidence: STUB_RANKING_CONFIDENCE,
+      entries: files.map((f, i) => ({
+        file: f,
+        score: files.length - i,
+        percentOfTotal: 0,
+        tier: "cool" as const,
+        churn: 0,
+        metricValue: 0,
+      })),
+    };
+  }
+
   it("ranks files by RRF score across multiple rankings", () => {
-    const rankings: Record<string, { entries: { file: string }[] }> = {
-      complexity: {
-        entries: [{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }],
-      },
-      nesting: {
-        entries: [{ file: "a.ts" }, { file: "c.ts" }, { file: "b.ts" }],
-      },
-      defects: {
-        entries: [{ file: "a.ts" }, { file: "b.ts" }],
-      },
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts", "b.ts", "c.ts"]),
+      nesting: makeRanking(["a.ts", "c.ts", "b.ts"]),
+      defects: makeRanking(["a.ts", "b.ts"]),
     };
     const churn = new Map([
       ["a.ts", 10],
@@ -1583,15 +1619,8 @@ describe("computeComposite", () => {
   });
 
   it("assigns tiers by cumulative distribution", () => {
-    const rankings: Record<string, { entries: { file: string }[] }> = {
-      complexity: {
-        entries: [
-          { file: "a.ts" },
-          { file: "b.ts" },
-          { file: "c.ts" },
-          { file: "d.ts" },
-        ],
-      },
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts", "b.ts", "c.ts", "d.ts"]),
     };
 
     const result = computeComposite(rankings, new Map(), 0);
@@ -1604,10 +1633,8 @@ describe("computeComposite", () => {
   });
 
   it("limits output by top parameter", () => {
-    const rankings: Record<string, { entries: { file: string }[] }> = {
-      complexity: {
-        entries: [{ file: "a.ts" }, { file: "b.ts" }, { file: "c.ts" }],
-      },
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts", "b.ts", "c.ts"]),
     };
 
     const result = computeComposite(rankings, new Map(), 2);
@@ -1618,11 +1645,11 @@ describe("computeComposite", () => {
   });
 
   it("counts dimensions a file appears in", () => {
-    const rankings: Record<string, { entries: { file: string }[] }> = {
-      complexity: { entries: [{ file: "a.ts" }, { file: "b.ts" }] },
-      nesting: { entries: [{ file: "a.ts" }] },
-      defects: { entries: [{ file: "a.ts" }] },
-      authors: { entries: [{ file: "b.ts" }] },
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts", "b.ts"]),
+      nesting: makeRanking(["a.ts"]),
+      defects: makeRanking(["a.ts"]),
+      authors: makeRanking(["b.ts"]),
     };
 
     const result = computeComposite(rankings, new Map(), 0);
@@ -1631,6 +1658,119 @@ describe("computeComposite", () => {
     const bEntry = result.entries.find((e) => e.file === "b.ts");
     expect(aEntry?.dimensionCount).toBe(3);
     expect(bEntry?.dimensionCount).toBe(2);
+  });
+
+  it("emits inconclusive composite confidence with fewer than 2 rankings", () => {
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts"]),
+    };
+
+    const result = computeComposite(rankings, new Map(), 0);
+
+    expect(result.confidence.level).toBe("inconclusive");
+    expect(result.confidence.reason).toContain("RRF requires");
+  });
+
+  it("inherits the weakest input ranking confidence", () => {
+    const weak: RankingOutput = {
+      ...makeRanking(["a.ts"]),
+      confidence: {
+        ...STUB_RANKING_CONFIDENCE,
+        level: "weak",
+      },
+    };
+    const rankings: Record<string, RankingOutput> = {
+      complexity: makeRanking(["a.ts", "b.ts"]),
+      defects: weak,
+    };
+
+    const result = computeComposite(rankings, new Map(), 0);
+
+    expect(result.confidence.level).toBe("weak");
+    expect(result.confidence.reason).toContain("weakest: WEAK");
+  });
+});
+
+describe("couplingConfidence", () => {
+  it("returns inconclusive below the weak floor", () => {
+    const c = couplingConfidence(2);
+    expect(c.level).toBe("inconclusive");
+    expect(c.reason).toContain("need ≥ 5");
+  });
+
+  it("returns weak between weak and plausible thresholds", () => {
+    expect(couplingConfidence(10).level).toBe("weak");
+  });
+
+  it("returns plausible between plausible and acceptable thresholds", () => {
+    expect(couplingConfidence(50).level).toBe("plausible");
+  });
+
+  it("returns acceptable at or above the acceptable threshold", () => {
+    expect(couplingConfidence(150).level).toBe("acceptable");
+  });
+});
+
+describe("getCommitsInWindow", () => {
+  it("parses the rev-list count", () => {
+    mockExecSync.mockReturnValue(Buffer.from("42\n"));
+    expect(getCommitsInWindow(3)).toBe(42);
+  });
+
+  it("returns 0 when output is not a number", () => {
+    mockExecSync.mockReturnValue(Buffer.from("not-a-number\n"));
+    expect(getCommitsInWindow(3)).toBe(0);
+  });
+
+  it("throws when git is unavailable", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("git not found");
+    });
+    expect(() => getCommitsInWindow(3)).toThrow(
+      /Not a git repository or git is not installed/,
+    );
+  });
+});
+
+describe("computeAllRankings confidence routing", () => {
+  const files: FileMetrics[] = [
+    {
+      file: "a.ts",
+      code: 10,
+      lines: 10,
+      complexity: 0,
+      comments: 0,
+      complexityDensity: 0,
+    },
+  ];
+
+  it("routes to skipped with inconclusive confidence when complexity sample is too small", () => {
+    const result = computeAllRankings(
+      files,
+      new Map([["a.ts", 1]]),
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.rankings.complexity).toBeUndefined();
+    expect(result.skipped.complexity).toBeDefined();
+    expect(result.skipped.complexity.confidence.level).toBe("inconclusive");
+  });
+
+  it("marks authors as inconclusive when no variance is present", () => {
+    const result = computeAllRankings(
+      files,
+      new Map([["a.ts", 1]]),
+      new Map(),
+      new Map(),
+      new Map([["a.ts", 1]]),
+      0,
+    );
+
+    expect(result.skipped.authors).toBeDefined();
+    expect(result.skipped.authors.confidence.level).toBe("inconclusive");
   });
 });
 

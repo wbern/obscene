@@ -10,11 +10,25 @@ import {
 } from "./color.js";
 import type {
   CompositeOutput,
+  ConfidenceInfo,
+  ConfidenceLevel,
   CouplingOutput,
   HotspotsOutput,
   RankingOutput,
   ReportOutput,
 } from "./types.js";
+
+const CONFIDENCE_PALETTE: Record<ConfidenceLevel, (s: string) => string> = {
+  inconclusive: pc.gray,
+  weak: pc.yellow,
+  plausible: pc.cyan,
+  acceptable: pc.green,
+};
+
+function formatConfidenceStamp(c: ConfidenceInfo): string[] {
+  const color = CONFIDENCE_PALETTE[c.level];
+  return [color(`Confidence: ${c.level.toUpperCase()} — ${c.reason}`)];
+}
 
 const RANKING_LABELS_BY_KEY: Record<string, string> = Object.fromEntries(
   RANKING_DEFS.map((d) => [d.key, d.label]),
@@ -180,6 +194,7 @@ function formatRankingTable(
   lines.push(
     `${prefix}${title} — Total score: ${ranking.totalScore.toLocaleString()}`,
   );
+  lines.push(...formatConfidenceStamp(ranking.confidence));
   if (description) {
     for (const line of description.split("\n")) {
       lines.push(pc.dim(line));
@@ -290,6 +305,7 @@ export function formatCouplingTable(output: CouplingOutput): string {
   lines.push(
     `Coupling — ${churnWindow} churn window | Min shared: ${output.minCochanges} | Total score: ${totalScore.toLocaleString()}`,
   );
+  lines.push(...formatConfidenceStamp(output.confidence));
   lines.push(...tierSummary(tierCounts, output.showing, output.totalCouplings));
 
   lines.push(
@@ -366,6 +382,7 @@ export function formatCompositeTable(output: CompositeOutput): string {
   lines.push(
     `★ ${output.label.toUpperCase()} — Total score: ${output.totalScore.toLocaleString()}`,
   );
+  lines.push(...formatConfidenceStamp(output.confidence));
   lines.push(
     ...tierSummary(output.tierCounts, output.showing, output.totalEntries),
   );

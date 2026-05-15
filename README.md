@@ -202,6 +202,45 @@ When the analyzed file set has no measurable cyclomatic complexity (every scanne
 
 `fileCount` counts files *after* exclusion (`.obsignore` and `--exclude` patterns are already applied). Treat HOT/WARM/COOL as relative groupings rather than risk labels when `totalComplexity` is 0.
 
+### Confidence
+
+Each ranking and the coupling table carry an epistemic confidence stamp so the tool never oversells a thin sample:
+
+| Level | Meaning |
+|-------|---------|
+| `INCONCLUSIVE` | Sample is below the literature-cited floor — the ranking is suppressed (routed to `skipped` in JSON). |
+| `WEAK` | Above the support floor but too few samples for stable rank ordering. Treat as suggestive, not actionable. |
+| `PLAUSIBLE` | Sample supports the ranking. Findings are worth reviewing. |
+| `ACCEPTABLE` | Ceiling. Sample is large enough that the ranking is stable. **Never** asserts the code itself is good or bad. |
+
+Thresholds are tied to published prior art per dimension, not picked freely:
+
+| Dimension | Sample metric | Sources |
+|-----------|---------------|---------|
+| Complexity | files with measurable complexity | Page (1963), Cohen (1988) — rank stability at n ≥ 30 |
+| Nesting | files with depth ≥ 3 | Campbell (SonarSource 2018), Page (1963) |
+| Defects | `fix:` commits in window | code-maat `--min-revs 5`, Gall et al. (IWPSE 2003), Hassan (ICSE 2009) |
+| Authors | distinct authors on the most-touched file | Bird et al. (FSE 2011), Mockus & Herbsleb (ICSE 2002) |
+| Coupling | commits in window | code-maat, Gall (IWPSE 2003), CodeScene (≥ 100 commits) |
+| Composite (RRF) | number of input rankings | Cormack et al. (SIGIR 2009), Fagin et al. (PODS 2003) — min-of-inputs aggregation |
+
+Every confidence stamp in JSON exposes its inputs so the rating is auditable:
+
+```json
+"confidence": {
+  "level": "plausible",
+  "reason": "42 fix: commits across 12 files (PLAUSIBLE threshold per code-maat / Gall 2003 / Hassan 2009).",
+  "inputs": {
+    "metric": "fixCommits",
+    "value": 42,
+    "thresholds": { "weak": 5, "plausible": 15, "acceptable": 50 }
+  },
+  "source": "code-maat --min-revs 5; Gall et al. (IWPSE 2003) support floor of 5; Hassan (ICSE 2009) entropy stable at n ≥ 100."
+}
+```
+
+`ACCEPTABLE` is the deliberate ceiling — even with thousands of commits, the rankings remain candidates for review, not verdicts on code quality.
+
 ## Example output
 
 ```

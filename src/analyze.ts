@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import type {
   CompositeEntry,
   CompositeOutput,
+  ConfidenceInfo,
+  ConfidenceLevel,
   CouplingEntry,
   FileMetrics,
   RankingEntry,
@@ -92,6 +94,53 @@ const WARM_CUMULATIVE = 0.8;
 
 const MIN_FIX_COMMITS = 5;
 const MIN_FILES_WITH_FIXES = 3;
+
+// Confidence thresholds per dimension. Each cutoff is tied to cited prior art
+// rather than chosen freely. See classifyConfidence() and per-dimension
+// confidence functions below for sources.
+const CONFIDENCE = {
+  complexity: { weak: 3, plausible: 10, acceptable: 30 },
+  nesting: { weak: 3, plausible: 10, acceptable: 30 },
+  defects: { weak: 5, plausible: 15, acceptable: 50 },
+  authors: { weak: 2, plausible: 4, acceptable: 8 },
+  coupling: { weak: 5, plausible: 30, acceptable: 100 },
+} as const;
+
+const CONFIDENCE_SOURCES = {
+  complexity:
+    "Page (1963), Cohen (1988) — rank stability requires n ≥ 30; below 3, ranking is arithmetically meaningless.",
+  nesting:
+    "Campbell (SonarSource 2018, Cognitive Complexity) — depth ≥ 3 is where readability degrades; Page (1963) for n ≥ 30 stability.",
+  defects:
+    "code-maat --min-revs 5; Gall et al. (IWPSE 2003) support floor of 5; Hassan (ICSE 2009) entropy stable at n ≥ 100.",
+  authors:
+    "Bird et al. (FSE 2011) Don't Touch My Code! — ownership signal stable from ~8 contributors; Mockus & Herbsleb (ICSE 2002) ≥ 3 floor.",
+  coupling:
+    "code-maat --min-revs 5, --max-changeset-size 30; Gall (IWPSE 2003) support floor; CodeScene recommends ≥ 100 commits before drawing conclusions.",
+  composite:
+    "Cormack et al. (SIGIR 2009) Reciprocal Rank Fusion — RRF assumes ≥ 2 independent rankings; min-of-inputs aggregation per Fagin et al. (PODS 2003).",
+} as const;
+
+function classifyConfidence(
+  metric: string,
+  value: number,
+  thresholds: { weak: number; plausible: number; acceptable: number },
+  source: string,
+  reasonTemplate: (level: ConfidenceLevel) => string,
+): ConfidenceInfo {
+  let level: ConfidenceLevel;
+  if (value < thresholds.weak) level = "inconclusive";
+  else if (value < thresholds.plausible) level = "weak";
+  else if (value < thresholds.acceptable) level = "plausible";
+  else level = "acceptable";
+
+  return {
+    level,
+    reason: reasonTemplate(level),
+    inputs: { metric, value, thresholds },
+    source,
+  };
+}
 
 function isExcluded(location: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(location));
@@ -430,29 +479,91 @@ export function computeAllRankings(
   };
 
   const skipped: Record<string, SkippedRanking> = {};
+  const confidences: Record<string, ConfidenceInfo> = {};
 
-  // Skip defects when insufficient fix: commit data
+  // Per-dimension confidence — see CONFIDENCE_SOURCES for citations.
+  let filesWithComplexity = 0;
+  for (const f of files) {
+    if (f.complexity > 0) filesWithComplexity++;
+  }
+  confidences.complexity = classifyConfidence(
+    "filesWithComplexity",
+    filesWithComplexity,
+    CONFIDENCE.complexity,
+    CONFIDENCE_SOURCES.complexity,
+    (level) =>
+      level === "inconclusive"
+        ? `${filesWithComplexity} files with measurable complexity — not enough to rank.`
+        : `${filesWithComplexity} files with measurable complexity (${level.toUpperCase()} threshold per Page 1963 / Cohen 1988).`,
+  );
+
+  let filesWithNesting = 0;
+  for (const depth of nestingDepths.values()) {
+    if (depth >= 3) filesWithNesting++;
+  }
+  confidences.nesting = classifyConfidence(
+    "filesWithNesting>=3",
+    filesWithNesting,
+    CONFIDENCE.nesting,
+    CONFIDENCE_SOURCES.nesting,
+    (level) =>
+      level === "inconclusive"
+        ? `${filesWithNesting} files with nesting depth ≥ 3 — not enough to rank.`
+        : `${filesWithNesting} files with nesting depth ≥ 3 (${level.toUpperCase()} threshold per Campbell 2018 / Page 1963).`,
+  );
+
   const totalFixCommits = [...defects.values()].reduce((s, v) => s + v, 0);
   const filesWithFixes = defects.size;
-  if (
-    totalFixCommits < MIN_FIX_COMMITS ||
-    filesWithFixes < MIN_FILES_WITH_FIXES
-  ) {
+  const defectsBelowFloor =
+    totalFixCommits < MIN_FIX_COMMITS || filesWithFixes < MIN_FILES_WITH_FIXES;
+  confidences.defects = classifyConfidence(
+    "fixCommits",
+    totalFixCommits,
+    CONFIDENCE.defects,
+    CONFIDENCE_SOURCES.defects,
+    (level) => {
+      if (level === "inconclusive" || defectsBelowFloor) {
+        return `${totalFixCommits} fix: commits across ${filesWithFixes} files — need ≥ ${MIN_FIX_COMMITS} commits across ≥ ${MIN_FILES_WITH_FIXES} files (code-maat / Gall 2003 support floor).`;
+      }
+      return `${totalFixCommits} fix: commits across ${filesWithFixes} files (${level.toUpperCase()} threshold per code-maat / Gall 2003 / Hassan 2009).`;
+    },
+  );
+  if (defectsBelowFloor) {
+    confidences.defects = {
+      ...confidences.defects,
+      level: "inconclusive",
+    };
     skipped.defects = {
       reason: `insufficient data (${totalFixCommits} fix: commits across ${filesWithFixes} files, need ${MIN_FIX_COMMITS}+ commits across ${MIN_FILES_WITH_FIXES}+ files)`,
       suggestion:
         "Adopt conventional commits with fix: prefix. See conventionalcommits.org",
+      confidence: confidences.defects,
     };
   }
 
-  // Skip authors when every file has the same author count (no variance)
+  // Authors confidence: distinct author counts. Also fall back to existing
+  // "all files share the same author count" skip when there's no variance.
   let maxAuthors = 0;
+  const distinctAuthorCounts = new Set<number>();
   for (const count of authors.values()) {
+    distinctAuthorCounts.add(count);
     if (count > maxAuthors) maxAuthors = count;
   }
+  confidences.authors = classifyConfidence(
+    "maxAuthors",
+    maxAuthors,
+    CONFIDENCE.authors,
+    CONFIDENCE_SOURCES.authors,
+    (level) =>
+      level === "inconclusive"
+        ? `${maxAuthors} distinct authors on the most-touched file — not enough to rank ownership.`
+        : `${maxAuthors} distinct authors on the most-touched file (${level.toUpperCase()} threshold per Bird et al. 2011 / Mockus & Herbsleb 2002).`,
+  );
   if (maxAuthors <= 1) {
+    confidences.authors = { ...confidences.authors, level: "inconclusive" };
     skipped.authors = {
       reason: "all files have the same author count — no variance to rank",
+      confidence: confidences.authors,
     };
   }
 
@@ -460,6 +571,13 @@ export function computeAllRankings(
 
   for (const def of RANKING_DEFS) {
     if (skipped[def.key]) continue;
+    if (confidences[def.key].level === "inconclusive") {
+      skipped[def.key] = {
+        reason: confidences[def.key].reason,
+        confidence: confidences[def.key],
+      };
+      continue;
+    }
     const ext = extractors[def.key];
     const allEntries = computeRanking(files, churn, ext.extract, ext.density);
     if (allEntries.length === 0) continue;
@@ -482,6 +600,7 @@ export function computeAllRankings(
       totalEntries: allEntries.length,
       showing: limited.length,
       entries: limited,
+      confidence: confidences[def.key],
     };
   }
 
@@ -792,12 +911,59 @@ const RRF_K = 10;
  * Reciprocal Rank Fusion (RRF). Each file's composite score is
  * the sum of 1/(k + rank) across all dimensions it appears in.
  */
+const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
+  inconclusive: 0,
+  weak: 1,
+  plausible: 2,
+  acceptable: 3,
+};
+
+function compositeConfidence(
+  inputs: Record<string, { confidence: ConfidenceInfo }>,
+): ConfidenceInfo {
+  const levels = Object.values(inputs)
+    .map((r) => r.confidence)
+    .filter((c): c is ConfidenceInfo => c !== undefined);
+  const inputCount = levels.length;
+
+  if (inputCount < 2) {
+    return {
+      level: "inconclusive",
+      reason: `${inputCount} input ranking — RRF requires ≥ 2 independent rankings.`,
+      inputs: {
+        metric: "inputRankings",
+        value: inputCount,
+        thresholds: { weak: 2, plausible: 3, acceptable: 4 },
+      },
+      source: CONFIDENCE_SOURCES.composite,
+    };
+  }
+
+  let minLevel: ConfidenceLevel = "acceptable";
+  for (const c of levels) {
+    if (CONFIDENCE_ORDER[c.level] < CONFIDENCE_ORDER[minLevel]) {
+      minLevel = c.level;
+    }
+  }
+  return {
+    level: minLevel,
+    reason: `Composite inherits min-of-inputs across ${inputCount} rankings (weakest: ${minLevel.toUpperCase()}).`,
+    inputs: {
+      metric: "inputRankings",
+      value: inputCount,
+      thresholds: { weak: 2, plausible: 3, acceptable: 4 },
+    },
+    source: CONFIDENCE_SOURCES.composite,
+  };
+}
+
 export function computeComposite(
-  rankings: Record<string, { entries: { file: string }[] }>,
+  rankings: Record<string, RankingOutput>,
   churn: Map<string, number>,
   top: number,
 ): CompositeOutput {
   const totalDimensions = Object.keys(rankings).length;
+  const confidence = compositeConfidence(rankings);
   const fileScores = new Map<string, { score: number; dims: number }>();
 
   for (const ranking of Object.values(rankings)) {
@@ -839,6 +1005,7 @@ export function computeComposite(
       totalEntries: 0,
       showing: 0,
       entries: [],
+      confidence,
     };
   }
 
@@ -859,5 +1026,40 @@ export function computeComposite(
     totalEntries: entries.length,
     showing: limited.length,
     entries: limited,
+    confidence,
   };
+}
+
+/**
+ * Confidence for a coupling analysis given the number of commits in the
+ * churn window. Sources: code-maat --min-revs 5; Gall (IWPSE 2003); CodeScene
+ * recommends ≥ 100 commits before drawing coupling conclusions.
+ */
+export function couplingConfidence(commitsInWindow: number): ConfidenceInfo {
+  return classifyConfidence(
+    "commitsInWindow",
+    commitsInWindow,
+    CONFIDENCE.coupling,
+    CONFIDENCE_SOURCES.coupling,
+    (level) =>
+      level === "inconclusive"
+        ? `${commitsInWindow} commits in window — need ≥ ${CONFIDENCE.coupling.weak} (code-maat / Gall 2003 support floor).`
+        : `${commitsInWindow} commits in window (${level.toUpperCase()} threshold per code-maat / Gall 2003 / CodeScene).`,
+  );
+}
+
+/**
+ * Count distinct commits in the churn window. Used by coupling analysis to
+ * compute its confidence level.
+ */
+export function getCommitsInWindow(months: number): number {
+  try {
+    const out = execSync(
+      `git rev-list --count --since="${months} months ago" HEAD`,
+      { stdio: ["pipe", "pipe", "pipe"] },
+    );
+    return parseInt(out.toString().trim(), 10) || 0;
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
 }

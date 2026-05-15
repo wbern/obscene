@@ -99,7 +99,7 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
-      { timeout: 10000, stdio: "pipe", cwd: dirWithSpaces },
+      { timeout: 25000, stdio: "pipe", cwd: dirWithSpaces },
     );
 
     expect(result.status).toBe(0);

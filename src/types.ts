@@ -22,6 +22,23 @@ export interface FileMetrics {
 
 export type Tier = "hot" | "warm" | "cool";
 
+export type ConfidenceLevel =
+  | "inconclusive"
+  | "weak"
+  | "plausible"
+  | "acceptable";
+
+export interface ConfidenceInfo {
+  level: ConfidenceLevel;
+  reason: string;
+  inputs: {
+    metric: string;
+    value: number;
+    thresholds: { weak: number; plausible: number; acceptable: number };
+  };
+  source: string;
+}
+
 export interface RankingEntry {
   file: string;
   score: number;
@@ -40,6 +57,7 @@ export interface RankingOutput {
   totalEntries: number;
   showing: number;
   entries: RankingEntry[];
+  confidence: ConfidenceInfo;
 }
 
 export interface ReportOutput {
@@ -59,6 +77,7 @@ export interface ReportOutput {
 export interface SkippedRanking {
   reason: string;
   suggestion?: string;
+  confidence: ConfidenceInfo;
 }
 
 export interface HotspotsOutput {
@@ -92,6 +111,7 @@ export interface CompositeOutput {
   totalEntries: number;
   showing: number;
   entries: CompositeEntry[];
+  confidence: ConfidenceInfo;
 }
 
 export interface CouplingEntry {
@@ -118,4 +138,5 @@ export interface CouplingOutput {
   totalCouplings: number;
   showing: number;
   couplings: CouplingEntry[];
+  confidence: ConfidenceInfo;
 }

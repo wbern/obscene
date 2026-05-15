@@ -7,10 +7,33 @@ import {
 } from "./format.js";
 import type {
   CompositeOutput,
+  ConfidenceInfo,
   CouplingOutput,
   HotspotsOutput,
   ReportOutput,
 } from "./types.js";
+
+const STUB_CONFIDENCE: ConfidenceInfo = {
+  level: "plausible",
+  reason: "stub",
+  inputs: {
+    metric: "stub",
+    value: 10,
+    thresholds: { weak: 3, plausible: 10, acceptable: 30 },
+  },
+  source: "stub",
+};
+
+const STUB_INCONCLUSIVE: ConfidenceInfo = {
+  level: "inconclusive",
+  reason: "stub",
+  inputs: {
+    metric: "stub",
+    value: 0,
+    thresholds: { weak: 3, plausible: 10, acceptable: 30 },
+  },
+  source: "stub",
+};
 
 describe("formatReportTable", () => {
   it("formats report output as a table", () => {
@@ -107,6 +130,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 1, cool: 0 },
           totalEntries: 2,
           showing: 2,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -170,6 +194,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -189,6 +214,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -228,6 +254,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 0, warm: 0, cool: 1 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/calm.ts",
@@ -263,6 +290,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/big.ts",
@@ -298,6 +326,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/very/deeply/nested/directory/structure/component.ts",
@@ -332,6 +361,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/buggy.ts",
@@ -368,6 +398,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/shared.ts",
@@ -402,6 +433,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -435,6 +467,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -464,6 +497,7 @@ describe("formatHotspotsTable", () => {
       skipped: {
         someOther: {
           reason: "insufficient data",
+          confidence: STUB_INCONCLUSIVE,
         },
       },
       corpus: { fileCount: 1, totalComplexity: 50 },
@@ -487,6 +521,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -526,6 +561,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -544,6 +580,7 @@ describe("formatHotspotsTable", () => {
           reason: "insufficient data (2 fix: commits, need 5+)",
           suggestion:
             "Adopt conventional commits with fix: prefix. See conventionalcommits.org",
+          confidence: STUB_INCONCLUSIVE,
         },
       },
       corpus: { fileCount: 1, totalComplexity: 50 },
@@ -570,6 +607,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "README.md",
@@ -605,6 +643,7 @@ describe("formatHotspotsTable", () => {
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
           showing: 1,
+          confidence: STUB_CONFIDENCE,
           entries: [
             {
               file: "src/foo.ts",
@@ -694,6 +733,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 1, warm: 1, cool: 0 },
       totalCouplings: 2,
       showing: 2,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/auth.ts",
@@ -744,6 +784,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 0, warm: 0, cool: 1 },
       totalCouplings: 1,
       showing: 1,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/a.ts",
@@ -774,6 +815,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 1, warm: 0, cool: 1 },
       totalCouplings: 2,
       showing: 2,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/old-removed.ts",
@@ -817,6 +859,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 1, warm: 0, cool: 0 },
       totalCouplings: 1,
       showing: 1,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/twin-a.ts",
@@ -848,6 +891,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 1, warm: 0, cool: 0 },
       totalCouplings: 1,
       showing: 1,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/a.ts",
@@ -878,6 +922,7 @@ describe("formatCouplingTable", () => {
       tierCounts: { hot: 1, warm: 0, cool: 0 },
       totalCouplings: 1,
       showing: 1,
+      confidence: STUB_CONFIDENCE,
       couplings: [
         {
           file1: "src/very/deeply/nested/directory/structure/component.ts",
@@ -908,6 +953,7 @@ describe("formatCompositeTable", () => {
       totalDimensions: 4,
       totalEntries: 2,
       showing: 2,
+      confidence: STUB_CONFIDENCE,
       entries: [
         {
           file: "src/foo.ts",

@@ -146,6 +146,7 @@ describe("CLI Integration", () => {
       "authors",
       "complexity",
       "composite",
+      "confidence",
       "corpus",
       "defects",
       "nesting",
@@ -220,6 +221,7 @@ describe("CLI Integration", () => {
     expect(parsed).toHaveProperty("guide");
     expect(Object.keys(parsed.guide).sort()).toEqual([
       "cochanges",
+      "confidence",
       "degree",
       "deleted",
       "lockstep",

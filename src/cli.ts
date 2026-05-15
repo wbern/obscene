@@ -6,11 +6,13 @@ import {
   computeAllRankings,
   computeComposite,
   computeCoupling,
+  couplingConfidence,
   detectIgnorePatterns,
   formatIgnoreFile,
   getAuthors,
   getChurn,
   getCoChanges,
+  getCommitsInWindow,
   getDefects,
   getNestingDepths,
   getTrackedFiles,
@@ -73,6 +75,8 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
   corpus:
     "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
+  confidence:
+    "Epistemic stamp on each ranking — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to cited sample-size floors per dimension (Page 1963, Cohen 1988, code-maat, Gall 2003, Hassan 2009, Bird et al. 2011, Mockus & Herbsleb 2002, Campbell 2018). ACCEPTABLE is the ceiling — the tool never claims certainty about code quality, only that the sample supports the ranking. INCONCLUSIVE rankings are surfaced under skipped rather than ranked.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -87,6 +91,8 @@ const COUPLING_GUIDE: Record<string, string> = {
     "file1Deleted / file2Deleted are set when the file is no longer present at HEAD (deleted or renamed away). The coupling signal is historical — the pair is not actionable in the current tree.",
   lockstep:
     "Set when shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (README ↔ src/README, *.pb.go ↔ *.proto). The coupling signal is real but uninformative; treat the pair as a single unit from git's perspective.",
+  confidence:
+    "Epistemic stamp on the coupling table — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to the number of commits in the analysis window. Sources: code-maat --min-revs 5, Gall (IWPSE 2003) support floor of 5, CodeScene recommends ≥ 100 commits before drawing coupling conclusions. ACCEPTABLE means the sample supports the ranking; it never asserts the couplings themselves are bad.",
 };
 
 function addSharedOptions(cmd: Command): Command {
@@ -296,6 +302,7 @@ function runCoupling(opts: CouplingOpts): void {
     totalCouplings: couplings.length,
     showing: limited.length,
     couplings: limited,
+    confidence: couplingConfidence(getCommitsInWindow(months)),
   };
 
   if (opts.format === "table") {
