@@ -88,7 +88,7 @@ Each table has its own tier assignment by cumulative score distribution:
 
 Tiers are relative to THIS codebase, not absolute quality grades. A "hot" file is under heavy load, not necessarily broken.
 
-A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Rankings with insufficient data are skipped with an explanation (e.g. defects ranking requires 5+ `fix:` commits across 3+ files). Bot authors (`[bot]` suffix) are filtered automatically.
+A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Rankings with insufficient data are skipped with an explanation (e.g. the Fix Activity ranking requires 5+ `fix:` commits across 3+ files). Bot authors (`[bot]` suffix) are filtered automatically.
 
 ### `obscene coupling`
 
@@ -122,7 +122,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 
 #### Score
 
-`metric × churn`. Each ranking table uses a different metric (complexity, nesting, defects, or authors) multiplied by churn. See [Why churn × complexity?](#why-churn-x-complexity) for the research backing this approach.
+`metric × churn`. Each ranking table uses a different metric (complexity, nesting, fix activity, or authors) multiplied by churn. See [Why churn × complexity?](#why-churn-x-complexity) for the research backing this approach.
 
 #### Churn (`Churn`)
 
@@ -130,7 +130,7 @@ Number of commits touching the file within the configured time window (default: 
 
 #### Cyclomatic complexity (`Cmplx`)
 
-Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide.
+Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide. The measure was introduced by McCabe (1976) and has been the standard structural-complexity metric since. — [IEEE TSE](https://doi.org/10.1109/TSE.1976.233837)
 
 #### Complexity density (`Dens`)
 
@@ -138,7 +138,9 @@ Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc).
 
 #### Fixes (`Fixes`)
 
-Count of `fix:` conventional commits touching the file within the churn window. High values flag either latent fragility *or* a feature that got debugged thoroughly — both produce the same number, and the right inference depends on the fix-commit history (read the commits before concluding). The metric is inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction; obscene reports the raw fix-activity signal and leaves the interpretation to you.
+Count of `fix:` conventional commits touching the file within the churn window. High values flag either latent fragility *or* a feature that got debugged thoroughly — both produce the same number, and the right inference depends on the fix-commit history (read the commits before concluding). The metric is inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction.
+
+The literature in [Why churn × complexity?](#why-churn-x-complexity) talks about *defects* — bugs confirmed against a bug-tracker or post-release issue database. obscene doesn't have access to that ground truth, so it uses `fix:` commits as a proxy and reports the raw signal as Fix Activity. The two are related but not identical: a `fix:` commit is direct evidence that someone considered something broken enough to label the change as a fix, but it doesn't distinguish trivial fixes from severe ones, and it relies on the team using conventional commits consistently. Treat Fix Activity as a prompt to read the commits, not as a defect count.
 
 #### Fix density (`FxDns`)
 
@@ -297,6 +299,8 @@ Files that are both complex and frequently modified are disproportionately likel
 
 - **Nagappan & Ball (2005)** studied Windows Server 2003 and found that relative code churn measures predict system defect density with 89% accuracy. — [ICSE 2005](https://doi.org/10.1109/ICSE.2005.1553571)
 - **Moser, Pedrycz & Succi (2008)** compared change metrics against static code attributes on Eclipse and found that process metrics (churn, change frequency) outperform static code metrics for defect prediction. — [ICSE 2008](https://doi.org/10.1145/1368088.1368114)
+- **Hassan (2009)** introduced an entropy-based measure of code-change complexity and showed it predicts faults better than prior change and prior fault counts on six large open-source systems. — [ICSE 2009](https://doi.org/10.1109/ICSE.2009.5070510)
+- **D'Ambros, Lanza & Robbes (2010)** systematically compared bug-prediction approaches (process, churn, source-code, entropy, and combined metrics) on five open-source systems and found that change-history metrics consistently rank among the strongest predictors. — [MSR 2010](https://doi.org/10.1109/MSR.2010.5463279)
 - **Shin, Meneely, Williams & Osborne (2011)** combined complexity, churn, and developer activity metrics to predict vulnerabilities in Mozilla Firefox and the Linux kernel. By flagging only 10.9% of files, the model identified 70.8% of known vulnerabilities. — [IEEE TSE](https://doi.org/10.1109/TSE.2010.55)
 - **Tornhill & Borg (2022)** analyzed 39 proprietary codebases and found that low-quality code (by their Code Health metric) contains 15x more defects and takes 124% longer to resolve. In their case studies, 4% of the codebase was responsible for 72% of all defects. — [ACM/IEEE TechDebt 2022](https://arxiv.org/abs/2203.04374)
 
