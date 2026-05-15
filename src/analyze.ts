@@ -541,12 +541,8 @@ export function computeAllRankings(
     };
   }
 
-  // Authors confidence: distinct author counts. Also fall back to existing
-  // "all files share the same author count" skip when there's no variance.
   let maxAuthors = 0;
-  const distinctAuthorCounts = new Set<number>();
   for (const count of authors.values()) {
-    distinctAuthorCounts.add(count);
     if (count > maxAuthors) maxAuthors = count;
   }
   confidences.authors = classifyConfidence(
@@ -921,9 +917,7 @@ const CONFIDENCE_ORDER: Record<ConfidenceLevel, number> = {
 function compositeConfidence(
   inputs: Record<string, { confidence: ConfidenceInfo }>,
 ): ConfidenceInfo {
-  const levels = Object.values(inputs)
-    .map((r) => r.confidence)
-    .filter((c): c is ConfidenceInfo => c !== undefined);
+  const levels = Object.values(inputs).map((r) => r.confidence);
   const inputCount = levels.length;
 
   if (inputCount < 2) {

@@ -838,7 +838,6 @@ describe("computeAllRankings", () => {
       ["a.ts", 5],
       ["b.ts", 3],
       ["c.ts", 4],
-      ["e.ts", 6],
     ]);
 
     const result = computeAllRankings(
