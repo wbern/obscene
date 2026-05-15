@@ -1613,6 +1613,45 @@ describe("detectIgnorePatterns", () => {
     });
   });
 
+  it("detects Claude Code generated slash commands", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from(".claude/commands/review.md\nsrc/app.ts\n"),
+    );
+
+    const result = detectIgnorePatterns();
+
+    expect(result).toContainEqual({
+      pattern: ".claude/commands/**",
+      comment: "Claude Code slash commands (often generated from sources)",
+    });
+  });
+
+  it("detects OpenCode generated slash commands", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from(".opencode/commands/review.md\nsrc/app.ts\n"),
+    );
+
+    const result = detectIgnorePatterns();
+
+    expect(result).toContainEqual({
+      pattern: ".opencode/commands/**",
+      comment: "OpenCode slash commands (often generated from sources)",
+    });
+  });
+
+  it("detects Cursor generated rules", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from(".cursor/rules/typescript.mdc\nsrc/app.ts\n"),
+    );
+
+    const result = detectIgnorePatterns();
+
+    expect(result).toContainEqual({
+      pattern: ".cursor/rules/**",
+      comment: "Cursor rules (often generated from sources)",
+    });
+  });
+
   it("returns empty array when no patterns match", () => {
     mockExecSync.mockReturnValue(Buffer.from("src/app.ts\nlib/utils.ts\n"));
 

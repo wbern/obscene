@@ -661,6 +661,21 @@ const INIT_FILE_RULES: { test: RegExp; pattern: string; comment: string }[] = [
     pattern: ".gitlab-ci*",
     comment: "GitLab CI configuration",
   },
+  {
+    test: /^\.claude\/commands\//,
+    pattern: ".claude/commands/**",
+    comment: "Claude Code slash commands (often generated from sources)",
+  },
+  {
+    test: /^\.opencode\/commands\//,
+    pattern: ".opencode/commands/**",
+    comment: "OpenCode slash commands (often generated from sources)",
+  },
+  {
+    test: /^\.cursor\/rules\//,
+    pattern: ".cursor/rules/**",
+    comment: "Cursor rules (often generated from sources)",
+  },
 ];
 
 /**
