@@ -95,9 +95,11 @@ const WARM_CUMULATIVE = 0.8;
 const MIN_FIX_COMMITS = 5;
 const MIN_FILES_WITH_FIXES = 3;
 
-// Confidence thresholds per dimension. Each cutoff is tied to cited prior art
-// rather than chosen freely. See classifyConfidence() and per-dimension
-// confidence functions below for sources.
+// Confidence thresholds per dimension. These are engineering defaults — the
+// floors come from established tooling where one exists (code-maat), and the
+// upper tiers are scaled from there. They are NOT prescribed by any specific
+// paper; the "acceptable" tier is a deliberate ceiling that says only that the
+// sample supports the ranking, never that the code itself is good or bad.
 const CONFIDENCE = {
   complexity: { weak: 3, plausible: 10, acceptable: 30 },
   nesting: { weak: 3, plausible: 10, acceptable: 30 },
@@ -108,17 +110,17 @@ const CONFIDENCE = {
 
 const CONFIDENCE_SOURCES = {
   complexity:
-    "Page (1963), Cohen (1988) — rank stability requires n ≥ 30; below 3, ranking is arithmetically meaningless.",
+    "Engineering judgment: any rank ordering needs ≥ 3 items to be meaningful; higher tiers scale from there. No paper prescribes these exact cutoffs.",
   nesting:
-    "Campbell (SonarSource 2018, Cognitive Complexity) — depth ≥ 3 is where readability degrades; Page (1963) for n ≥ 30 stability.",
+    "Engineering judgment, informed by Campbell (SonarSource 2018) Cognitive Complexity which assigns a compounding penalty per nesting level. The 3/10/30 sample-count tiers are not from the paper.",
   defects:
-    "code-maat --min-revs 5; Gall et al. (IWPSE 2003) support floor of 5; Hassan (ICSE 2009) entropy stable at n ≥ 100.",
+    "code-maat's --min-revs default of 5 (Adam Tornhill); higher tiers are engineering judgment. Gall et al. (IWPSE 2003) and Hassan (ICSE 2009) study co-change and change-entropy but do not prescribe a specific commit-count floor.",
   authors:
-    "Bird et al. (FSE 2011) Don't Touch My Code! — ownership signal stable from ~8 contributors; Mockus & Herbsleb (ICSE 2002) ≥ 3 floor.",
+    "Engineering judgment. Bird et al. (FSE 2011) Don't Touch My Code! shows minor contributors (< 5% of commits) correlate with elevated defects, motivating attention to contributor count — but the 2/4/8 tiers here are not from the paper.",
   coupling:
-    "code-maat --min-revs 5, --max-changeset-size 30; Gall (IWPSE 2003) support floor; CodeScene recommends ≥ 100 commits before drawing conclusions.",
+    "code-maat defaults (--min-revs 5, --max-changeset-size 30, Adam Tornhill). CodeScene's documented temporal-coupling default filters files with fewer than 10 commits. The 30/100 upper tiers are engineering judgment.",
   composite:
-    "Cormack et al. (SIGIR 2009) Reciprocal Rank Fusion — RRF assumes ≥ 2 independent rankings; min-of-inputs aggregation per Fagin et al. (PODS 2003).",
+    "Reciprocal Rank Fusion (Cormack et al., SIGIR 2009) fuses multiple independent rankings; min-of-inputs is a strict monotone aggregator (Fagin et al., PODS 2003 treat min as the canonical example).",
 } as const;
 
 function classifyConfidence(
@@ -494,7 +496,7 @@ export function computeAllRankings(
     (level) =>
       level === "inconclusive"
         ? `${filesWithComplexity} files with measurable complexity — not enough to rank.`
-        : `${filesWithComplexity} files with measurable complexity (${level.toUpperCase()} threshold per Page 1963 / Cohen 1988).`,
+        : `${filesWithComplexity} files with measurable complexity (${level.toUpperCase()} sample size).`,
   );
 
   let filesWithNesting = 0;
@@ -509,7 +511,7 @@ export function computeAllRankings(
     (level) =>
       level === "inconclusive"
         ? `${filesWithNesting} files with nesting depth ≥ 3 — not enough to rank.`
-        : `${filesWithNesting} files with nesting depth ≥ 3 (${level.toUpperCase()} threshold per Campbell 2018 / Page 1963).`,
+        : `${filesWithNesting} files with nesting depth ≥ 3 (${level.toUpperCase()} sample size).`,
   );
 
   const totalFixCommits = [...defects.values()].reduce((s, v) => s + v, 0);
@@ -523,9 +525,9 @@ export function computeAllRankings(
     CONFIDENCE_SOURCES.defects,
     (level) => {
       if (level === "inconclusive" || defectsBelowFloor) {
-        return `${totalFixCommits} fix: commits across ${filesWithFixes} files — need ≥ ${MIN_FIX_COMMITS} commits across ≥ ${MIN_FILES_WITH_FIXES} files (code-maat / Gall 2003 support floor).`;
+        return `${totalFixCommits} fix: commits across ${filesWithFixes} files — need ≥ ${MIN_FIX_COMMITS} commits across ≥ ${MIN_FILES_WITH_FIXES} files (matches code-maat's --min-revs default).`;
       }
-      return `${totalFixCommits} fix: commits across ${filesWithFixes} files (${level.toUpperCase()} threshold per code-maat / Gall 2003 / Hassan 2009).`;
+      return `${totalFixCommits} fix: commits across ${filesWithFixes} files (${level.toUpperCase()} sample size).`;
     },
   );
   if (defectsBelowFloor) {
@@ -553,7 +555,7 @@ export function computeAllRankings(
     (level) =>
       level === "inconclusive"
         ? `${maxAuthors} distinct authors on the most-touched file — not enough to rank ownership.`
-        : `${maxAuthors} distinct authors on the most-touched file (${level.toUpperCase()} threshold per Bird et al. 2011 / Mockus & Herbsleb 2002).`,
+        : `${maxAuthors} distinct authors on the most-touched file (${level.toUpperCase()} sample size).`,
   );
   if (maxAuthors <= 1) {
     confidences.authors = { ...confidences.authors, level: "inconclusive" };
@@ -1025,9 +1027,9 @@ export function computeComposite(
 }
 
 /**
- * Confidence for a coupling analysis given the number of commits in the
- * churn window. Sources: code-maat --min-revs 5; Gall (IWPSE 2003); CodeScene
- * recommends ≥ 100 commits before drawing coupling conclusions.
+ * Confidence for a coupling analysis given the number of commits in the churn
+ * window. The weak floor of 5 matches code-maat's --min-revs default; higher
+ * tiers are engineering judgment.
  */
 export function couplingConfidence(commitsInWindow: number): ConfidenceInfo {
   return classifyConfidence(
@@ -1037,8 +1039,8 @@ export function couplingConfidence(commitsInWindow: number): ConfidenceInfo {
     CONFIDENCE_SOURCES.coupling,
     (level) =>
       level === "inconclusive"
-        ? `${commitsInWindow} commits in window — need ≥ ${CONFIDENCE.coupling.weak} (code-maat / Gall 2003 support floor).`
-        : `${commitsInWindow} commits in window (${level.toUpperCase()} threshold per code-maat / Gall 2003 / CodeScene).`,
+        ? `${commitsInWindow} commits in window — need ≥ ${CONFIDENCE.coupling.weak} (matches code-maat's --min-revs default).`
+        : `${commitsInWindow} commits in window (${level.toUpperCase()} sample size).`,
   );
 }
 

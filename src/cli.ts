@@ -76,7 +76,7 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   corpus:
     "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
   confidence:
-    "Epistemic stamp on each ranking — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to cited sample-size floors per dimension (Page 1963, Cohen 1988, code-maat, Gall 2003, Hassan 2009, Bird et al. 2011, Mockus & Herbsleb 2002, Campbell 2018). ACCEPTABLE is the ceiling — the tool never claims certainty about code quality, only that the sample supports the ranking. INCONCLUSIVE rankings are surfaced under skipped rather than ranked.",
+    "Epistemic stamp on each ranking — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. These are engineering-judgment sample-size tiers, with the weak floor for defects matching code-maat's --min-revs default of 5. ACCEPTABLE is the ceiling — the tool never claims certainty about code quality, only that the sample supports the ranking. INCONCLUSIVE rankings are surfaced under skipped rather than ranked.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -92,7 +92,7 @@ const COUPLING_GUIDE: Record<string, string> = {
   lockstep:
     "Set when shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (README ↔ src/README, *.pb.go ↔ *.proto). The coupling signal is real but uninformative; treat the pair as a single unit from git's perspective.",
   confidence:
-    "Epistemic stamp on the coupling table — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to the number of commits in the analysis window. Sources: code-maat --min-revs 5, Gall (IWPSE 2003) support floor of 5, CodeScene recommends ≥ 100 commits before drawing coupling conclusions. ACCEPTABLE means the sample supports the ranking; it never asserts the couplings themselves are bad.",
+    "Epistemic stamp on the coupling table — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to the number of commits in the analysis window. The weak floor of 5 matches code-maat's --min-revs default (Adam Tornhill); higher tiers are engineering judgment. ACCEPTABLE means the sample supports the ranking; it never asserts the couplings themselves are bad.",
 };
 
 function addSharedOptions(cmd: Command): Command {

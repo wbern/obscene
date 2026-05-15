@@ -208,34 +208,36 @@ Each ranking and the coupling table carry an epistemic confidence stamp so the t
 
 | Level | Meaning |
 |-------|---------|
-| `INCONCLUSIVE` | Sample is below the literature-cited floor — the ranking is suppressed (routed to `skipped` in JSON). |
-| `WEAK` | Above the support floor but too few samples for stable rank ordering. Treat as suggestive, not actionable. |
+| `INCONCLUSIVE` | Sample is below the weak floor — the ranking is suppressed (routed to `skipped` in JSON). |
+| `WEAK` | Above the floor but too few samples for stable rank ordering. Treat as suggestive, not actionable. |
 | `PLAUSIBLE` | Sample supports the ranking. Findings are worth reviewing. |
 | `ACCEPTABLE` | Ceiling. Sample is large enough that the ranking is stable. **Never** asserts the code itself is good or bad. |
 
-Thresholds are tied to published prior art per dimension, not picked freely:
+The thresholds are engineering judgment, not paper-prescribed. The defect/coupling floor of 5 commits matches code-maat's `--min-revs` default ([Adam Tornhill](https://github.com/adamtornhill/code-maat)); CodeScene's documented temporal-coupling default filters files with fewer than 10 commits. Upper tiers (plausible, acceptable) are scaled from there.
 
-| Dimension | Sample metric | Sources |
-|-----------|---------------|---------|
-| Complexity | files with measurable complexity | Page (1963), Cohen (1988) — rank stability at n ≥ 30 |
-| Nesting | files with depth ≥ 3 | Campbell (SonarSource 2018), Page (1963) |
-| Defects | `fix:` commits in window | code-maat `--min-revs 5`, Gall et al. (IWPSE 2003), Hassan (ICSE 2009) |
-| Authors | distinct authors on the most-touched file | Bird et al. (FSE 2011), Mockus & Herbsleb (ICSE 2002) |
-| Coupling | commits in window | code-maat, Gall (IWPSE 2003), CodeScene (≥ 100 commits) |
-| Composite (RRF) | number of input rankings | Cormack et al. (SIGIR 2009), Fagin et al. (PODS 2003) — min-of-inputs aggregation |
+| Dimension | Sample metric | Weak / Plausible / Acceptable | Note |
+|-----------|---------------|-------------------------------|------|
+| Complexity | files with measurable complexity | 3 / 10 / 30 | Any rank ordering needs ≥ 3 items to be meaningful |
+| Nesting | files with depth ≥ 3 | 3 / 10 / 30 | Depth-3 cut matches Campbell's compounding-nesting-penalty intuition (SonarSource 2018) |
+| Defects | total `fix:` commits in window | 5 / 15 / 50 | Floor matches code-maat `--min-revs 5` |
+| Authors | distinct authors on the most-touched file | 2 / 4 / 8 | Bird et al. (FSE 2011) shows minor contributors correlate with defects, but the floor is engineering judgment |
+| Coupling | commits in window | 5 / 30 / 100 | Floor matches code-maat `--min-revs 5` |
+| Composite (RRF) | number of input rankings | min-of-inputs over per-dimension confidences | Reciprocal Rank Fusion (Cormack et al., SIGIR 2009); `min` as canonical strict-monotone aggregator (Fagin et al., PODS 2003) |
+
+I want to be transparent: an earlier release of this section over-attributed thresholds to specific papers. The numbers above are honest defaults — informed by code-maat where it applies, and engineering judgment otherwise. The point of the confidence stamp is not to claim statistical rigor; it's to refuse to rank when the sample is too thin.
 
 Every confidence stamp in JSON exposes its inputs so the rating is auditable:
 
 ```json
 "confidence": {
   "level": "plausible",
-  "reason": "42 fix: commits across 12 files (PLAUSIBLE threshold per code-maat / Gall 2003 / Hassan 2009).",
+  "reason": "42 fix: commits across 12 files (PLAUSIBLE sample size).",
   "inputs": {
     "metric": "fixCommits",
     "value": 42,
     "thresholds": { "weak": 5, "plausible": 15, "acceptable": 50 }
   },
-  "source": "code-maat --min-revs 5; Gall et al. (IWPSE 2003) support floor of 5; Hassan (ICSE 2009) entropy stable at n ≥ 100."
+  "source": "code-maat's --min-revs default of 5 (Adam Tornhill); higher tiers are engineering judgment. Gall et al. (IWPSE 2003) and Hassan (ICSE 2009) study co-change and change-entropy but do not prescribe a specific commit-count floor."
 }
 ```
 
