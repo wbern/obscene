@@ -120,7 +120,7 @@ const CONFIDENCE_SOURCES = {
   coupling:
     "code-maat defaults (--min-revs 5, --max-changeset-size 30, Adam Tornhill). CodeScene's documented temporal-coupling default filters files with fewer than 10 commits. The 30/100 upper tiers are engineering judgment.",
   composite:
-    "Reciprocal Rank Fusion (Cormack et al., SIGIR 2009) fuses multiple independent rankings; min-of-inputs is a strict monotone aggregator (Fagin et al., PODS 2003 treat min as the canonical example).",
+    "Reciprocal Rank Fusion (Cormack et al., SIGIR 2009) fuses multiple independent rankings; min-of-inputs is a strict monotone aggregator — when every input ranking is at confidence level L, the composite cannot exceed L.",
 } as const;
 
 function classifyConfidence(

@@ -222,7 +222,7 @@ The thresholds are engineering judgment, not paper-prescribed. The defect/coupli
 | Defects | total `fix:` commits in window | 5 / 15 / 50 | Floor matches code-maat `--min-revs 5` |
 | Authors | distinct authors on the most-touched file | 2 / 4 / 8 | Bird et al. (FSE 2011) shows minor contributors correlate with defects, but the floor is engineering judgment |
 | Coupling | commits in window | 5 / 30 / 100 | Floor matches code-maat `--min-revs 5` |
-| Composite (RRF) | number of input rankings | min-of-inputs over per-dimension confidences | Reciprocal Rank Fusion (Cormack et al., SIGIR 2009); `min` as canonical strict-monotone aggregator (Fagin et al., PODS 2003) |
+| Composite (RRF) | number of input rankings | min-of-inputs over per-dimension confidences | Reciprocal Rank Fusion (Cormack et al., SIGIR 2009); `min` ensures the composite can never claim more confidence than its weakest input |
 
 I want to be transparent: an earlier release of this section over-attributed thresholds to specific papers. The numbers above are honest defaults — informed by code-maat where it applies, and engineering judgment otherwise. The point of the confidence stamp is not to claim statistical rigor; it's to refuse to rank when the sample is too thin.
 
