@@ -63,9 +63,15 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("init");
   });
 
-  // Tarball packing runs lifecycle scripts (build, prepare) which is too slow
-  // on Windows CI. The tarball content is platform-independent so Linux-only is fine.
-  it.skipIf(process.platform === "win32")(
+  // Packs the tarball and runs a full `pnpm install` in a temp dir to verify
+  // the published artifact resolves end-to-end. The install dominates the
+  // runtime (~90-120s), which exceeds vitest's internal worker RPC heartbeat,
+  // so this test is gated to CI (where the budget is fine and the signal
+  // is most valuable: catching tarball regressions before release). Skipped
+  // locally to keep pre-commit fast; pre-commit still verifies tarball size
+  // and build output via the other tests in this file. Also skipped on
+  // Windows CI because lifecycle scripts (build, prepare) are too slow there.
+  it.skipIf(!process.env.CI || process.platform === "win32")(
     "should run CLI from packed tarball without crashing",
     {
       timeout: 120000,
