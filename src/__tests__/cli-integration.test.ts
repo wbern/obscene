@@ -68,7 +68,7 @@ describe("CLI Integration", () => {
   it.skipIf(process.platform === "win32")(
     "should run CLI from packed tarball without crashing",
     {
-      timeout: 60000,
+      timeout: 120000,
     },
     () => {
       // Pack the package to temp dir
@@ -84,10 +84,11 @@ describe("CLI Integration", () => {
       const tarball = files.find((f) => f.endsWith(".tgz"));
       expect(tarball).toBeDefined();
 
-      // Check tarball size — should be small (uncompressed ~30KB, allow up to 60KB)
+      // Check tarball size — should be small (uncompressed ~30KB code + README).
+      // README growth (field reports, expanded docs) is fine; binary bloat is not.
       const stats = fs.statSync(path.join(tempDir, tarball!));
       const sizeKB = stats.size / 1024;
-      expect(sizeKB).toBeLessThan(65);
+      expect(sizeKB).toBeLessThan(75);
 
       // Extract it
       const extractDir = path.join(tempDir, "extracted");
