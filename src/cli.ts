@@ -64,7 +64,7 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   nesting:
     "maxNesting × churn. Deeply nested code that changes often is harder to reason about.\nSource: cognitive complexity research (SonarSource, G. Ann Campbell 2018) · Strength: catches hard-to-follow control flow · Limit: some patterns (error chains, config) legitimately nest deep",
   defects:
-    "defects × churn. Files with fix: commits that also churn heavily may harbor latent bugs.\nSource: defect prediction via conventional commits (fix: prefix) · Strength: direct bug-history signal · Limit: requires consistent fix: convention to be accurate",
+    "fixes × churn. Count of fix: commits touching the file × churn. High values can mean latent fragility, but they also flag features that got debugged thoroughly — read the fix-commit history before concluding which.\nSource: change-history metrics (Moser, Pedrycz & Succi 2008) via conventional commits (fix: prefix) · Strength: direct fix-history signal · Limit: counts fix activity, not defects per se; requires consistent fix: convention",
   authors:
     "authors × churn. Files touched by many authors and changing often may lack clear ownership.\nSource: code ownership research (Bird et al. 2011, Microsoft) · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
   composite:

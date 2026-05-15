@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { RANKING_DEFS } from "./analyze.js";
 import {
   colorRow,
   padLeft,
@@ -14,6 +15,10 @@ import type {
   RankingOutput,
   ReportOutput,
 } from "./types.js";
+
+const RANKING_LABELS_BY_KEY: Record<string, string> = Object.fromEntries(
+  RANKING_DEFS.map((d) => [d.key, d.label]),
+);
 
 export function formatReportTable(output: ReportOutput): string {
   const lines: string[] = [];
@@ -122,13 +127,13 @@ function getRankingColumns(key: string): RankingColumnDef[] {
     ],
     defects: [
       {
-        header: "Dfcts",
+        header: "Fixes",
         width: 6,
         align: "right",
         value: (e) => String(e.metricValue),
       },
       {
-        header: "DfDns",
+        header: "FxDns",
         width: 7,
         align: "right",
         value: (e) => (e.metricDensity ?? 0).toFixed(4),
@@ -157,7 +162,7 @@ function getRankingColumns(key: string): RankingColumnDef[] {
 const METRIC_EMOJI: Record<string, string> = {
   complexity: "🧬",
   nesting: "📏",
-  defects: "🐛",
+  defects: "🔧",
   authors: "👥",
 };
 
@@ -233,8 +238,10 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   if (output.skipped) {
     for (const [key, info] of Object.entries(output.skipped)) {
       lines.push("");
-      const label = key.charAt(0).toUpperCase() + key.slice(1);
-      lines.push(`${label} \u00D7 Churn \u2014 skipped (${info.reason})`);
+      const label =
+        RANKING_LABELS_BY_KEY[key] ??
+        `${key.charAt(0).toUpperCase() + key.slice(1)} \u00D7 Churn`;
+      lines.push(`${label} \u2014 skipped (${info.reason})`);
       if (info.suggestion) {
         lines.push(`  ${info.suggestion}`);
       }

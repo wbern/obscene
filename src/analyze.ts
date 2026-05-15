@@ -336,7 +336,7 @@ interface RankingDef {
   scoreFormula: string;
 }
 
-const RANKING_DEFS: RankingDef[] = [
+export const RANKING_DEFS: RankingDef[] = [
   {
     key: "complexity",
     label: "Complexity \u00D7 Churn",
@@ -349,8 +349,8 @@ const RANKING_DEFS: RankingDef[] = [
   },
   {
     key: "defects",
-    label: "Defects \u00D7 Churn",
-    scoreFormula: "defects \u00D7 churn",
+    label: "Fix Activity \u00D7 Churn",
+    scoreFormula: "fixes \u00D7 churn",
   },
   {
     key: "authors",
@@ -541,7 +541,11 @@ export function computeCoupling(
 
 /**
  * Measure deepest indentation level per file.
- * Language-agnostic: detects indent unit from smallest non-zero leading space count.
+ * Language-agnostic: detects indent unit from the most common positive delta
+ * between consecutive non-blank line indent widths. Using the mode rather than
+ * the minimum avoids single-space outlier lines (continuation alignment,
+ * multiline strings, embedded SQL/JSON) inflating depths by an order of
+ * magnitude.
  */
 export function getNestingDepths(filePaths: string[]): Map<string, number> {
   const depths = new Map<string, number>();
@@ -555,21 +559,38 @@ export function getNestingDepths(filePaths: string[]): Map<string, number> {
       continue;
     }
 
-    let minSpaces = Number.POSITIVE_INFINITY;
     const leadings: string[] = [];
+    const deltaCounts = new Map<number, number>();
+    let prevSpaceWidth = 0;
     for (const line of content.split("\n")) {
       if (!line.trim()) continue;
       const match = line.match(/^(\s+)/);
-      if (!match) continue;
+      if (!match) {
+        prevSpaceWidth = 0;
+        continue;
+      }
       const leading = match[1];
       leadings.push(leading);
-      const spaceCount = (leading.match(/ /g) ?? []).length;
-      if (spaceCount > 0 && !leading.includes("\t") && spaceCount < minSpaces) {
-        minSpaces = spaceCount;
+      if (leading.includes("\t")) {
+        continue;
+      }
+      const width = leading.length;
+      const delta = width - prevSpaceWidth;
+      if (delta > 0) {
+        deltaCounts.set(delta, (deltaCounts.get(delta) ?? 0) + 1);
+      }
+      prevSpaceWidth = width;
+    }
+
+    let indentUnit = 4;
+    let bestCount = 0;
+    for (const [delta, count] of deltaCounts) {
+      if (count > bestCount || (count === bestCount && delta < indentUnit)) {
+        bestCount = count;
+        indentUnit = delta;
       }
     }
 
-    const indentUnit = minSpaces === Number.POSITIVE_INFINITY ? 4 : minSpaces;
     let maxDepth = 0;
     for (const leading of leadings) {
       let depth = 0;

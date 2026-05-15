@@ -677,6 +677,42 @@ describe("getNestingDepths", () => {
 
     expect(result.get("src/blanks.ts")).toBe(1);
   });
+
+  it("breaks ties between equally-frequent indent deltas by picking the smaller", () => {
+    // Designed so deltaCounts == {4: 2, 2: 2} with the larger key inserted
+    // first — exercises the tiebreaker (count == bestCount && delta < indentUnit).
+    // Result: indent unit resolves to 2.
+    const content = ["x", "    a", "        b", "c", "  d", "    e"].join("\n");
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/tie.ts"]);
+
+    // Max leading is 8 spaces; with unit=2 that's depth 4.
+    expect(result.get("src/tie.ts")).toBe(4);
+  });
+
+  it("ignores outlier single-space-leading lines from multiline strings", () => {
+    // A Python file with normal 4-space indented control flow (max depth 3)
+    // plus a multiline string whose continuation lines have a single leading
+    // space. Pre-fix, the min-width detector picked unit=1 and inflated depth
+    // to 12+. Post-fix, the most-common positive delta is 4 → unit=4 → depth=3.
+    const content = [
+      "def handler():",
+      "    if a:",
+      "        if b:",
+      '            return "ok"',
+      "",
+      '"""',
+      " continuation line one",
+      " continuation line two",
+      '"""',
+    ].join("\n");
+    mockReadFileSync.mockReturnValue(content);
+
+    const result = getNestingDepths(["src/handler.py"]);
+
+    expect(result.get("src/handler.py")).toBe(3);
+  });
 });
 
 describe("assignTiers", () => {

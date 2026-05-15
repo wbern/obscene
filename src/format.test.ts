@@ -314,15 +314,15 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("…");
   });
 
-  it("renders defects table with DfDns column", () => {
+  it("renders defects table with FxDns column", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
       rankings: {
         defects: {
-          label: "Defects \u00D7 Churn",
-          scoreFormula: "defects \u00D7 churn",
+          label: "Fix Activity \u00D7 Churn",
+          scoreFormula: "fixes \u00D7 churn",
           totalScore: 30,
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
@@ -344,8 +344,8 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("Dfcts");
-    expect(result).toContain("DfDns");
+    expect(result).toContain("Fixes");
+    expect(result).toContain("FxDns");
     expect(result).toContain("0.0300");
   });
 
@@ -421,8 +421,8 @@ describe("formatHotspotsTable", () => {
       churnWindow: "3 months",
       rankings: {
         defects: {
-          label: "Defects \u00D7 Churn",
-          scoreFormula: "defects \u00D7 churn",
+          label: "Fix Activity \u00D7 Churn",
+          scoreFormula: "fixes \u00D7 churn",
           totalScore: 10,
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
@@ -444,6 +444,24 @@ describe("formatHotspotsTable", () => {
     const result = formatHotspotsTable(output);
 
     expect(result).toContain("0.0000");
+  });
+
+  it("synthesizes a skip label for unknown ranking keys", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+      skipped: {
+        someOther: {
+          reason: "insufficient data",
+        },
+      },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("SomeOther × Churn — skipped");
   });
 
   it("renders unknown ranking key with base columns only", () => {
@@ -521,7 +539,7 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("Defects");
+    expect(result).toContain("Fix Activity");
     expect(result).toContain("skipped");
     expect(result).toContain("fix:");
     expect(result).toContain("conventionalcommits.org");

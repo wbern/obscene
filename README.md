@@ -73,7 +73,7 @@ Produces **four independent ranking tables**, each scoring files by a different 
 |---------|---------------|----------------|
 | Complexity × Churn | `complexity × churn` | Cmplx, Dens |
 | Nesting × Churn | `maxNesting × churn` | Nest |
-| Defects × Churn | `defects × churn` | Dfcts, DfDns |
+| Fix Activity × Churn | `fixes × churn` | Fixes, FxDns |
 | Authors × Churn | `authors × churn` | Auth |
 
 Plus a **Combined** ranking using [Reciprocal Rank Fusion](https://doi.org/10.1145/1571941.1572114) (RRF) across all dimensions — files appearing near the top of multiple rankings score highest.
@@ -136,17 +136,17 @@ Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc).
 
 `complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). Based on Harrison & Magel (1981), who found that complexity relative to code size is a stronger fault predictor than raw complexity alone.
 
-#### Defects (`Dfcts`)
+#### Fixes (`Fixes`)
 
-Count of `fix:` conventional commits touching the file within the churn window. A proxy for historical defect rate — files that attract repeated fixes are more likely to contain latent bugs. Inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction.
+Count of `fix:` conventional commits touching the file within the churn window. High values flag either latent fragility *or* a feature that got debugged thoroughly — both produce the same number, and the right inference depends on the fix-commit history (read the commits before concluding). The metric is inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction; obscene reports the raw fix-activity signal and leaves the interpretation to you.
 
-#### Defect density (`DfDns`)
+#### Fix density (`FxDns`)
 
-`defects / lines of code`. Shown in the Defects × Churn table. Normalizes defect count by file size.
+`fixes / lines of code`. Shown in the Fix Activity × Churn table. Normalizes fix-commit count by file size so a 50-line file with 5 fixes (density 0.10) stands out against a 500-line file with 5 fixes (density 0.01).
 
 #### Nesting depth (`Nest`)
 
-Maximum indentation level (tab stops) in the file. Deep nesting correlates with high cognitive load and defect likelihood. Harrison & Magel (1981) identified nesting depth as a significant complexity contributor.
+Maximum indentation level (tab stops) in the file. Deep nesting correlates with high cognitive load and defect likelihood. Harrison & Magel (1981) identified nesting depth as a significant complexity contributor. The indent unit is detected from the most common positive delta between consecutive non-blank line indents, which keeps single-space outlier lines (multiline strings, continuation alignment) from inflating the score. The metric measures whitespace depth, not AST control-flow depth — they usually agree, but a file with deep alignment and shallow logic can read higher than its true nesting.
 
 #### Unique authors (`Auth`)
 
