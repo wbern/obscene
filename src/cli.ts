@@ -71,6 +71,8 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   composite:
     "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nSource: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
+  corpus:
+    "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -81,6 +83,10 @@ const COUPLING_GUIDE: Record<string, string> = {
   totalComplexity:
     "Sum of both files' cyclomatic complexity. Highlights coupled pairs where the involved code is also complex — hidden dependency + high complexity compounds maintenance risk.",
   tier: "Relative ranking within THIS codebase's coupling pairs (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade. 'hot' means this pair co-changes more than most — it may be intentional and fine.",
+  deleted:
+    "file1Deleted / file2Deleted are set when the file is no longer present at HEAD (deleted or renamed away). The coupling signal is historical — the pair is not actionable in the current tree.",
+  lockstep:
+    "Set when both files' total churn equals their co-change count over the window — i.e. they only ever changed together. The 100% degree is real but uninformative; treat the pair as a single unit from git's perspective.",
 };
 
 function addSharedOptions(cmd: Command): Command {

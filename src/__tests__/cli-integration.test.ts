@@ -146,6 +146,7 @@ describe("CLI Integration", () => {
       "authors",
       "complexity",
       "composite",
+      "corpus",
       "defects",
       "nesting",
       "rankings",
@@ -220,6 +221,8 @@ describe("CLI Integration", () => {
     expect(Object.keys(parsed.guide).sort()).toEqual([
       "cochanges",
       "degree",
+      "deleted",
+      "lockstep",
       "tier",
       "totalComplexity",
     ]);

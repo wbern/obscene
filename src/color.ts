@@ -55,8 +55,9 @@ export function padLeft(s: string, n: number): string {
 }
 
 export function truncate(s: string, max: number): string {
+  if (max <= 0) return "";
   if (s.length <= max) return s;
-  if (max <= 1) return "…";
+  if (max === 1) return "…";
   // Middle-truncate so both the leading prefix and the trailing basename remain
   // visible. Without this, paths sharing a common suffix (e.g. siblings under
   // .claude/commands/ and .opencode/commands/) collapse to indistinguishable

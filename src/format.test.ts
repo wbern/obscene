@@ -639,6 +639,19 @@ describe("formatHotspotsTable", () => {
 
     expect(result).not.toContain("no measurable code complexity");
   });
+
+  it("omits the soft-framing banner when corpus is absent", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).not.toContain("no measurable code complexity");
+  });
 });
 
 describe("formatCouplingTable", () => {

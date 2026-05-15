@@ -221,7 +221,7 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   const { churnWindow, rankings, corpus } = output;
 
   lines.push(`Hotspots — ${churnWindow} churn window`);
-  if (corpus.fileCount > 0 && corpus.totalComplexity === 0) {
+  if (corpus && corpus.fileCount > 0 && corpus.totalComplexity === 0) {
     lines.push("");
     lines.push(
       pc.yellow(

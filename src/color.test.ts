@@ -136,6 +136,11 @@ describe("truncate", () => {
     expect(truncate("hello", 1)).toBe("…");
   });
 
+  it("returns empty string when max is 0 or negative", () => {
+    expect(truncate("hello", 0)).toBe("");
+    expect(truncate("hello", -1)).toBe("");
+  });
+
   it("preserves distinguishing prefix for sibling paths", () => {
     // Paths sharing a common trailing basename must not collide.
     const a = truncate(".claude/commands/commitlint-checklist-nodejs.md", 33);

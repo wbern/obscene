@@ -178,6 +178,30 @@ Cumulative score distribution bucket:
 | ☀️ **warm** | next 30% (50–80%) | Moderate coupling |
 | 🧊 **cool** | bottom 20% | Low coupling |
 
+#### Pair markers
+
+The coupling table annotates entries that need framing:
+
+| Marker | JSON field | Meaning |
+|--------|------------|---------|
+| `†` next to a path | `file1Deleted` / `file2Deleted` | File is no longer present at HEAD (deleted or renamed away). The coupling signal is historical; the pair is not actionable in the current tree. |
+| `⇄` next to the Degree value | `lockstep` | Both files' total churn equals their co-change count over the window — they only ever changed together. The 100% degree is real but uninformative; treat the pair as a single unit from git's perspective. |
+
+### Corpus framing
+
+When the analyzed file set has no measurable cyclomatic complexity (every scanned file is non-code or trivial), the `hotspots` table prepends a banner noting that rankings reflect size and churn only. The `corpus` field in JSON output exposes the same signal:
+
+```json
+{
+  "corpus": {
+    "fileCount": 42,
+    "totalComplexity": 0
+  }
+}
+```
+
+`fileCount` counts files *after* exclusion (`.obsignore` and `--exclude` patterns are already applied). Treat HOT/WARM/COOL as relative groupings rather than risk labels when `totalComplexity` is 0.
+
 ## Example output
 
 ```
@@ -264,7 +288,7 @@ obscene init
 
 This creates a `.obsignore` containing:
 - **Universal exclusions** — test files (`*.test.*`, `*.spec.*`, `__tests__/`, etc.), lock files (`package-lock.json`, `pnpm-lock.yaml`, etc.), and package manifests (`package.json`)
-- **Detected project patterns** — CI directories (`.github/`), config files (`*.config.*`), vendored code, etc., based on your project structure
+- **Detected project patterns** — CI directories (`.github/`), config files (`*.config.*`), vendored code, generated agent-command directories (`.claude/commands/**`, `.opencode/commands/**`, `.cursor/rules/**`), etc., based on your project structure
 
 If no `.obsignore` or `.obsceneignore` exists, obscene prints a hint to stderr:
 

@@ -1489,6 +1489,18 @@ describe("computeCoupling", () => {
 
     expect(result[0].lockstep).toBeUndefined();
   });
+
+  it("does not flag lockstep when the other side changed outside the pair", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 4]]);
+    const churn = new Map([
+      ["a.ts", 6],
+      ["lib/b.ts", 4],
+    ]);
+
+    const result = computeCoupling(cochanges, churn, new Map(), 1);
+
+    expect(result[0].lockstep).toBeUndefined();
+  });
 });
 
 describe("computeComposite", () => {
