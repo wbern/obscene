@@ -130,13 +130,13 @@ Number of commits touching the file within the configured time window (default: 
 
 #### Cyclomatic complexity (`Cmplx`)
 
-Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide. The measure was introduced by McCabe (1976) and has been the standard structural-complexity metric since. — [IEEE TSE](https://doi.org/10.1109/TSE.1976.233837)
+Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide. The measure was introduced by McCabe (1976) in *A Complexity Measure* and has been the standard structural-complexity metric since. — [IEEE TSE](https://doi.org/10.1109/TSE.1976.233837)
 
 #### Complexity density (`Dens`)
 
 `complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). Based on Harrison & Magel (1981), who found that complexity relative to code size is a stronger fault predictor than raw complexity alone.
 
-#### Fixes (`Fixes`)
+#### Fix activity (`Fixes`)
 
 Count of `fix:` conventional commits touching the file within the churn window. High values flag either latent fragility *or* a feature that got debugged thoroughly — both produce the same number, and the right inference depends on the fix-commit history (read the commits before concluding). The metric is inspired by Moser, Pedrycz & Succi (2008), who showed that change-history metrics outperform static code metrics for defect prediction.
 
@@ -349,15 +349,19 @@ Reviews from agents that ran obscene against real codebases.
 > - The headline finding: the top co-change pair (~21 shared commits, ~70% degree) was a service module and its corresponding configuration-management playbook. The repo's own developer docs spent ~200 words explicitly warning that those two paths *must* produce identical state because they had already drifted twice in the project's history. The tool independently surfaced exactly the pair the human author had to document by hand as the #1 operational hazard. Temporal coupling (co-change history, not structural / type-level coupling) catches a class of risk — "two paths must move in lockstep" — that complexity and churn cannot, by construction.
 > - Second-tier signal: cross-stack pairs (frontend SPA + backend API, ~8 co-changes) flagged which abstraction boundaries actually leak in practice. Useful prompt for "if I touch endpoint X, what else am I likely to need to touch?"
 >
-> Worth setting expectations on:
+> Worth setting expectations on the hotspots view:
 >
 > - It's a churn × complexity instrument, so it *temporarily penalizes* refactoring — moving code out of a hot file shows up as more commits on that file, inflating the score before the new structure pays off in stability.
 > - McCabe complexity doesn't distinguish "one giant function" from "many small ones in the same file." A score tells you the size of the badness, not the shape.
 > - HOT/WARM/COOL tiers are relative to the repo, so *something* will always be HOT. Useful for "what's worst here," not a portable quality grade.
-> - Documentation files (CLAUDE.md, READMEs) co-changing with code shows up high in coupling but reads as hygiene — docs co-evolving with the surface they describe, not a coupling smell.
+> - Failure modes that aren't visible to git or scc — type confusion, missing tests, brittle integration seams, hidden globals — won't appear in the rankings at all. The tool can't tell you about risks it has no signal for.
+>
+> And on the coupling view:
+>
+> - Documentation files (CLAUDE.md, READMEs) co-changing with code shows up high but reads as hygiene — docs co-evolving with the surface they describe, not a coupling smell.
 > - `Degree` is asymmetric (`shared / min(churn)`, so it measures how entangled the *less-churned* file is with the other), but the file-pair display is symmetric. No visible indicator of which file is the "captured" one without cross-referencing per-file churn.
 > - Small-absolute / high-degree pairs (e.g. 5 co-changes at 83%) appear near the top at defaults. `--min-cochanges 5` filters these out cleanly.
-> - Tier inflation in coupling: a sizable fraction of pairs end up HOT at defaults. Same critique as the hotspot tiers — when ~30% of a population is HOT, the tier stops being signal.
+> - Tier inflation: a sizable fraction of pairs end up HOT at defaults. Same critique as the hotspot tiers — when ~30% of a population is HOT, the tier stops being signal.
 >
 > Verdict: hotspots and coupling are complementary, not redundant. Hotspots ask "what file is the worst?"; coupling asks "what files must I keep in sync?" — distinct questions, and a repo whose dominant bug class is the second will get more out of coupling than out of complexity-based rankings. A 60-second sanity check that mostly ranks what reading the codebase already tells you, plus one or two findings you'd otherwise miss. Treat Fix Activity as a prompt to investigate (not a verdict), run it quarterly, and don't optimize against the leaderboard — it's a magnifying glass, not a scoreboard.
 >
