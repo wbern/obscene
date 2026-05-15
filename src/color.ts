@@ -55,7 +55,17 @@ export function padLeft(s: string, n: number): string {
 }
 
 export function truncate(s: string, max: number): string {
-  return s.length <= max ? s : `…${s.slice(s.length - max + 1)}`;
+  if (s.length <= max) return s;
+  if (max <= 1) return "…";
+  // Middle-truncate so both the leading prefix and the trailing basename remain
+  // visible. Without this, paths sharing a common suffix (e.g. siblings under
+  // .claude/commands/ and .opencode/commands/) collapse to indistinguishable
+  // tails. Bias toward the tail (~60%) so the basename — the more identifying
+  // segment — stays intact for typical path widths.
+  const remaining = max - 1;
+  const tail = Math.ceil(remaining * 0.6);
+  const head = remaining - tail;
+  return `${s.slice(0, head)}…${s.slice(s.length - tail)}`;
 }
 
 export function tierLabel(tier: Tier): string {

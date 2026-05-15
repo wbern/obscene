@@ -121,14 +121,33 @@ describe("truncate", () => {
     expect(truncate("hi", 10)).toBe("hi");
   });
 
-  it("truncates long strings with ellipsis prefix", () => {
+  it("middle-truncates long strings preserving head and tail", () => {
+    // max=5 → remaining=4, tail=ceil(4*0.6)=3, head=1
     const result = truncate("abcdefghij", 5);
-    expect(result).toBe("…ghij");
+    expect(result).toBe("a…hij");
     expect(result.length).toBe(5);
   });
 
   it("returns string unchanged at exact max length", () => {
     expect(truncate("hello", 5)).toBe("hello");
+  });
+
+  it("returns just the ellipsis when max is 1", () => {
+    expect(truncate("hello", 1)).toBe("…");
+  });
+
+  it("preserves distinguishing prefix for sibling paths", () => {
+    // Paths sharing a common trailing basename must not collide.
+    const a = truncate(".claude/commands/commitlint-checklist-nodejs.md", 33);
+    const b = truncate(".opencode/commands/commitlint-checklist-nodejs.md", 33);
+    const c = truncate("src/sources/commitlint-checklist-nodejs.md", 33);
+    expect(a).not.toBe(b);
+    expect(a).not.toBe(c);
+    expect(b).not.toBe(c);
+    // Head segment stays visible so the parent dir is recognizable.
+    expect(a.startsWith(".claude")).toBe(true);
+    expect(b.startsWith(".opencode")).toBe(true);
+    expect(c.startsWith("src/sources")).toBe(true);
   });
 });
 
