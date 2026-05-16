@@ -92,6 +92,9 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     expect(result.status).not.toBe(0);
   });
 
+  // Generous timeout: pwsh cold-start in a cwd with spaces is highly variable
+  // on macOS (observed 5–26s) — unrelated to obscene itself, but this test
+  // smoke-checks that the binary's argv quoting survives a spaced cwd.
   it("should handle paths with spaces via pwsh", { timeout: 90000 }, () => {
     const dirWithSpaces = path.join(tempDir, "path with spaces");
     fs.mkdirSync(dirWithSpaces);

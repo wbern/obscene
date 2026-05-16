@@ -40,6 +40,11 @@ if [[ ${#SECTIONS[@]} -eq 0 ]]; then
 fi
 
 if [[ ! -f "$REPO_ROOT/dist/cli.js" ]]; then
+    if ! command -v pnpm >/dev/null 2>&1; then
+        echo "error: dist/cli.js missing and pnpm not installed." >&2
+        echo "       Build first: pnpm install && pnpm build" >&2
+        exit 1
+    fi
     echo "==> dist/cli.js missing; running pnpm build"
     (cd "$REPO_ROOT" && pnpm build)
 fi
@@ -144,7 +149,9 @@ record_one() {
             if [[ -f "$REPO_ROOT/.obsignore" ]]; then
                 cp "$REPO_ROOT/.obsignore" "$proj/.obsignore"
             else
-                (cd "$proj" && PATH="$TMP_BIN:$PATH" obscene init >/dev/null 2>&1) || true
+                if ! (cd "$proj" && PATH="$TMP_BIN:$PATH" obscene init >/dev/null 2>&1); then
+                    echo "    warning: obscene init failed; recording may show no-.obsignore hint" >&2
+                fi
             fi
             ;;
         init)
@@ -163,6 +170,9 @@ record_one() {
     # (2) running scenario.sh as the *direct* child of asciinema lets
     # it run under asciinema's PTY, which is line-buffered.
     local launcher="$TMP_BIN/launch-$section.sh"
+    # Heredoc terminator is intentionally unquoted: we want $proj, $TMP_BIN,
+    # $TYPE_SPEED, $BEAT, $SCENARIO, $section expanded NOW (when the launcher
+    # is written), not later when it runs. Do not change to <<'EOF'.
     cat > "$launcher" <<EOF
 #!/usr/bin/env bash
 cd "$proj"

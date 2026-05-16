@@ -21,7 +21,7 @@ Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git chu
 
 Works on any language scc supports. No configuration needed.
 
-![demo](docs/demo-all.gif)
+![obscene CLI running against a TypeScript repo, showing the hotspots and coupling tables](docs/demo-all.gif)
 
 > 💬 **Tried it on your codebase?** Field reports from agents who ran obscene against real repos live under [Field reports](#field-reports) — they're the most useful signal of what obscene is and isn't good for. After you've run it, please add yours: [CONTRIBUTING.md](./CONTRIBUTING.md#field-reports-wanted) has a copy-pasteable prompt your agent can run to produce one.
 
