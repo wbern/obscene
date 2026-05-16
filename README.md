@@ -145,7 +145,7 @@ The literature in [Why churn × complexity?](#why-churn-x-complexity) talks abou
 
 #### Nesting depth (`Nest`)
 
-Maximum indentation level (tab stops) in the file. Deep nesting correlates with high cognitive load and defect likelihood. Harrison & Magel (1981) identified nesting depth as a significant complexity contributor. The indent unit is detected from the most common positive delta between consecutive non-blank line indents, which keeps single-space outlier lines (multiline strings, continuation alignment) from inflating the score. The metric measures whitespace depth, not AST control-flow depth — they usually agree, but a file with deep alignment and shallow logic can read higher than its true nesting.
+Maximum indentation level (tab stops) in the file. Deep nesting correlates with high cognitive load and defect likelihood. Harrison & Magel (1981) identified nesting depth as a significant complexity contributor. The indent unit is detected from the most common positive delta between consecutive non-blank line indents, which keeps single-space outlier lines (multiline strings, continuation alignment) from inflating the score. The metric measures whitespace depth, not AST control-flow depth — they usually agree, but a file with deep alignment and shallow logic can read higher than its true nesting. Files where scc reports zero cyclomatic complexity are excluded from the Nesting × Churn ranking: their indentation is structural (YAML, JSON, templates) rather than control flow, so a deep `Nest` reading isn't evidence of branching difficulty.
 
 #### Unique authors (`Auth`)
 

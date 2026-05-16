@@ -855,6 +855,59 @@ describe("computeAllRankings", () => {
     expect(result.rankings.nesting.entries[0].metricValue).toBe(5);
   });
 
+  it("excludes zero-complexity files from the nesting ranking", () => {
+    // YAML/structural files have deep indentation but scc reports complexity
+    // 0 — they shouldn't score on Nesting × Churn alongside real code files.
+    const mixedFiles: FileMetrics[] = [
+      {
+        file: "playbook.yml",
+        code: 200,
+        lines: 220,
+        complexity: 0,
+        comments: 5,
+        complexityDensity: 0,
+      },
+      {
+        file: "deploy.yml",
+        code: 150,
+        lines: 170,
+        complexity: 0,
+        comments: 2,
+        complexityDensity: 0,
+      },
+      ...files,
+    ];
+    const churn = new Map([
+      ["playbook.yml", 20],
+      ["deploy.yml", 15],
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 4],
+    ]);
+    const nesting = new Map([
+      ["playbook.yml", 8],
+      ["deploy.yml", 7],
+      ["a.ts", 4],
+      ["b.ts", 3],
+      ["c.ts", 5],
+    ]);
+
+    const result = computeAllRankings(
+      mixedFiles,
+      churn,
+      new Map(),
+      nesting,
+      new Map(),
+      0,
+    );
+
+    expect(result.rankings.nesting).toBeDefined();
+    const entryFiles = result.rankings.nesting.entries.map((e) => e.file);
+    expect(entryFiles).not.toContain("playbook.yml");
+    expect(entryFiles).not.toContain("deploy.yml");
+    expect(entryFiles).toContain("a.ts");
+  });
+
   it("produces defects ranking with defect density", () => {
     const churn = new Map([
       ["a.ts", 10],

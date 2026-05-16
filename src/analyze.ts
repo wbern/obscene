@@ -466,7 +466,11 @@ export function computeAllRankings(
       density: (f) => f.complexityDensity,
     },
     nesting: {
-      extract: (f) => nestingDepths.get(f.file) ?? 0,
+      // Drop files with zero cyclomatic complexity: their indentation is
+      // structural (YAML, JSON, templates) rather than control flow, so a
+      // deep maxNesting reading isn't a signal of branching difficulty.
+      extract: (f) =>
+        f.complexity === 0 ? 0 : (nestingDepths.get(f.file) ?? 0),
     },
     defects: {
       extract: (f) => defects.get(f.file) ?? 0,
@@ -499,9 +503,14 @@ export function computeAllRankings(
         : `${filesWithComplexity} files with measurable complexity (${level.toUpperCase()} sample size).`,
   );
 
+  // Only count files that will actually contribute to the ranking — files
+  // with complexity 0 are dropped above (structural indentation rather than
+  // control flow), so they shouldn't inflate the confidence sample either.
   let filesWithNesting = 0;
-  for (const depth of nestingDepths.values()) {
-    if (depth >= 3) filesWithNesting++;
+  for (const f of files) {
+    if (f.complexity > 0 && (nestingDepths.get(f.file) ?? 0) >= 3) {
+      filesWithNesting++;
+    }
   }
   confidences.nesting = classifyConfidence(
     "filesWithNesting>=3",
