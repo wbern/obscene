@@ -71,7 +71,7 @@ Produces **four independent ranking tables**, each scoring files by a different 
 | Complexity × Churn | `complexity × churn` | Cmplx, Dens |
 | Nesting × Churn | `maxNesting × churn` | Nest |
 | Fix Activity × Churn | `fixes × churn` | Fixes, FxDns |
-| Authors × Churn | `authors × churn` | Auth |
+| Authors × Churn | `authors × churn` | Auth, MinAuth |
 
 Plus a **Combined** ranking using [Reciprocal Rank Fusion](https://doi.org/10.1145/1571941.1572114) (RRF) across all dimensions — files appearing near the top of multiple rankings score highest.
 
@@ -149,7 +149,13 @@ Maximum indentation level (tab stops) in the file. Deep nesting correlates with 
 
 #### Unique authors (`Auth`)
 
-Number of distinct git authors who committed to the file within the churn window. Bot authors (names ending in `[bot]`, e.g. `dependabot[bot]`) are excluded automatically. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes.
+Number of distinct git authors who committed to the file within the churn window. Bot authors (names ending in `[bot]`, e.g. `dependabot[bot]`) are excluded automatically. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes. `Co-authored-by:` trailers are folded into the author set so squash-merge workflows aren't undercounted.
+
+#### Minor authors (`MinAuth`)
+
+Number of contributors with strictly less than 5% of a file's commits within the churn window. Bird et al. (FSE 2011) found that a high minor-author count correlates with elevated post-release defects after controlling for size, churn, and complexity — the intuition being that drive-by contributors are less likely to internalize the file's invariants. The 5% cutoff is the canonical value from the original paper; a recent OSS replication (arXiv:2312.10861, 2023) found 10% to be more stable, so treat the absolute number as directional rather than definitive. Files with fewer than 2 commits in the window render as `—` rather than 0: there are too few commits to call any contributor *minor* vs *the only one*, a floor borrowed from Greiler et al. (MSR 2015).
+
+**Limitation.** Greiler et al.'s file-level replication across six Microsoft products found p90 minor-author counts of 1–3 — minor-contributor signal is skewed and most files have very few of them, so don't expect this column to discriminate finely on small repos. Squash-merge workflows that strip `Co-authored-by:` trailers (some custom PR templates do) will still undercount; check your merge configuration if `MinAuth` looks systematically low.
 
 ### Coupling metrics
 

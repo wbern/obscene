@@ -261,44 +261,80 @@ export function getDefects(months: number): Map<string, number> {
 }
 
 /**
- * Count unique git authors per file over a given time window.
+ * Parse the first line of a git-log block into a list of distinct human
+ * author names. The format produced by getAuthorCommitCounts is
+ * `<primary>\t<coauthor1>\t<coauthor2>...` where each coauthor is the raw
+ * "Name <email>" value from a Co-authored-by trailer. When no trailers
+ * exist the line is just `<primary>` (no tab) — older callers and the
+ * legacy git-log format still pass that shape, so the parser remains
+ * backwards-compatible.
  */
-export function getAuthors(months: number): Map<string, number> {
+function parseAuthorsLine(line: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of line.split("\t")) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    // Co-authored-by trailer values look like "Name <email>"; strip the
+    // email so we match against names equivalently to %aN. Primary
+    // authors have no angle-bracket suffix and pass through unchanged.
+    const match = trimmed.match(/^(.+?)\s*<[^>]+>\s*$/);
+    const name = (match ? match[1] : trimmed).trim();
+    if (!name || name.endsWith("[bot]")) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Per-file, per-author commit counts over a churn window.
+ * Folds Co-authored-by trailers into the author set so squash-merge
+ * workflows (which collapse the named PR authors into a single committer)
+ * don't appear as solo-author files. Bot authors (`[bot]` suffix) are
+ * filtered out.
+ *
+ * Used directly to compute MinAuth (count of <5% minor contributors per
+ * file, Bird et al. FSE 2011). Set size of the inner map is the
+ * underlying signal for the Authors × Churn ranking.
+ */
+export function getAuthorCommitCounts(
+  months: number,
+): Map<string, Map<string, number>> {
   let raw: Buffer;
   try {
     raw = execSync(
-      `git log --since="${months} months ago" --format="COMMIT_SEP%n%aN" --name-only`,
+      `git log --since="${months} months ago" --format="COMMIT_SEP%n%aN%x09%(trailers:key=Co-authored-by,valueonly,separator=%x09)" --name-only`,
       { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
     );
   } catch {
     throw new Error("Not a git repository or git is not installed.");
   }
 
-  const authorSets = new Map<string, Set<string>>();
+  const fileAuthors = new Map<string, Map<string, number>>();
   const blocks = raw.toString().split("COMMIT_SEP\n");
 
   for (const block of blocks) {
     if (!block.trim()) continue;
     const lines = block.split("\n");
-    const author = lines[0].trim();
-    if (!author || author.endsWith("[bot]")) continue;
+    const authors = parseAuthorsLine(lines[0]);
+    if (authors.length === 0) continue;
     for (let i = 1; i < lines.length; i++) {
       const file = normalizePath(lines[i].trim());
       if (!file) continue;
-      let set = authorSets.get(file);
-      if (!set) {
-        set = new Set();
-        authorSets.set(file, set);
+      let counts = fileAuthors.get(file);
+      if (!counts) {
+        counts = new Map();
+        fileAuthors.set(file, counts);
       }
-      set.add(author);
+      for (const author of authors) {
+        counts.set(author, (counts.get(author) ?? 0) + 1);
+      }
     }
   }
 
-  const counts = new Map<string, number>();
-  for (const [file, set] of authorSets) {
-    counts.set(file, set.size);
-  }
-  return counts;
+  return fileAuthors;
 }
 
 const MAX_FILES_PER_COMMIT = 20;
@@ -444,6 +480,34 @@ function computeRanking(
 /**
  * Compute all four ranking tables from file metrics and git data.
  */
+// Minor-contributor cutoff from Bird et al. (FSE 2011, "Don't Touch My Code!"):
+// a contributor with fewer than 5% of a file's commits correlates with elevated
+// post-release defects after controlling for size, churn, and complexity.
+// Recent OSS replication (arXiv:2312.10861, 2023) found 10% more stable than
+// 5% as a binary cutoff; we keep 5% as the canonical value and reserve a
+// ladder of cutoffs for a future side-by-side comparison.
+const MINOR_AUTHOR_CUTOFF = 0.05;
+// Greiler et al. (MSR 2015) file-level replication: minor-contributor counts
+// are skewed (p90 = 1-3 across 6 Microsoft products). Below 2 commits we have
+// no way to say a contributor is *minor* vs *the only one* — emit null and
+// render as "—" in the table so we don't fabricate signal on thin slices.
+const MIN_COMMITS_FOR_MINOR_AUTHORS = 2;
+
+function computeMinorAuthors(
+  perAuthor: Map<string, number> | undefined,
+): number | null {
+  if (!perAuthor || perAuthor.size === 0) return null;
+  let totalCommits = 0;
+  for (const c of perAuthor.values()) totalCommits += c;
+  if (totalCommits < MIN_COMMITS_FOR_MINOR_AUTHORS) return null;
+  const cutoff = totalCommits * MINOR_AUTHOR_CUTOFF;
+  let minor = 0;
+  for (const c of perAuthor.values()) {
+    if (c < cutoff) minor++;
+  }
+  return minor;
+}
+
 export function computeAllRankings(
   files: FileMetrics[],
   churn: Map<string, number>,
@@ -451,6 +515,7 @@ export function computeAllRankings(
   nestingDepths: Map<string, number>,
   authors: Map<string, number>,
   top: number,
+  authorCommitCounts?: Map<string, Map<string, number>>,
 ): {
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
@@ -589,6 +654,14 @@ export function computeAllRankings(
     const ext = extractors[def.key];
     const allEntries = computeRanking(files, churn, ext.extract, ext.density);
     if (allEntries.length === 0) continue;
+
+    if (def.key === "authors" && authorCommitCounts) {
+      for (const entry of allEntries) {
+        entry.minorAuthors = computeMinorAuthors(
+          authorCommitCounts.get(entry.file),
+        );
+      }
+    }
 
     const limited = top > 0 ? allEntries.slice(0, top) : allEntries;
     const tierCounts: Record<Tier, number> = {

@@ -7,7 +7,7 @@ import {
   couplingConfidence,
   detectIgnorePatterns,
   formatIgnoreFile,
-  getAuthors,
+  getAuthorCommitCounts,
   getChurn,
   getCoChanges,
   getCommitsInWindow,
@@ -539,16 +539,23 @@ describe("getDefects", () => {
   });
 });
 
-describe("getAuthors", () => {
+describe("getAuthorCommitCounts", () => {
+  const sizeFor = (
+    result: Map<string, Map<string, number>>,
+    file: string,
+  ): number | undefined => result.get(file)?.size;
+
   it("counts unique authors per file", () => {
     const gitOutput =
       "COMMIT_SEP\nAlice\nsrc/foo.ts\nsrc/bar.ts\nCOMMIT_SEP\nBob\nsrc/foo.ts\nCOMMIT_SEP\nAlice\nsrc/foo.ts\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
-    expect(result.get("src/foo.ts")).toBe(2);
-    expect(result.get("src/bar.ts")).toBe(1);
+    expect(sizeFor(result, "src/foo.ts")).toBe(2);
+    expect(sizeFor(result, "src/bar.ts")).toBe(1);
+    expect(result.get("src/foo.ts")?.get("Alice")).toBe(2);
+    expect(result.get("src/foo.ts")?.get("Bob")).toBe(1);
   });
 
   it("excludes bot authors from count", () => {
@@ -556,11 +563,10 @@ describe("getAuthors", () => {
       "COMMIT_SEP\nAlice\nsrc/foo.ts\nCOMMIT_SEP\nsemantic-release[bot]\nsrc/foo.ts\npackage.json\nCOMMIT_SEP\nBob\npackage.json\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
-    // semantic-release[bot] excluded: foo has 1 author, package.json has 1
-    expect(result.get("src/foo.ts")).toBe(1);
-    expect(result.get("package.json")).toBe(1);
+    expect(sizeFor(result, "src/foo.ts")).toBe(1);
+    expect(sizeFor(result, "package.json")).toBe(1);
   });
 
   it("omits files only touched by bots", () => {
@@ -568,7 +574,7 @@ describe("getAuthors", () => {
       "COMMIT_SEP\ndependabot[bot]\npackage.json\nCOMMIT_SEP\nrenovate[bot]\npackage.json\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
     expect(result.has("package.json")).toBe(false);
   });
@@ -578,18 +584,19 @@ describe("getAuthors", () => {
       "COMMIT_SEP\nAlice\nsrc/solo.ts\nCOMMIT_SEP\nAlice\nsrc/solo.ts\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
-    expect(result.get("src/solo.ts")).toBe(1);
+    expect(sizeFor(result, "src/solo.ts")).toBe(1);
+    expect(result.get("src/solo.ts")?.get("Alice")).toBe(2);
   });
 
   it("normalizes paths with ./ prefix", () => {
     const gitOutput = "COMMIT_SEP\nAlice\n./src/foo.ts\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
-    expect(result.get("src/foo.ts")).toBe(1);
+    expect(sizeFor(result, "src/foo.ts")).toBe(1);
   });
 
   it("skips blocks with empty author", () => {
@@ -597,16 +604,16 @@ describe("getAuthors", () => {
       "COMMIT_SEP\n\nsrc/foo.ts\nCOMMIT_SEP\nAlice\nsrc/bar.ts\n";
     mockExecSync.mockReturnValue(Buffer.from(gitOutput));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
     expect(result.has("src/foo.ts")).toBe(false);
-    expect(result.get("src/bar.ts")).toBe(1);
+    expect(sizeFor(result, "src/bar.ts")).toBe(1);
   });
 
   it("returns empty map when no commits exist", () => {
     mockExecSync.mockReturnValue(Buffer.from(""));
 
-    const result = getAuthors(3);
+    const result = getAuthorCommitCounts(3);
 
     expect(result.size).toBe(0);
   });
@@ -616,9 +623,48 @@ describe("getAuthors", () => {
       throw new Error("not a git repository");
     });
 
-    expect(() => getAuthors(3)).toThrow(
+    expect(() => getAuthorCommitCounts(3)).toThrow(
       "Not a git repository or git is not installed",
     );
+  });
+
+  it("folds Co-authored-by trailers into the author set", () => {
+    // git log format we emit: "<primary>\t<coauthor1>\t<coauthor2>..."
+    const gitOutput =
+      "COMMIT_SEP\nAlice\tBob <bob@example.com>\tCarol <carol@example.com>\nsrc/foo.ts\nCOMMIT_SEP\nAlice\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthorCommitCounts(3);
+
+    const perAuthor = result.get("src/foo.ts");
+    expect(perAuthor?.size).toBe(3);
+    expect(perAuthor?.get("Alice")).toBe(2);
+    expect(perAuthor?.get("Bob")).toBe(1);
+    expect(perAuthor?.get("Carol")).toBe(1);
+  });
+
+  it("ignores bot coauthors but keeps the human primary", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\tdependabot[bot] <noreply@github.com>\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthorCommitCounts(3);
+
+    const perAuthor = result.get("src/foo.ts");
+    expect(perAuthor?.size).toBe(1);
+    expect(perAuthor?.get("Alice")).toBe(1);
+  });
+
+  it("deduplicates the primary when also listed as a coauthor", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\tAlice <alice@example.com>\nsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getAuthorCommitCounts(3);
+
+    const perAuthor = result.get("src/foo.ts");
+    expect(perAuthor?.size).toBe(1);
+    expect(perAuthor?.get("Alice")).toBe(1);
   });
 });
 
@@ -983,6 +1029,157 @@ describe("computeAllRankings", () => {
     );
 
     expect(result.rankings.defects.entries[0].metricDensity).toBe(0);
+  });
+
+  it("attaches MinAuth (minorAuthors) to authors-ranking entries when commit counts are provided", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const authorMap = new Map([
+      ["a.ts", 4],
+      ["b.ts", 2],
+    ]);
+    // a.ts: 22 commits total. 5% cutoff = 1.1. Two contributors with 1 commit
+    // each (< 1.1) → both are *minor*. Two contributors with 10 commits each →
+    // major. Expected minorAuthors = 2.
+    const authorCommitCounts = new Map<string, Map<string, number>>([
+      [
+        "a.ts",
+        new Map([
+          ["Alice", 10],
+          ["Bob", 10],
+          ["Carol", 1],
+          ["Dave", 1],
+        ]),
+      ],
+      [
+        "b.ts",
+        new Map([
+          ["Alice", 4],
+          ["Bob", 1],
+        ]),
+      ],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authorMap,
+      0,
+      authorCommitCounts,
+    );
+
+    const aEntry = result.rankings.authors.entries.find(
+      (e) => e.file === "a.ts",
+    );
+    const bEntry = result.rankings.authors.entries.find(
+      (e) => e.file === "b.ts",
+    );
+    expect(aEntry?.minorAuthors).toBe(2);
+    // b.ts: 5 commits total. 5% cutoff = 0.25. Bob has 1 commit (>= 0.25) so
+    // not minor; both contributors are above the cutoff → minorAuthors = 0.
+    expect(bEntry?.minorAuthors).toBe(0);
+  });
+
+  it("returns minorAuthors=null when a file has fewer than 2 commits", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const authorMap = new Map([
+      ["a.ts", 2],
+      ["b.ts", 1],
+    ]);
+    const authorCommitCounts = new Map<string, Map<string, number>>([
+      [
+        "a.ts",
+        new Map([
+          ["Alice", 5],
+          ["Bob", 5],
+        ]),
+      ],
+      // b.ts has only 1 total commit — below the Greiler 2015 floor of 2.
+      ["b.ts", new Map([["Alice", 1]])],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authorMap,
+      0,
+      authorCommitCounts,
+    );
+
+    const bEntry = result.rankings.authors.entries.find(
+      (e) => e.file === "b.ts",
+    );
+    expect(bEntry?.minorAuthors).toBeNull();
+  });
+
+  it("leaves minorAuthors undefined when authorCommitCounts is not supplied", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const authorMap = new Map([
+      ["a.ts", 2],
+      ["b.ts", 4],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authorMap,
+      0,
+    );
+
+    for (const entry of result.rankings.authors.entries) {
+      expect(entry.minorAuthors).toBeUndefined();
+    }
+  });
+
+  it("returns minorAuthors=null for a file missing from authorCommitCounts", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const authorMap = new Map([
+      ["a.ts", 2],
+      ["b.ts", 4],
+    ]);
+    // authorCommitCounts is non-empty (so the side-column is enabled) but
+    // b.ts is absent — that's the perAuthor === undefined branch.
+    const authorCommitCounts = new Map<string, Map<string, number>>([
+      [
+        "a.ts",
+        new Map([
+          ["Alice", 5],
+          ["Bob", 5],
+        ]),
+      ],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      authorMap,
+      0,
+      authorCommitCounts,
+    );
+
+    const bEntry = result.rankings.authors.entries.find(
+      (e) => e.file === "b.ts",
+    );
+    expect(bEntry?.minorAuthors).toBeNull();
   });
 
   it("produces authors ranking", () => {

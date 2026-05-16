@@ -385,7 +385,7 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("0.0300");
   });
 
-  it("renders authors table with Auth column", () => {
+  it("renders authors table with Auth and MinAuth columns", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
@@ -394,6 +394,53 @@ describe("formatHotspotsTable", () => {
         authors: {
           label: "Authors \u00D7 Churn",
           scoreFormula: "authors \u00D7 churn",
+          totalScore: 40,
+          tierCounts: { hot: 2, warm: 0, cool: 0 },
+          totalEntries: 2,
+          showing: 2,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/shared.ts",
+              score: 20,
+              percentOfTotal: 50,
+              tier: "hot",
+              churn: 10,
+              metricValue: 2,
+              minorAuthors: 3,
+            },
+            {
+              file: "src/once.ts",
+              score: 20,
+              percentOfTotal: 50,
+              tier: "hot",
+              churn: 1,
+              metricValue: 1,
+              minorAuthors: null,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 2, totalComplexity: 50 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Auth");
+    expect(result).toContain("MinAuth");
+    expect(result).toContain("—");
+    expect(result).toContain("AUTHORS");
+  });
+
+  it("renders MinAuth as em dash when minorAuthors is undefined", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        authors: {
+          label: "Authors × Churn",
+          scoreFormula: "authors × churn",
           totalScore: 20,
           tierCounts: { hot: 1, warm: 0, cool: 0 },
           totalEntries: 1,
@@ -416,7 +463,8 @@ describe("formatHotspotsTable", () => {
 
     const result = formatHotspotsTable(output);
 
-    expect(result).toContain("Auth");
+    expect(result).toContain("MinAuth");
+    expect(result).toContain("—");
     expect(result).toContain("👥 AUTHORS \u00D7 🔄 CHURN");
   });
 

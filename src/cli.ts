@@ -9,7 +9,7 @@ import {
   couplingConfidence,
   detectIgnorePatterns,
   formatIgnoreFile,
-  getAuthors,
+  getAuthorCommitCounts,
   getChurn,
   getCoChanges,
   getCommitsInWindow,
@@ -75,7 +75,7 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
   defects:
     "fixes × churn. Count of fix: commits touching the file × churn. High values can mean latent fragility, but they also flag features that got debugged thoroughly — read the fix-commit history before concluding which.\nMetric concept: change-history metrics (Moser, Pedrycz & Succi 2008) via conventional commits (fix: prefix) · Strength: direct fix-history signal · Limit: counts fix activity, not defects per se; requires consistent fix: convention",
   authors:
-    "authors × churn. Files touched by many authors and changing often may lack clear ownership.\nMetric concept: code ownership research (Bird et al. 2011, Microsoft) · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
+    "authors × churn. Files touched by many authors and changing often may lack clear ownership. MinAuth side-column counts contributors with <5% of file commits (Bird et al. FSE 2011) — '—' means the file has fewer than 2 commits, too few to call anyone *minor*.\nMetric concept: code ownership research (Bird et al. 2011, Microsoft); Co-authored-by trailers folded into author set to close the squash-merge gap · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
   composite:
     "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nMetric concept: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
@@ -238,7 +238,11 @@ function runHotspots(opts: HotspotsOpts): void {
   const files = runScc(allExcludes);
   const churn = getChurn(months);
   const defects = getDefects(months);
-  const authors = getAuthors(months);
+  const authorCommitCounts = getAuthorCommitCounts(months);
+  const authors = new Map<string, number>();
+  for (const [file, perAuthor] of authorCommitCounts) {
+    authors.set(file, perAuthor.size);
+  }
   const nestingDepths = getNestingDepths(files.map((f) => f.file));
   const { rankings, skipped } = computeAllRankings(
     files,
@@ -247,6 +251,7 @@ function runHotspots(opts: HotspotsOpts): void {
     nestingDepths,
     authors,
     top,
+    authorCommitCounts,
   );
 
   const composite = computeComposite(rankings, churn, top);

@@ -47,6 +47,14 @@ export interface RankingEntry {
   churn: number;
   metricValue: number;
   metricDensity?: number;
+  /**
+   * Number of minor contributors on this file (< 5% of file commits;
+   * Bird et al., FSE 2011). `null` means the file is below the
+   * 2-commits/file Greiler-2015 floor — too few commits to call a
+   * contributor "minor" with any confidence. Only set on the Authors
+   * × Churn ranking.
+   */
+  minorAuthors?: number | null;
 }
 
 export interface RankingOutput {

@@ -160,6 +160,18 @@ function getRankingColumns(key: string): RankingColumnDef[] {
         align: "right",
         value: (e) => String(e.metricValue),
       },
+      {
+        // MinAuth: contributors with < 5% of file commits (Bird et al.,
+        // FSE 2011). Renders "—" when the file has < 2 commits (Greiler
+        // 2015 floor) — too few commits to call anyone *minor*.
+        header: "MinAuth",
+        width: 9,
+        align: "right",
+        value: (e) =>
+          e.minorAuthors === null || e.minorAuthors === undefined
+            ? "—"
+            : String(e.minorAuthors),
+      },
     ],
   };
 
