@@ -9,8 +9,8 @@ Hotspot analysis CLI — identifies files that are both complex and frequently c
 ## Git identity
 
 All commits must use author `wbern <wbern@users.noreply.github.com>`.
-The pre-commit hook validates this. If Gas Town sets `GIT_AUTHOR_NAME` in the
-environment (it does for crew agents), unset it before committing:
+The pre-commit hook validates this. If your agent runtime sets `GIT_AUTHOR_NAME`
+in the environment (some do, to identify the agent), unset it before committing:
 
 ```bash
 unset GIT_AUTHOR_NAME

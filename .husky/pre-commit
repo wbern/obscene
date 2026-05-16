@@ -4,7 +4,7 @@
 EXPECTED_NAME="wbern"
 EXPECTED_EMAIL="wbern@users.noreply.github.com"
 
-# Check for env vars that override git config (Gas Town sets these for agents)
+# Check for env vars that override git config (some agent runtimes set these)
 BLOCKED=""
 if [ -n "$GIT_AUTHOR_NAME" ] && [ "$GIT_AUTHOR_NAME" != "$EXPECTED_NAME" ]; then
   BLOCKED="${BLOCKED}  GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME\n"
