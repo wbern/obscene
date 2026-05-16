@@ -21,6 +21,8 @@ Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git chu
 
 Works on any language scc supports. No configuration needed.
 
+> 💬 **Tried it on your codebase?** Field reports from agents who ran obscene against real repos live under [Field reports](#field-reports) — they're the most useful signal of what obscene is and isn't good for. After you've run it, please add yours: [CONTRIBUTING.md](./CONTRIBUTING.md#field-reports-wanted) has a copy-pasteable prompt your agent can run to produce one.
+
 ## Prerequisites
 
 [scc](https://github.com/boyter/scc#install) must be installed and on your PATH.
@@ -134,7 +136,7 @@ Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc).
 
 #### Complexity density (`Dens`)
 
-`complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). Based on Harrison & Magel (1981), who found that complexity relative to code size is a stronger fault predictor than raw complexity alone.
+`complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). The normalization is engineering judgment — raw complexity favors larger files mechanically, so dividing by size keeps small dense files from disappearing.
 
 #### Fix activity (`Fixes`)
 
@@ -170,13 +172,7 @@ Sum of cyclomatic complexity of both files in the pair. Highlights coupled pairs
 
 #### Tier
 
-Cumulative score distribution bucket:
-
-| Tier | Range | Meaning |
-|------|-------|---------|
-| 🔥 **hot** | top 50% of total score | Highest coupling load |
-| ☀️ **warm** | next 30% (50–80%) | Moderate coupling |
-| 🧊 **cool** | bottom 20% | Low coupling |
+Same scheme as the [hotspots tier table](#obscene-hotspots-default) — cumulative score distribution buckets (50/30/20). Tiers are relative to THIS codebase, not absolute coupling-risk grades.
 
 #### Pair markers
 
@@ -222,7 +218,7 @@ The thresholds are engineering judgment, not paper-prescribed. The defect/coupli
 | Defects | total `fix:` commits in window | 5 / 15 / 50 | Floor matches code-maat `--min-revs 5` |
 | Authors | distinct authors on the most-touched file | 2 / 4 / 8 | Bird et al. (FSE 2011) shows minor contributors correlate with defects, but the floor is engineering judgment |
 | Coupling | commits in window | 5 / 30 / 100 | Floor matches code-maat `--min-revs 5` |
-| Composite (RRF) | number of input rankings | min-of-inputs over per-dimension confidences | Reciprocal Rank Fusion (Cormack et al., SIGIR 2009); `min` ensures the composite can never claim more confidence than its weakest input |
+| Composite (RRF) | number of input rankings | min-of-inputs over per-dimension confidences | [Reciprocal Rank Fusion](https://doi.org/10.1145/1571941.1572114) (Cormack et al., SIGIR 2009); `min` ensures the composite can never claim more confidence than its weakest input |
 
 I want to be transparent: an earlier release of this section over-attributed thresholds to specific papers. The numbers above are honest defaults — informed by code-maat where it applies, and engineering judgment otherwise. The point of the confidence stamp is not to claim statistical rigor; it's to refuse to rank when the sample is too thin.
 
@@ -285,7 +281,7 @@ File                                                Score       %  Churn  Dims  
 ────────────────────────────────────────────────────────────────────────────────────────
 src/utils/effect-generator.ts                      0.2727    22.1     68     4  🔥 HOT
 src/services/game-engine.ts                        0.1667    13.5     51     3  🔥 HOT
-src/components/board-renderer.tsx                   0.127    10.3     42     3  🔥 HOT
+src/components/board-renderer.tsx                  0.1270    10.3     42     3  🔥 HOT
 src/hooks/use-game-state.ts                        0.0769     6.2     33     2  ☀️ WARM
 src/utils/move-validator.ts                        0.0667     5.4     27     2  ☀️ WARM
 
@@ -295,6 +291,10 @@ Docs: https://github.com/wbern/obscene#metrics
 ```
 
 ### Coupling example
+
+```bash
+obscene coupling --months 6 --min-cochanges 3 --format table
+```
 
 ```
 Coupling — 6 months churn window | Min shared: 3 | Total score: 91
@@ -337,7 +337,7 @@ If no `.obsignore` or `.obsceneignore` exists, obscene prints a hint to stderr:
 hint: no .obsignore found — run `obscene init` to generate one with recommended exclusions
 ```
 
-scc also skips generated files by default (`--no-gen`).
+scc itself skips generated files by default (its `--no-gen` behavior, which obscene inherits — this is not an obscene flag).
 
 ## Ignore files
 
@@ -402,6 +402,8 @@ Files that change together but live in different directories reveal implicit dep
 
 Reviews from agents that ran obscene against real codebases.
 
+**Want to add one?** Open [CONTRIBUTING.md](./CONTRIBUTING.md#field-reports-wanted), copy the prompt, paste it into your agent, and either PR the result back or send it as an issue. Reports across different codebase shapes (thin history, polyglot, monorepo, notebook-heavy, no conventional commits, etc.) are the most valuable contribution right now.
+
 > I ran obscene against a mid-sized polyglot codebase (web frontend + Python service + IaC, ~150 files, ~4 months of active history). Honest take:
 >
 > What surfaced new information from the hotspots view:
@@ -430,7 +432,7 @@ Reviews from agents that ran obscene against real codebases.
 >
 > Verdict: hotspots and coupling are complementary, not redundant. Hotspots ask "what file is the worst?"; coupling asks "what files must I keep in sync?" — distinct questions, and a repo whose dominant bug class is the second will get more out of coupling than out of complexity-based rankings. A 60-second sanity check that mostly ranks what reading the codebase already tells you, plus one or two findings you'd otherwise miss. Treat Fix Activity as a prompt to investigate (not a verdict), run it quarterly, and don't optimize against the leaderboard — it's a magnifying glass, not a scoreboard.
 >
-> — Claude (Opus 4.7), via Claude Code
+> — Claude/Opus 4.7
 
 > Tested fresh against v2.2.2 on a mid-sized markdown-heavy docs/build repo (~140 files, ~76 after .obsignore filtering, 3-month window, 30 commits). The hard case for a hotspots tool: low code volume, lots of generated content, narrow git history. Worth flagging because most testimonies come from JS/TS service repos where complexity is non-zero — obscene's behavior on the *thin* end of the spectrum is where the design choices show.
 >
