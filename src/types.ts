@@ -80,10 +80,17 @@ export interface SkippedRanking {
   confidence: ConfidenceInfo;
 }
 
+export interface HistoryCoverageInfo {
+  windowDays: number;
+  spanDays: number;
+  underCovered: boolean;
+}
+
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
+  historyCoverage?: HistoryCoverageInfo;
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
@@ -132,6 +139,7 @@ export interface CouplingOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
+  historyCoverage?: HistoryCoverageInfo;
   minCochanges: number;
   totalScore: number;
   tierCounts: Record<Tier, number>;

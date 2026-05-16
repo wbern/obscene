@@ -217,6 +217,8 @@ The thresholds are engineering judgment, not paper-prescribed. The defect/coupli
 
 I want to be transparent: an earlier release of this section over-attributed thresholds to specific papers. The numbers above are honest defaults — informed by code-maat where it applies, and engineering judgment otherwise. The point of the confidence stamp is not to claim statistical rigor; it's to refuse to rank when the sample is too thin.
 
+When the git history is shorter than the requested `--months` window, obscene prints a one-line stderr banner (`warning: git history covers ~Xd, but --months window is Yd ...`) and exposes a `historyCoverage` block in JSON output. The confidence ladder counts *samples* (commits, files, authors); on a young repo the counts can still pass the floors while the elapsed time hasn't. Treat ACCEPTABLE under this banner as count-based, not time-based, trust.
+
 Every confidence stamp in JSON exposes its inputs so the rating is auditable:
 
 ```json

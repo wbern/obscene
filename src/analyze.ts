@@ -7,6 +7,7 @@ import type {
   ConfidenceLevel,
   CouplingEntry,
   FileMetrics,
+  HistoryCoverageInfo,
   RankingEntry,
   RankingOutput,
   SccLanguage,
@@ -1067,4 +1068,37 @@ export function getCommitsInWindow(months: number): number {
   } catch {
     throw new Error("Not a git repository or git is not installed.");
   }
+}
+
+const DAYS_PER_MONTH = 30;
+
+/**
+ * Compare the user's churn window against the actual git history length.
+ * When history is shorter than the window, count-based confidence ladders
+ * over-state how much *time* the ranking really observed: a 12-month window
+ * on a 2-month repo still passes the commit-count floors but doesn't earn
+ * time-based trust. Callers use `underCovered` to render a banner.
+ */
+export function getHistoryCoverage(months: number): HistoryCoverageInfo {
+  const windowDays = months * DAYS_PER_MONTH;
+  let firstCommitSeconds: number;
+  try {
+    const out = execSync("git log --format=%ct --reverse HEAD", {
+      maxBuffer: 50 * 1024 * 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const firstLine = out.toString().split("\n", 1)[0].trim();
+    firstCommitSeconds = parseInt(firstLine, 10);
+    if (!Number.isFinite(firstCommitSeconds) || firstCommitSeconds <= 0) {
+      return { windowDays, spanDays: 0, underCovered: true };
+    }
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const spanDays = Math.max(
+    0,
+    Math.floor((nowSeconds - firstCommitSeconds) / 86400),
+  );
+  return { windowDays, spanDays, underCovered: spanDays < windowDays };
 }

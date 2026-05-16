@@ -14,6 +14,7 @@ import {
   getCoChanges,
   getCommitsInWindow,
   getDefects,
+  getHistoryCoverage,
   getNestingDepths,
   getTrackedFiles,
   readIgnoreFile,
@@ -26,7 +27,12 @@ import {
   formatHotspotsTable,
   formatReportTable,
 } from "./format.js";
-import type { CouplingOutput, HotspotsOutput, ReportOutput } from "./types.js";
+import type {
+  CouplingOutput,
+  HistoryCoverageInfo,
+  HotspotsOutput,
+  ReportOutput,
+} from "./types.js";
 
 const program = new Command();
 
@@ -173,6 +179,17 @@ function warnIfNoIgnoreFile(): void {
   }
 }
 
+function warnHistoryCoverage(months: number): HistoryCoverageInfo {
+  const coverage = getHistoryCoverage(months);
+  if (coverage.underCovered) {
+    process.stderr.write(
+      `warning: git history covers ~${coverage.spanDays}d, but --months window is ${coverage.windowDays}d — ` +
+        "count-based confidence won't reflect time-based trust on a young repo\n",
+    );
+  }
+  return coverage;
+}
+
 function runReport(opts: SharedOpts): void {
   warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
@@ -216,6 +233,7 @@ function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
+  const historyCoverage = warnHistoryCoverage(months);
   const allExcludes = resolveExcludes(opts.exclude);
   const files = runScc(allExcludes);
   const churn = getChurn(months);
@@ -240,6 +258,7 @@ function runHotspots(opts: HotspotsOpts): void {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
+    historyCoverage,
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
@@ -264,6 +283,7 @@ function runCoupling(opts: CouplingOpts): void {
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const minCochanges = parseInt(opts.minCochanges, 10);
+  const historyCoverage = warnHistoryCoverage(months);
   const allExcludes = resolveExcludes(opts.exclude);
   const files = runScc(allExcludes);
   const churn = getChurn(months);
@@ -296,6 +316,7 @@ function runCoupling(opts: CouplingOpts): void {
     generated: new Date().toISOString(),
     guide: COUPLING_GUIDE,
     churnWindow: `${months} months`,
+    historyCoverage,
     minCochanges,
     totalScore,
     tierCounts,

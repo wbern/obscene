@@ -12,6 +12,7 @@ import {
   getCoChanges,
   getCommitsInWindow,
   getDefects,
+  getHistoryCoverage,
   getNestingDepths,
   getTrackedFiles,
   readIgnoreFile,
@@ -1779,6 +1780,54 @@ describe("getCommitsInWindow", () => {
       throw new Error("git not found");
     });
     expect(() => getCommitsInWindow(3)).toThrow(
+      /Not a git repository or git is not installed/,
+    );
+  });
+});
+
+describe("getHistoryCoverage", () => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const daysAgo = (n: number): number => nowSeconds - n * 86400;
+
+  it("flags underCovered when history is shorter than the window", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from(`${daysAgo(20)}\n${daysAgo(1)}\n`),
+    );
+    const coverage = getHistoryCoverage(3); // 90-day window
+    expect(coverage.underCovered).toBe(true);
+    expect(coverage.windowDays).toBe(90);
+    expect(coverage.spanDays).toBeGreaterThanOrEqual(19);
+    expect(coverage.spanDays).toBeLessThanOrEqual(20);
+  });
+
+  it("clears underCovered when history exceeds the window", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from(`${daysAgo(180)}\n${daysAgo(1)}\n`),
+    );
+    const coverage = getHistoryCoverage(3); // 90-day window
+    expect(coverage.underCovered).toBe(false);
+    expect(coverage.spanDays).toBeGreaterThanOrEqual(179);
+  });
+
+  it("returns underCovered=true with spanDays=0 on a malformed first line", () => {
+    mockExecSync.mockReturnValue(Buffer.from("not-a-timestamp\n"));
+    const coverage = getHistoryCoverage(3);
+    expect(coverage.spanDays).toBe(0);
+    expect(coverage.underCovered).toBe(true);
+  });
+
+  it("returns underCovered=true with spanDays=0 on an empty log", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+    const coverage = getHistoryCoverage(3);
+    expect(coverage.spanDays).toBe(0);
+    expect(coverage.underCovered).toBe(true);
+  });
+
+  it("throws when git is unavailable", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("git not found");
+    });
+    expect(() => getHistoryCoverage(3)).toThrow(
       /Not a git repository or git is not installed/,
     );
   });
