@@ -1,0 +1,15 @@
+<svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="obscene">
+  <line x1="20"  y1="128" x2="62"  y2="128" stroke="#0f1419" stroke-width="4" stroke-linecap="round"/>
+  <line x1="194" y1="128" x2="236" y2="128" stroke="#0f1419" stroke-width="4" stroke-linecap="round"/>
+  <line x1="128" y1="20"  x2="128" y2="62"  stroke="#0f1419" stroke-width="4" stroke-linecap="round"/>
+  <line x1="128" y1="194" x2="128" y2="236" stroke="#0f1419" stroke-width="4" stroke-linecap="round"/>
+  <rect x="56"  y="56"  width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="108" y="56"  width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="160" y="56"  width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="56"  y="108" width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="108" y="108" width="40" height="40" fill="#f0b429" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="160" y="108" width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="56"  y="160" width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="108" y="160" width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="160" y="160" width="40" height="40" fill="none" stroke="#0f1419" stroke-width="8" stroke-linejoin="round"/>
+</svg>

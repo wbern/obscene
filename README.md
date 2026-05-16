@@ -1,3 +1,5 @@
+<p align="center"><img src="./logo.svg" width="160" alt="obscene logo"></p>
+
 # @wbern/obscene
 
 ```
