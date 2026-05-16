@@ -1,6 +1,13 @@
-<p align="center"><img src="./logo.svg" width="160" alt="obscene logo"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./logo-dark.svg">
+    <img src="./logo.svg" width="160" alt="obscene logo">
+  </picture>
+</p>
 
-# @wbern/obscene
+<h1 align="center">@wbern/obscene</h1>
+
+<p align="center">Find hotspot files — complex code that changes frequently.</p>
 
 ```
        _==/          i     i          \==_
@@ -16,8 +23,6 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
     \XX\       \X/    \XXX/    \X/       /XX/
        "\       "      \X/      "       /"
 ```
-
-**Find hotspot files — complex code that changes frequently.**
 
 Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Based on Adam Tornhill's *Your Code as a Crime Scene*.
 
