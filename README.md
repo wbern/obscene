@@ -9,21 +9,6 @@
 
 <p align="center">Find hotspot files — complex code that changes frequently.</p>
 
-```
-       _==/          i     i          \==_
-     /XX/            |\___/|            \XX\
-   /XXXX\            |XXXXX|            /XXXX\
-  |XXXXXX\_         _XXXXXXX_         _/XXXXXX|
- XXXXXXXXXXXxxxxxxxXXXXXXXXXXXxxxxxxxXXXXXXXXXXX
-|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX|
-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX|
- XXXXXX/^^^^"\XXXXXXXXXXXXXXXXXXXXX/^^^^^\XXXXXX
-  |XXX|       \XXX/^^\XXXXX/^^\XXX/       |XXX|
-    \XX\       \X/    \XXX/    \X/       /XX/
-       "\       "      \X/      "       /"
-```
-
 Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Based on Adam Tornhill's *Your Code as a Crime Scene*.
 
 Works on any language scc supports. No configuration needed.
