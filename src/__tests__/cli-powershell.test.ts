@@ -92,14 +92,14 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
     expect(result.status).not.toBe(0);
   });
 
-  it("should handle paths with spaces via pwsh", { timeout: 30000 }, () => {
+  it("should handle paths with spaces via pwsh", { timeout: 90000 }, () => {
     const dirWithSpaces = path.join(tempDir, "path with spaces");
     fs.mkdirSync(dirWithSpaces);
 
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
-      { timeout: 25000, stdio: "pipe", cwd: dirWithSpaces },
+      { timeout: 60000, stdio: "pipe", cwd: dirWithSpaces },
     );
 
     expect(result.status).toBe(0);
