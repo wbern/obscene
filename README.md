@@ -168,6 +168,8 @@ Number of contributors with strictly less than 5% of a file's commits within the
 
 **Limitation.** Greiler et al.'s file-level replication across six Microsoft products found p90 minor-author counts of 1–3 — minor-contributor signal is skewed and most files have very few of them, so don't expect this column to discriminate finely on small repos. Squash-merge workflows that strip `Co-authored-by:` trailers (some custom PR templates do) will still undercount; check your merge configuration if `MinAuth` looks systematically low.
 
+**Mixed human/AI corpora.** Bird et al.'s defect correlation rests on humans accumulating domain knowledge over commits; in repos where most `Co-authored-by:` contributors are AI assistants, `MinAuth` still measures author *distribution*, but the underlying ownership-and-knowledge semantics flatten. Read the column as "how spread out is contribution on this file" rather than "how many drive-by humans are touching this file."
+
 ### Coupling metrics
 
 #### Shared commits (`Shared`)
@@ -500,6 +502,33 @@ Reviews from agents that ran obscene against real codebases.
 > - Read both the table and the JSON if you care about provenance. They're different views; the JSON has the deeper-attribution and threshold values.
 >
 > **Verdict:** Useful, transparent about its math, willing to skip rather than fabricate, willing to label its own confidence. The doc-heavy/thin-history case is where most analysis tools fall over by inventing rankings; obscene falls over honestly — it tells you the rankings are size-and-churn, and which dimensions had to skip. That's the harder design choice, and the right one. I'd run this in CI on a service repo with real branching code. I'd run it more cautiously on a docs repo and read the preamble before the tier column.
+>
+> — Claude/Opus 4.7
+
+> Fresh run of v2.4.0 against a small multi-tenant workshop infra repo (Python + JS/JSX + Ansible/Jinja2), young (~12 days of history), high cadence, polyglot mix. 177 files, 1,428 total complexity.
+>
+> **Three v2.4.0 features, tested:**
+>
+> *History-coverage banner — earns its line.* The opening line of output now reads `warning: git history covers ~12d, but --months window is 90d — count-based confidence won't reflect time-based trust on a young repo`. This is the right shape. A prior critique was that count-based ACCEPTABLE doesn't earn time-based trust — and the fix is not to invent a new tier, but to make the gap visible at the top before any table renders. JSON exposes it as `historyCoverage: {windowDays: 90, spanDays: 12, underCovered: true}`, which is also the right shape — a structured flag downstream tools can react to. Short, parsable, doesn't double up against the per-ranking confidence stamps. Pass.
+>
+> *MinAuth column — useful signal, audience-dependent.* Bird et al.'s minor-author count appears as a side column in Authors × Churn. Sample:
+>
+> ```
+> frontend/src/App.jsx            Auth=10  MinAuth=3
+> infra/.../provisioner.py        Auth=10  MinAuth=5
+> infra/playbook.yml              Auth=10  MinAuth=2
+> infra/.../provision-student.yml Auth=8   MinAuth=0
+> ```
+>
+> The `Auth=8 / MinAuth=0` line is the most informative: eight contributors, none under the 5% floor — that's evenly-shared ownership, not diffuse-author risk. The `Auth=10 / MinAuth=5` line says the opposite, even at the same headcount. That distinction wasn't surfaceable in v2.3.0; now it is. Caveat for repos like this one: when most "authors" are AI assistants folded in via Co-authored-by trailers, the human-ownership semantics Bird et al. encoded start to flatten. MinAuth still measures *distribution*, but the underlying assumption (humans accumulating domain knowledge over commits) doesn't fully hold. Not a defect — the column would benefit from one line on what it does and doesn't infer in mixed human/AI corpora.
+>
+> *Zero-complexity nesting filter — fixes the v2.3.0 miss.* The prior report flagged Ansible YAML slipping into HOT nesting because `maxNesting × churn` doesn't care whether the file has any actual control flow. In v2.4.0, the Nesting × Churn HOT/WARM rows are all real code (Python + JSX), and the only templates that appear are ones with non-zero complexity from actual Jinja loops (`gallery-index.html.j2`, nest 20, churn 1, COOL). A Jinja template that *does* nest control flow legitimately ranks; one that's just deep indentation does not. The filter does what it claimed. Pass.
+>
+> **What surprised me:** the composite ranking is steadier than v2.3.0. Same files top the list but the supporting columns now disagree usefully — MinAuth and FxDns split files that previously looked identical on raw score. The 12-day banner is calibrated to feel like a footnote, not a disclaimer. That's the correct emotional weight — surfaced, not alarming.
+>
+> **Still missing / would change trust:** Nothing structural. One small ask — time-based confidence as a separate axis from count-based confidence. The banner says "this is a young repo"; what it doesn't say is what *would* earn time-based trust. A second confidence stamp keyed on spanDays (e.g. weak <30d, plausible <90d, acceptable ≥90d) would let a reader see both halves at once. Not a blocker — the banner is enough for now.
+>
+> **Verdict:** Three for three on the features promised. The banner is the most impactful change because it closes a feedback loop that was previously implicit. MinAuth and the nesting filter are quieter wins. Trust in the output is higher than v2.3.0, on the same repo, with the same churn — that's the right direction.
 >
 > — Claude/Opus 4.7
 
