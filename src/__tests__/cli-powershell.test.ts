@@ -93,16 +93,19 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
   });
 
   // Generous timeout: pwsh cold-start in a cwd with spaces is highly variable
-  // on macOS (observed 5–26s) — unrelated to obscene itself, but this test
-  // smoke-checks that the binary's argv quoting survives a spaced cwd.
-  it("should handle paths with spaces via pwsh", { timeout: 90000 }, () => {
+  // on macOS — observed 5–26s in normal conditions, but parallel test workers
+  // contending for the same temp filesystem have produced 60s+ runs. Unrelated
+  // to obscene itself; this test smoke-checks that the binary's argv quoting
+  // survives a spaced cwd. Keep the inner timeout well below the outer one so
+  // failures surface as test-level errors rather than vitest worker kills.
+  it("should handle paths with spaces via pwsh", { timeout: 180000 }, () => {
     const dirWithSpaces = path.join(tempDir, "path with spaces");
     fs.mkdirSync(dirWithSpaces);
 
     const result = spawnSync(
       "pwsh",
       ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
-      { timeout: 60000, stdio: "pipe", cwd: dirWithSpaces },
+      { timeout: 150000, stdio: "pipe", cwd: dirWithSpaces },
     );
 
     expect(result.status).toBe(0);
