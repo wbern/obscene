@@ -90,12 +90,6 @@ describe("CLI Integration", () => {
       const tarball = files.find((f) => f.endsWith(".tgz"));
       expect(tarball).toBeDefined();
 
-      // Check tarball size — should be small (uncompressed ~30KB code + README).
-      // README growth (field reports, expanded docs) is fine; binary bloat is not.
-      const stats = fs.statSync(path.join(tempDir, tarball!));
-      const sizeKB = stats.size / 1024;
-      expect(sizeKB).toBeLessThan(75);
-
       // Extract it
       const extractDir = path.join(tempDir, "extracted");
       fs.mkdirSync(extractDir);
@@ -107,6 +101,13 @@ describe("CLI Integration", () => {
       expect(tarResult.status).toBe(0);
 
       const packageDir = path.join(extractDir, "package");
+
+      // Binary bloat canary: dist/cli.js (the runtime payload) should stay
+      // compact regardless of how much the README grows. README growth from
+      // field reports and expanded docs is welcome; binary bloat is not.
+      const cliStats = fs.statSync(path.join(packageDir, "dist", "cli.js"));
+      const cliSizeKB = cliStats.size / 1024;
+      expect(cliSizeKB).toBeLessThan(40);
 
       // Install dependencies in isolated dir
       const installResult = spawnSync(
