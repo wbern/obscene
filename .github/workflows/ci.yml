@@ -17,31 +17,42 @@ jobs:
     steps:
       # fetch-depth: 0 needed — integration tests run `obscene` on the repo, which needs git log history
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "lts/*"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
 
       - name: Install scc (Linux)
         if: runner.os == 'Linux'
         run: |
-          curl -sL https://github.com/boyter/scc/releases/download/v3.4.0/scc_Linux_x86_64.tar.gz | tar xz -C /tmp
+          SCC_VERSION=3.4.0
+          SCC_SHA256=8f812d25c237112ea74a4285f0699b7a2c448d70c5e63e370d2d199d38b13eda
+          curl -sL -o /tmp/scc.tar.gz "https://github.com/boyter/scc/releases/download/v${SCC_VERSION}/scc_Linux_x86_64.tar.gz"
+          echo "${SCC_SHA256}  /tmp/scc.tar.gz" | sha256sum -c -
+          tar xz -C /tmp -f /tmp/scc.tar.gz
           sudo mv /tmp/scc /usr/local/bin/
 
       - name: Install scc (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://github.com/boyter/scc/releases/download/v3.4.0/scc_Windows_x86_64.zip" -OutFile scc.zip
+          $SCC_VERSION = "3.4.0"
+          $SCC_SHA256 = "95e050f110b340256248b156c818b8ec490b84f58871889ecf4f53c370c97c6c"
+          Invoke-WebRequest -Uri "https://github.com/boyter/scc/releases/download/v$SCC_VERSION/scc_Windows_x86_64.zip" -OutFile scc.zip
+          $actual = (Get-FileHash scc.zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $SCC_SHA256) {
+            Write-Error "scc checksum mismatch: expected $SCC_SHA256, got $actual"
+            exit 1
+          }
           Expand-Archive scc.zip -DestinationPath scc-bin
           Move-Item scc-bin\scc.exe C:\Windows\system32\scc.exe
 
