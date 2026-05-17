@@ -180,6 +180,8 @@ Number of commits where both files in a pair were modified together. The core ra
 
 `shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file. This normalization follows D'Ambros, Lanza & Lungu (2009), who showed that relative coupling measures provide more stable results than raw co-change counts across projects of different sizes.
 
+`Degree` is intentionally asymmetric: a 100% degree means "every time the *less-active* file changes, the other one changes too" — it doesn't claim the reverse. For cases where both files are entangled in both directions, see the `⇄` lockstep marker below, which uses `max(churn)` (symmetric) instead of `min`.
+
 #### Combined complexity (`Cmplx`)
 
 Sum of cyclomatic complexity of both files in the pair. Highlights coupled pairs where the involved code is also complex — the combination of hidden dependency and high complexity compounds maintenance risk.
@@ -195,7 +197,7 @@ The coupling table annotates entries that need framing:
 | Marker | JSON field | Meaning |
 |--------|------------|---------|
 | `†` next to a path | `file1Deleted` / `file2Deleted` | File is no longer present at HEAD (deleted or renamed away). The coupling signal is historical; the pair is not actionable in the current tree. |
-| `⇄` next to the Degree value | `lockstep` | Shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (`README.md` ↔ `src/README.md`, `*.pb.go` ↔ `*.proto`). Treat the pair as a single unit from git's perspective. |
+| `⇄` next to the Degree value | `lockstep` | `shared / max(churn) ≥ 0.9` — both files almost always change together over the window. Note the contrast with `Degree`: lockstep uses `max(churn)` (symmetric — entanglement holds in both directions), while `Degree` uses `min(churn)` (asymmetric — `Degree` can be 100% even when one file moves freely without the other). Typical lockstep pairs: generator/mirror (`README.md` ↔ `src/README.md`, `*.pb.go` ↔ `*.proto`). Treat the pair as a single unit from git's perspective. |
 
 ### Corpus framing
 
