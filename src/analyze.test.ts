@@ -5,9 +5,11 @@ import {
   computeComposite,
   computeCoupling,
   couplingConfidence,
+  detectDefaultBranch,
   detectIgnorePatterns,
   formatIgnoreFile,
   getAuthorCommitCounts,
+  getChangedFiles,
   getChurn,
   getCoChanges,
   getCommitsInWindow,
@@ -2102,6 +2104,97 @@ describe("getTrackedFiles", () => {
     expect(() => getTrackedFiles()).toThrow(
       "Not a git repository or git is not installed.",
     );
+  });
+});
+
+describe("getChangedFiles", () => {
+  it("returns the normalized set of files in the three-dot diff", () => {
+    mockExecSync.mockReturnValue(
+      Buffer.from("src/a.ts\n./src/b.ts\nlib\\nested\\c.ts\n"),
+    );
+
+    const result = getChangedFiles("main");
+
+    expect(mockExecSync).toHaveBeenCalledWith(
+      "git diff --name-only main...HEAD",
+      expect.any(Object),
+    );
+    expect(result.has("src/a.ts")).toBe(true);
+    expect(result.has("src/b.ts")).toBe(true);
+    expect(result.has("lib/nested/c.ts")).toBe(true);
+  });
+
+  it("accepts a commit sha as base ref", () => {
+    mockExecSync.mockReturnValue(Buffer.from("src/a.ts\n"));
+
+    getChangedFiles("abc123");
+
+    expect(mockExecSync).toHaveBeenCalledWith(
+      "git diff --name-only abc123...HEAD",
+      expect.any(Object),
+    );
+  });
+
+  it("returns an empty set when nothing has changed", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = getChangedFiles("main");
+
+    expect(result.size).toBe(0);
+  });
+
+  it("ignores blank lines in output", () => {
+    mockExecSync.mockReturnValue(Buffer.from("\nsrc/a.ts\n\n\nsrc/b.ts\n"));
+
+    const result = getChangedFiles("main");
+
+    expect(result.size).toBe(2);
+  });
+
+  it("throws a descriptive error when the ref does not exist", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("fatal: bad revision");
+    });
+
+    expect(() => getChangedFiles("nope")).toThrow(
+      /Failed to compute diff against base ref 'nope'/,
+    );
+  });
+});
+
+describe("detectDefaultBranch", () => {
+  it("returns 'main' when it resolves", () => {
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      if (typeof cmd === "string" && cmd.includes("rev-parse --verify main")) {
+        return Buffer.from("abc123\n");
+      }
+      throw new Error("no");
+    });
+
+    expect(detectDefaultBranch()).toBe("main");
+  });
+
+  it("falls back to 'master' when 'main' is missing", () => {
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      if (typeof cmd !== "string") throw new Error("no");
+      if (cmd.includes("rev-parse --verify main")) {
+        throw new Error("fatal: Needed a single revision");
+      }
+      if (cmd.includes("rev-parse --verify master")) {
+        return Buffer.from("abc123\n");
+      }
+      throw new Error("no");
+    });
+
+    expect(detectDefaultBranch()).toBe("master");
+  });
+
+  it("returns undefined when neither branch exists", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("fatal: Needed a single revision");
+    });
+
+    expect(detectDefaultBranch()).toBeUndefined();
   });
 });
 

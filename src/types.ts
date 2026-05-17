@@ -94,11 +94,18 @@ export interface HistoryCoverageInfo {
   underCovered: boolean;
 }
 
+export interface DeltaInfo {
+  base: string;
+  head: string;
+  changedFiles: string[];
+}
+
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
   historyCoverage?: HistoryCoverageInfo;
+  delta?: DeltaInfo;
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;

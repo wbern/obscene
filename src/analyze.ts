@@ -689,6 +689,53 @@ export function computeAllRankings(
 }
 
 /**
+ * Files changed between baseRef and HEAD using three-dot syntax —
+ * `<base>...HEAD` resolves to the set of files modified on HEAD since the
+ * merge-base with base. That matches PR semantics: a PR's diff is the work
+ * done on the branch, not changes that happened on the base branch since
+ * divergence.
+ */
+export function getChangedFiles(baseRef: string): Set<string> {
+  let raw: Buffer;
+  try {
+    raw = execSync(`git diff --name-only ${baseRef}...HEAD`, {
+      maxBuffer: 50 * 1024 * 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch {
+    throw new Error(
+      `Failed to compute diff against base ref '${baseRef}'. ` +
+        "Verify the ref exists (e.g. 'git rev-parse --verify <ref>').",
+    );
+  }
+  const set = new Set<string>();
+  for (const line of raw.toString().split("\n")) {
+    const trimmed = normalizePath(line.trim());
+    if (trimmed) set.add(trimmed);
+  }
+  return set;
+}
+
+const DEFAULT_BRANCH_CANDIDATES = ["main", "master"];
+
+/**
+ * Locate the local default branch when the user invokes `--base` without
+ * specifying a ref. Tries `main` then `master`. Returns undefined when
+ * neither exists — the caller surfaces a usage error.
+ */
+export function detectDefaultBranch(): string | undefined {
+  for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
+    try {
+      execSync(`git rev-parse --verify ${candidate}`, {
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return candidate;
+    } catch {}
+  }
+  return undefined;
+}
+
+/**
  * List files currently tracked at HEAD. Used to flag coupling pairs whose
  * members no longer exist (renamed away, deleted) so they aren't presented as
  * actionable hotspots.

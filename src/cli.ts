@@ -7,9 +7,11 @@ import {
   computeComposite,
   computeCoupling,
   couplingConfidence,
+  detectDefaultBranch,
   detectIgnorePatterns,
   formatIgnoreFile,
   getAuthorCommitCounts,
+  getChangedFiles,
   getChurn,
   getCoChanges,
   getCommitsInWindow,
@@ -29,6 +31,7 @@ import {
 } from "./format.js";
 import type {
   CouplingOutput,
+  DeltaInfo,
   HistoryCoverageInfo,
   HotspotsOutput,
   ReportOutput,
@@ -49,6 +52,7 @@ interface SharedOpts {
 
 interface HotspotsOpts extends SharedOpts {
   months: string;
+  base?: string | boolean;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -129,6 +133,10 @@ addSharedOptions(
     .description("churn × complexity hotspot analysis (default)"),
 )
   .option("--months <n>", "churn window in months", "3")
+  .option(
+    "--base [ref]",
+    "delta mode: filter rankings to files changed since this ref (bare flag auto-detects main/master)",
+  )
   .action((opts: HotspotsOpts) => {
     try {
       runHotspots(opts);
@@ -229,13 +237,59 @@ function runReport(opts: SharedOpts): void {
   }
 }
 
+function resolveBaseRef(raw: string | boolean): string {
+  if (typeof raw === "string") return raw;
+  // Commander emits `true` for bare `--base` with no value. (`false` is not
+  // a value the parser produces for this flag shape, but the type union from
+  // commander includes it.)
+  const detected = detectDefaultBranch();
+  if (!detected) {
+    throw new Error(
+      "--base used without a ref but no default branch found (looked for main, master). " +
+        "Specify the base ref explicitly, e.g. --base <branch-or-sha>.",
+    );
+  }
+  return detected;
+}
+
 function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const historyCoverage = warnHistoryCoverage(months);
   const allExcludes = resolveExcludes(opts.exclude);
-  const files = runScc(allExcludes);
+  let files = runScc(allExcludes);
+
+  let delta: DeltaInfo | undefined;
+  if (opts.base !== undefined) {
+    const baseRef = resolveBaseRef(opts.base);
+    const changed = getChangedFiles(baseRef);
+    if (changed.size === 0) {
+      process.stderr.write(`No files changed since ${baseRef}.\n`);
+      const empty: HotspotsOutput = {
+        generated: new Date().toISOString(),
+        guide: HOTSPOTS_GUIDE,
+        churnWindow: `${months} months`,
+        historyCoverage,
+        delta: { base: baseRef, head: "HEAD", changedFiles: [] },
+        rankings: {},
+        corpus: { fileCount: 0, totalComplexity: 0 },
+      };
+      if (opts.format === "table") {
+        process.stdout.write(`${formatHotspotsTable(empty)}\n`);
+      } else {
+        process.stdout.write(`${JSON.stringify(empty, null, 2)}\n`);
+      }
+      return;
+    }
+    files = files.filter((f) => changed.has(f.file));
+    delta = {
+      base: baseRef,
+      head: "HEAD",
+      changedFiles: [...changed].sort(),
+    };
+  }
+
   const churn = getChurn(months);
   const defects = getDefects(months);
   const authorCommitCounts = getAuthorCommitCounts(months);
@@ -264,6 +318,7 @@ function runHotspots(opts: HotspotsOpts): void {
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
     historyCoverage,
+    delta,
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,

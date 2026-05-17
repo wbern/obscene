@@ -245,8 +245,22 @@ function formatRankingTable(
 
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
-  const { churnWindow, rankings, corpus } = output;
+  const { churnWindow, rankings, corpus, delta } = output;
 
+  if (delta) {
+    lines.push(
+      pc.cyan(
+        `Delta — ${delta.changedFiles.length} file${
+          delta.changedFiles.length === 1 ? "" : "s"
+        } changed since ${delta.base}`,
+      ),
+    );
+    if (delta.changedFiles.length === 0) {
+      lines.push("");
+      lines.push(pc.dim("No changes — nothing to rank."));
+      return lines.join("\n");
+    }
+  }
   lines.push(`Hotspots — ${churnWindow} churn window`);
   if (corpus && corpus.fileCount > 0 && corpus.totalComplexity === 0) {
     lines.push("");

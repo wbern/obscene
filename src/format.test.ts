@@ -768,6 +768,86 @@ describe("formatHotspotsTable", () => {
 
     expect(result).toContain("parsers, engines");
   });
+
+  it("renders a delta header when delta metadata is present", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "main",
+        head: "HEAD",
+        changedFiles: ["src/a.ts", "src/b.ts"],
+      },
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/a.ts",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 2, totalComplexity: 120 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Delta —");
+    expect(result).toContain("2 files changed since main");
+    expect(result).toContain("Hotspots — 3 months");
+  });
+
+  it("uses singular 'file' in delta header for a single change", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "abc123",
+        head: "HEAD",
+        changedFiles: ["src/a.ts"],
+      },
+      rankings: {},
+      corpus: { fileCount: 1, totalComplexity: 10 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("1 file changed since abc123");
+    expect(result).not.toContain("1 files");
+  });
+
+  it("renders the empty-delta message and skips rankings when nothing changed", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: { base: "main", head: "HEAD", changedFiles: [] },
+      rankings: {},
+      corpus: { fileCount: 0, totalComplexity: 0 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("0 files changed since main");
+    expect(result).toContain("No changes — nothing to rank.");
+    // The normal "Hotspots — churn window" header should NOT render
+    expect(result).not.toContain("Hotspots — 3 months");
+  });
 });
 
 describe("formatCouplingTable", () => {

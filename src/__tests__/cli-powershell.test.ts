@@ -98,17 +98,25 @@ describe.skipIf(!hasPwsh)("CLI PowerShell", () => {
   // to obscene itself; this test smoke-checks that the binary's argv quoting
   // survives a spaced cwd. Keep the inner timeout well below the outer one so
   // failures surface as test-level errors rather than vitest worker kills.
-  it("should handle paths with spaces via pwsh", { timeout: 180000 }, () => {
-    const dirWithSpaces = path.join(tempDir, "path with spaces");
-    fs.mkdirSync(dirWithSpaces);
+  // Skipped under coverage runs: v8 instrumentation pushes worker RPC over its
+  // heartbeat threshold and this test spawns a subprocess that contributes no
+  // coverage anyway. Other pwsh tests still exercise argv quoting on this path.
+  const isCoverageRun = process.env.npm_lifecycle_event === "test:coverage";
+  it.skipIf(isCoverageRun)(
+    "should handle paths with spaces via pwsh",
+    { timeout: 180000 },
+    () => {
+      const dirWithSpaces = path.join(tempDir, "path with spaces");
+      fs.mkdirSync(dirWithSpaces);
 
-    const result = spawnSync(
-      "pwsh",
-      ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
-      { timeout: 150000, stdio: "pipe", cwd: dirWithSpaces },
-    );
+      const result = spawnSync(
+        "pwsh",
+        ["-NoProfile", "-Command", `node ${pwshQuote(BIN_PATH)} --version`],
+        { timeout: 150000, stdio: "pipe", cwd: dirWithSpaces },
+      );
 
-    expect(result.status).toBe(0);
-    expect(result.stdout.toString().trim()).toMatch(/^\d+\.\d+\.\d+$/);
-  });
+      expect(result.status).toBe(0);
+      expect(result.stdout.toString().trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    },
+  );
 });

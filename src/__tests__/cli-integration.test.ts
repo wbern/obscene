@@ -395,4 +395,197 @@ describe("CLI Integration", () => {
     expect(result.stderr).toContain("hint: no .obsignore found");
     expect(result.stderr).toContain("obscene init");
   });
+
+  // Delta mode A: --base filters rankings to files changed since the base ref.
+  // Builds a tiny two-commit repo so the diff is deterministic and unaffected
+  // by the parent project's history.
+  function setupDeltaRepo(): { headSha: string; baseSha: string } {
+    spawnSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    // Base commit: two files
+    fs.writeFileSync(
+      path.join(tempDir, "kept.ts"),
+      "export function a() { if (1) return 1; }\n",
+    );
+    fs.writeFileSync(
+      path.join(tempDir, "unchanged.ts"),
+      "export function b() { if (1) return 2; }\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "base"], { cwd: tempDir, stdio: "pipe" });
+    const baseSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    }).stdout.trim();
+
+    // Create a branch off main so HEAD diverges (matches PR shape)
+    spawnSync("git", ["checkout", "-b", "feature"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    // PR commit: modify kept.ts, add new.ts; leave unchanged.ts alone
+    fs.writeFileSync(
+      path.join(tempDir, "kept.ts"),
+      "export function a() { if (1) { if (2) return 1; } }\n",
+    );
+    fs.writeFileSync(
+      path.join(tempDir, "new.ts"),
+      "export function c() { if (1) if (2) if (3) return 3; }\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "pr work"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const headSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    }).stdout.trim();
+
+    return { baseSha, headSha };
+  }
+
+  it("should filter rankings to changed files when --base is given", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toHaveProperty("delta");
+    expect(parsed.delta.base).toBe("main");
+    expect(parsed.delta.head).toBe("HEAD");
+    expect(parsed.delta.changedFiles.sort()).toEqual(["kept.ts", "new.ts"]);
+
+    // Rankings should only contain changed files
+    const seenFiles = new Set<string>();
+    for (const ranking of Object.values(parsed.rankings) as Array<{
+      entries: Array<{ file: string }>;
+    }>) {
+      for (const e of ranking.entries) seenFiles.add(e.file);
+    }
+    expect(seenFiles.has("unchanged.ts")).toBe(false);
+  });
+
+  it("should auto-detect default branch with bare --base", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--base"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.delta.base).toBe("main");
+  });
+
+  it("should accept a commit sha as --base", {
+    timeout: 30000,
+  }, () => {
+    const { baseSha } = setupDeltaRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--base", baseSha], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.delta.base).toBe(baseSha);
+    expect(parsed.delta.changedFiles.sort()).toEqual(["kept.ts", "new.ts"]);
+  });
+
+  it("should report empty delta when nothing changed", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepo();
+    // Switch back to main where HEAD == base
+    spawnSync("git", ["checkout", "main"], { cwd: tempDir, stdio: "pipe" });
+
+    const result = spawnSync("node", [BIN_PATH, "--base", "main"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("No files changed since main");
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.delta.changedFiles).toEqual([]);
+    expect(parsed.rankings).toEqual({});
+  });
+
+  it("should render a delta header in table format", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--format", "table"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Delta —");
+    expect(result.stdout).toContain("changed since main");
+  });
+
+  it("should fail when --base references a missing ref", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--base", "does-not-exist"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Failed to compute diff against base ref");
+  });
+
+  it("should fail bare --base when no default branch exists", {
+    timeout: 30000,
+  }, () => {
+    // Init a repo whose only branch is neither main nor master
+    spawnSync("git", ["init", "-b", "trunk"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    fs.writeFileSync(path.join(tempDir, "app.ts"), "console.log(1);\n");
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "init"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+
+    const result = spawnSync("node", [BIN_PATH, "--base"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("no default branch found");
+  });
 });

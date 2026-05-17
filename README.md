@@ -98,6 +98,23 @@ Tiers are relative to THIS codebase, not absolute quality grades. A "hot" file i
 
 A file may rank high in one dimension (e.g. complexity) but low in another (e.g. authors). Rankings with insufficient data are skipped with an explanation (e.g. the Fix Activity ranking requires 5+ `fix:` commits across 3+ files). Bot authors (`[bot]` suffix) are filtered automatically.
 
+#### Delta mode (`--base`)
+
+Filter rankings to files changed since a base ref. Useful in CI: on a PR, you usually only care about the files the PR actually touched, not the global hotspot picture.
+
+```bash
+obscene --base main          # diff against local main (auto-detects main/master)
+obscene --base                # bare: same as above, auto-detected
+obscene --base origin/main   # against a remote tracking branch
+obscene --base abc123        # against an arbitrary commit
+```
+
+What it does, mechanically: runs `git diff --name-only <ref>...HEAD` (three-dot: the merge-base of `<ref>` and HEAD up to HEAD — same semantics a PR uses), restricts the four rankings to that file set, and prints them. Tiers and confidence are computed *within the changed set*, so HOT means "hottest among files you touched", not "hottest in the whole repo".
+
+When nothing has changed, the command prints `No files changed since <ref>` to stderr and exits 0. The JSON output gains a top-level `delta` field with `{ base, head, changedFiles }`.
+
+This is the cheapest of three planned delta modes; complexity-delta and full-snapshot-diff modes are tracked separately.
+
 ### `obscene coupling`
 
 **Temporal coupling** (co-change history), not structural / type-level coupling. Detects files that frequently change together in the same commit but live in different directories — Tornhill's "temporal coupling" analysis from *Your Code as a Crime Scene* (2015). Surfaces hidden dependencies that aren't visible in imports or the module graph: pairs of files that *in practice* can't be changed independently, even when the type system says they can.
@@ -121,6 +138,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--top <n>` | `20` | Limit results (0 = all) |
 | `--months <n>` | `3` | Churn window in months |
 | `--format <type>` | `json` | `json` or `table` |
+| `--base [ref]` | — | Delta mode (hotspots only): filter rankings to files changed since this ref. Bare flag auto-detects `main`/`master` |
 | `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
 | `--exclude <patterns...>` | — | Additional exclusion patterns (also reads `.obsignore` / `.obsceneignore`) |
 
