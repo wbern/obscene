@@ -429,7 +429,7 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("Auth");
     expect(result).toContain("MinAuth");
     expect(result).toContain("—");
-    expect(result).toContain("AUTHORS");
+    expect(result).toContain("👥 AUTHORS × 🔄 CHURN");
   });
 
   it("renders MinAuth as em dash when minorAuthors is undefined", () => {
