@@ -3,26 +3,25 @@ declare const __VERSION__: string;
 import { existsSync, writeFileSync } from "node:fs";
 import { Command } from "commander";
 import {
-  computeAllRankings,
-  computeComposite,
   computeCoupling,
+  computeDelta,
+  computeHotspotsCore,
+  computeSnapshot,
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
   formatIgnoreFile,
-  getAuthorCommitCounts,
   getChangedFiles,
   getChurn,
   getCoChanges,
   getCommitsInWindow,
   getComplexityDeltas,
-  getDefects,
   getHistoryCoverage,
-  getNestingDepths,
   getTrackedFiles,
   readIgnoreFile,
   runScc,
   UNIVERSAL_IGNORE_GROUPS,
+  withWorktreeAt,
 } from "./analyze.js";
 import {
   formatCompositeTable,
@@ -35,6 +34,8 @@ import type {
   CouplingOutput,
   DeltaInfo,
   HistoryCoverageInfo,
+  HotspotDelta,
+  HotspotSnapshot,
   HotspotsOutput,
   ReportOutput,
 } from "./types.js";
@@ -55,6 +56,7 @@ interface SharedOpts {
 interface HotspotsOpts extends SharedOpts {
   months: string;
   base?: string | boolean;
+  fullDelta?: boolean;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -138,6 +140,10 @@ addSharedOptions(
   .option(
     "--base [ref]",
     "delta mode: filter rankings to files changed since this ref (bare flag auto-detects main/master)",
+  )
+  .option(
+    "--full-delta",
+    "with --base, run the full hotspots pipeline against the base ref too and emit a structured before/after diff (slower; tier transitions, score deltas, new/deleted files)",
   )
   .action((opts: HotspotsOpts) => {
     try {
@@ -281,7 +287,14 @@ function runHotspots(opts: HotspotsOpts): void {
   const allExcludes = resolveExcludes(opts.exclude);
   let files = runScc(allExcludes);
 
+  if (opts.fullDelta && opts.base === undefined) {
+    throw new Error(
+      "--full-delta requires --base. Specify a base ref, e.g. --base main --full-delta.",
+    );
+  }
+
   let delta: DeltaInfo | undefined;
+  let fullDelta: HotspotDelta | undefined;
   if (opts.base !== undefined) {
     const baseRef = resolveBaseRef(opts.base);
     const changed = getChangedFiles(baseRef);
@@ -303,35 +316,47 @@ function runHotspots(opts: HotspotsOpts): void {
       }
       return;
     }
-    files = files.filter((f) => changed.has(f.file));
     delta = {
       base: baseRef,
       head: "HEAD",
       changedFiles: [...changed].sort(),
     };
+
+    if (opts.fullDelta) {
+      // Mode C: full corpus on both sides. Don't filter `files`; the user
+      // wants whole-codebase rankings plus a cross-snapshot diff.
+      try {
+        const headCore = computeHotspotsCore(files, months, 0);
+        const headSnapshot: HotspotSnapshot = {
+          files,
+          rankings: headCore.rankings,
+          skipped: headCore.skipped,
+          composite: headCore.composite,
+          corpus: headCore.corpus,
+        };
+        const baseSnapshot = withWorktreeAt(baseRef, (path) =>
+          computeSnapshot({ months, excludes: allExcludes, cwd: path }),
+        );
+        fullDelta = computeDelta(baseRef, "HEAD", baseSnapshot, headSnapshot);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `warning: full-delta unavailable (${message}). ` +
+            "Continuing with HEAD-only rankings.\n",
+        );
+      }
+    } else {
+      files = files.filter((f) => changed.has(f.file));
+    }
   }
 
-  const churn = getChurn(months);
-  const defects = getDefects(months);
-  const authorCommitCounts = getAuthorCommitCounts(months);
-  const authors = new Map<string, number>();
-  for (const [file, perAuthor] of authorCommitCounts) {
-    authors.set(file, perAuthor.size);
-  }
-  const nestingDepths = getNestingDepths(files.map((f) => f.file));
-  const { rankings, skipped } = computeAllRankings(
+  const { rankings, skipped, composite, corpus } = computeHotspotsCore(
     files,
-    churn,
-    defects,
-    nestingDepths,
-    authors,
+    months,
     top,
-    authorCommitCounts,
   );
 
-  const composite = computeComposite(rankings, churn, top);
-
-  if (delta) {
+  if (delta && !opts.fullDelta) {
     const newComplexity = new Map<string, number>();
     const fileList: string[] = [];
     for (const f of files) {
@@ -350,22 +375,17 @@ function runHotspots(opts: HotspotsOpts): void {
     }
   }
 
-  let corpusTotalComplexity = 0;
-  for (const f of files) corpusTotalComplexity += f.complexity;
-
   const output: HotspotsOutput = {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
     historyCoverage,
     delta,
+    fullDelta,
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
-    corpus: {
-      fileCount: files.length,
-      totalComplexity: corpusTotalComplexity,
-    },
+    corpus,
   };
 
   if (opts.format === "table") {

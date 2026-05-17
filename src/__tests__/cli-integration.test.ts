@@ -688,6 +688,72 @@ describe("CLI Integration", () => {
     expect(result.stdout).toMatch(/new\.ts\s+.*?\s+new\s+.*?(HOT|WARM|COOL)/);
   });
 
+  // Mode C: --full-delta runs the snapshot pipeline against both refs and
+  // attaches a structured fullDelta block alongside the HEAD rankings.
+  it("should attach fullDelta with new files and corpus deltas under --full-delta", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--full-delta", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+
+    expect(parsed.fullDelta).toBeDefined();
+    expect(parsed.fullDelta.base).toBe("main");
+    expect(parsed.fullDelta.head).toBe("HEAD");
+    expect(parsed.fullDelta.newFiles).toContain("new.ts");
+    expect(parsed.fullDelta.deletedFiles).toEqual([]);
+    expect(parsed.fullDelta.perDimensionDeltas.fileCount.change).toBe(1);
+    // a.ts got deeper — total complexity should have risen at HEAD.
+    expect(
+      parsed.fullDelta.perDimensionDeltas.complexity.change,
+    ).toBeGreaterThan(0);
+    // Full mode keeps the whole corpus visible, not just the changed files.
+    const filesInRankings = new Set<string>();
+    for (const ranking of Object.values(parsed.rankings) as Array<{
+      entries: Array<{ file: string }>;
+    }>) {
+      for (const e of ranking.entries) filesInRankings.add(e.file);
+    }
+    expect(filesInRankings.has("c.ts")).toBe(true);
+  });
+
+  it("should render a Full Delta section in table format under --full-delta", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--full-delta", "--format", "table"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Full Delta");
+    expect(result.stdout).toContain("new.ts");
+  });
+
+  it("should reject --full-delta without --base", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync("node", [BIN_PATH, "--full-delta"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--full-delta requires --base");
+  });
+
   it("should fail bare --base when no default branch exists", {
     timeout: 30000,
   }, () => {

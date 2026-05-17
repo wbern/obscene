@@ -118,10 +118,77 @@ export interface HotspotsOutput {
   churnWindow: string;
   historyCoverage?: HistoryCoverageInfo;
   delta?: DeltaInfo;
+  fullDelta?: HotspotDelta;
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
   corpus?: {
+    fileCount: number;
+    totalComplexity: number;
+  };
+}
+
+/**
+ * Per-file composite-score change between two snapshots. `oldScore`/`oldTier`
+ * are null when the file didn't exist at the base ref; `newScore`/`newTier`
+ * are null when the file was deleted at HEAD. `transition` rolls up the
+ * common cases callers want without reimplementing the lookup.
+ */
+export interface ScoreChange {
+  file: string;
+  oldScore: number | null;
+  newScore: number | null;
+  change: number | null;
+  percentChange: number | null;
+  oldTier: Tier | null;
+  newTier: Tier | null;
+  transition:
+    | "new"
+    | "deleted"
+    | "entered-hot"
+    | "entered-warm"
+    | "exited-hot"
+    | "exited-warm"
+    | "stable";
+}
+
+/**
+ * Full before/after snapshot diff produced by Mode C (`--full-delta`).
+ *
+ * Tier transitions reflect the *relative* tiers in each snapshot (HOT/WARM/COOL
+ * are percentile bands within that snapshot's corpus). A file can shift tiers
+ * because its absolute score moved OR because the rest of the corpus moved
+ * around it — `scoreChanges` carries the absolute delta so callers can
+ * disambiguate. See README "Delta modes" for details.
+ */
+export interface HotspotDelta {
+  base: string;
+  head: string;
+  newFiles: string[];
+  deletedFiles: string[];
+  tierTransitions: {
+    enteredHot: string[];
+    enteredWarm: string[];
+    exitedHot: string[];
+    exitedWarm: string[];
+  };
+  scoreChanges: ScoreChange[];
+  perDimensionDeltas: {
+    complexity: { oldTotal: number; newTotal: number; change: number };
+    fileCount: { oldTotal: number; newTotal: number; change: number };
+  };
+}
+
+/**
+ * Result of running the hotspot pipeline once (against HEAD or a base
+ * worktree). Mode C runs this twice and feeds the pair to `computeDelta`.
+ */
+export interface HotspotSnapshot {
+  files: FileMetrics[];
+  rankings: Record<string, RankingOutput>;
+  skipped: Record<string, SkippedRanking>;
+  composite: CompositeOutput;
+  corpus: {
     fileCount: number;
     totalComplexity: number;
   };

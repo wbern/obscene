@@ -4,6 +4,9 @@ import {
   computeAllRankings,
   computeComposite,
   computeCoupling,
+  computeDelta,
+  computeHotspotsCore,
+  computeSnapshot,
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
@@ -25,8 +28,10 @@ import {
   withWorktreeAt,
 } from "./analyze.js";
 import type {
+  CompositeOutput,
   ConfidenceInfo,
   FileMetrics,
+  HotspotSnapshot,
   RankingOutput,
   Tier,
 } from "./types.js";
@@ -2794,5 +2799,264 @@ describe("getComplexityDeltas", () => {
 
     const result = getComplexityDeltas("main", ["src/gone.ts"], new Map());
     expect(result.size).toBe(0);
+  });
+});
+
+function snapshotFrom(opts: {
+  files: { file: string; complexity: number }[];
+  compositeEntries: { file: string; score: number; tier: Tier }[];
+}): HotspotSnapshot {
+  const fileMetrics: FileMetrics[] = opts.files.map((f) => ({
+    file: f.file,
+    code: 100,
+    lines: 120,
+    complexity: f.complexity,
+    comments: 0,
+    complexityDensity: f.complexity / 100,
+  }));
+  const totalComplexity = opts.files.reduce((s, f) => s + f.complexity, 0);
+  const composite: CompositeOutput = {
+    label: "Combined",
+    scoreFormula: "reciprocal rank fusion across all dimensions",
+    totalScore: opts.compositeEntries.reduce((s, e) => s + e.score, 0),
+    tierCounts: { hot: 0, warm: 0, cool: 0 },
+    totalDimensions: 4,
+    totalEntries: opts.compositeEntries.length,
+    showing: opts.compositeEntries.length,
+    entries: opts.compositeEntries.map((e) => ({
+      ...e,
+      percentOfTotal: 0,
+      churn: 0,
+      dimensionCount: 4,
+    })),
+    confidence: {
+      level: "plausible",
+      reason: "test",
+      inputs: {
+        metric: "inputRankings",
+        value: 4,
+        thresholds: { weak: 2, plausible: 3, acceptable: 4 },
+      },
+      source: "test",
+    },
+  };
+  return {
+    files: fileMetrics,
+    rankings: {},
+    skipped: {},
+    composite,
+    corpus: { fileCount: opts.files.length, totalComplexity },
+  };
+}
+
+describe("computeDelta", () => {
+  it("returns empty transitions for identical snapshots", () => {
+    const snap = snapshotFrom({
+      files: [{ file: "a.ts", complexity: 10 }],
+      compositeEntries: [{ file: "a.ts", score: 0.1, tier: "hot" }],
+    });
+    const result = computeDelta("base", "HEAD", snap, snap);
+    expect(result.newFiles).toEqual([]);
+    expect(result.deletedFiles).toEqual([]);
+    expect(result.tierTransitions.enteredHot).toEqual([]);
+    expect(result.tierTransitions.exitedHot).toEqual([]);
+    expect(result.scoreChanges.every((c) => c.change === 0)).toBe(true);
+    expect(result.perDimensionDeltas.complexity.change).toBe(0);
+    expect(result.perDimensionDeltas.fileCount.change).toBe(0);
+  });
+
+  it("identifies new and deleted files", () => {
+    const base = snapshotFrom({
+      files: [{ file: "old.ts", complexity: 10 }],
+      compositeEntries: [{ file: "old.ts", score: 0.1, tier: "hot" }],
+    });
+    const head = snapshotFrom({
+      files: [{ file: "new.ts", complexity: 7 }],
+      compositeEntries: [{ file: "new.ts", score: 0.05, tier: "hot" }],
+    });
+    const result = computeDelta("base", "HEAD", base, head);
+    expect(result.newFiles).toEqual(["new.ts"]);
+    expect(result.deletedFiles).toEqual(["old.ts"]);
+    const newEntry = result.scoreChanges.find((c) => c.file === "new.ts");
+    const oldEntry = result.scoreChanges.find((c) => c.file === "old.ts");
+    expect(newEntry?.transition).toBe("new");
+    expect(newEntry?.oldScore).toBeNull();
+    expect(newEntry?.change).toBeNull();
+    expect(oldEntry?.transition).toBe("deleted");
+    expect(oldEntry?.newScore).toBeNull();
+    expect(result.perDimensionDeltas.complexity.change).toBe(-3);
+  });
+
+  it("detects upward and downward tier transitions", () => {
+    const base = snapshotFrom({
+      files: [
+        { file: "rising.ts", complexity: 5 },
+        { file: "falling.ts", complexity: 50 },
+        { file: "stable.ts", complexity: 20 },
+        { file: "warming.ts", complexity: 5 },
+        { file: "cooling.ts", complexity: 20 },
+      ],
+      compositeEntries: [
+        { file: "rising.ts", score: 0.01, tier: "cool" },
+        { file: "falling.ts", score: 0.2, tier: "hot" },
+        { file: "stable.ts", score: 0.1, tier: "warm" },
+        { file: "warming.ts", score: 0.02, tier: "cool" },
+        { file: "cooling.ts", score: 0.08, tier: "warm" },
+      ],
+    });
+    const head = snapshotFrom({
+      files: [
+        { file: "rising.ts", complexity: 60 },
+        { file: "falling.ts", complexity: 5 },
+        { file: "stable.ts", complexity: 20 },
+        { file: "warming.ts", complexity: 20 },
+        { file: "cooling.ts", complexity: 5 },
+      ],
+      compositeEntries: [
+        { file: "rising.ts", score: 0.25, tier: "hot" },
+        { file: "falling.ts", score: 0.01, tier: "cool" },
+        { file: "stable.ts", score: 0.1, tier: "warm" },
+        { file: "warming.ts", score: 0.09, tier: "warm" },
+        { file: "cooling.ts", score: 0.02, tier: "cool" },
+      ],
+    });
+    const result = computeDelta("base", "HEAD", base, head);
+    expect(result.tierTransitions.enteredHot).toEqual(["rising.ts"]);
+    expect(result.tierTransitions.exitedHot).toEqual(["falling.ts"]);
+    expect(result.tierTransitions.enteredWarm).toEqual(["warming.ts"]);
+    expect(result.tierTransitions.exitedWarm).toEqual(["cooling.ts"]);
+    const stable = result.scoreChanges.find((c) => c.file === "stable.ts");
+    expect(stable?.transition).toBe("stable");
+  });
+
+  it("computes percentChange and sorts by magnitude", () => {
+    const base = snapshotFrom({
+      files: [
+        { file: "big.ts", complexity: 100 },
+        { file: "small.ts", complexity: 10 },
+      ],
+      compositeEntries: [
+        { file: "big.ts", score: 1.0, tier: "hot" },
+        { file: "small.ts", score: 0.1, tier: "warm" },
+      ],
+    });
+    const head = snapshotFrom({
+      files: [
+        { file: "big.ts", complexity: 50 },
+        { file: "small.ts", complexity: 12 },
+      ],
+      compositeEntries: [
+        { file: "big.ts", score: 0.5, tier: "hot" },
+        { file: "small.ts", score: 0.12, tier: "warm" },
+      ],
+    });
+    const result = computeDelta("base", "HEAD", base, head);
+    // big.ts has larger |change|, so it sorts first.
+    expect(result.scoreChanges[0].file).toBe("big.ts");
+    expect(result.scoreChanges[0].percentChange).toBe(-50);
+    const small = result.scoreChanges.find((c) => c.file === "small.ts");
+    expect(small?.percentChange).toBe(20);
+  });
+
+  it("returns null percentChange when oldScore is zero", () => {
+    const base = snapshotFrom({
+      files: [{ file: "x.ts", complexity: 1 }],
+      compositeEntries: [{ file: "x.ts", score: 0, tier: "cool" }],
+    });
+    const head = snapshotFrom({
+      files: [{ file: "x.ts", complexity: 5 }],
+      compositeEntries: [{ file: "x.ts", score: 0.5, tier: "hot" }],
+    });
+    const result = computeDelta("base", "HEAD", base, head);
+    const entry = result.scoreChanges.find((c) => c.file === "x.ts");
+    expect(entry?.percentChange).toBeNull();
+    expect(entry?.transition).toBe("entered-hot");
+  });
+});
+
+describe("computeHotspotsCore", () => {
+  it("assembles rankings, composite, and corpus from file + git data", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 30,
+        comments: 0,
+        complexityDensity: 0.3,
+      },
+      {
+        file: "src/b.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+      {
+        file: "src/c.ts",
+        code: 30,
+        lines: 35,
+        complexity: 5,
+        comments: 0,
+        complexityDensity: 0.16,
+      },
+    ];
+    // git log calls in order: getChurn, getDefects, getAuthorCommitCounts.
+    mockExecSync
+      .mockReturnValueOnce(
+        Buffer.from("src/a.ts\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\n"),
+      )
+      .mockReturnValueOnce(Buffer.from("src/a.ts\n"))
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/a.ts\nCOMMIT_SEP\nalice\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
+        ),
+      );
+    // getNestingDepths reads each file.
+    mockReadFileSync.mockImplementation(
+      () =>
+        "function f() {\n  if (x) {\n    if (y) {\n      doit();\n    }\n  }\n}\n",
+    );
+    const result = computeHotspotsCore(files, 3, 0);
+    expect(result.corpus).toEqual({ fileCount: 3, totalComplexity: 45 });
+    expect(result.churn.get("src/a.ts")).toBe(2);
+    expect(result.rankings.complexity?.entries.length ?? 0).toBeGreaterThan(0);
+    expect(result.composite.totalEntries).toBeGreaterThan(0);
+  });
+});
+
+describe("computeSnapshot", () => {
+  it("runs scc + computeHotspotsCore and returns a HotspotSnapshot", () => {
+    // First execSync call is runScc.
+    mockExecSync
+      .mockReturnValueOnce(
+        Buffer.from(
+          JSON.stringify([
+            {
+              Name: "TypeScript",
+              Files: [
+                {
+                  Location: "src/a.ts",
+                  Code: 80,
+                  Lines: 90,
+                  Complexity: 12,
+                  Comment: 2,
+                },
+              ],
+            },
+          ]),
+        ),
+      )
+      // Then computeHotspotsCore makes 3 git log calls.
+      .mockReturnValueOnce(Buffer.from("src/a.ts\nsrc/a.ts\n"))
+      .mockReturnValueOnce(Buffer.from(""))
+      .mockReturnValueOnce(Buffer.from("COMMIT_SEP\nalice\nsrc/a.ts\n"));
+    mockReadFileSync.mockImplementation(() => "if (x) {\n  do();\n}\n");
+    const snap = computeSnapshot({ months: 3, excludes: [] });
+    expect(snap.files.length).toBe(1);
+    expect(snap.files[0].file).toBe("src/a.ts");
+    expect(snap.corpus.fileCount).toBe(1);
+    expect(snap.corpus.totalComplexity).toBe(12);
   });
 });

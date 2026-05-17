@@ -117,7 +117,32 @@ Each ranking entry also carries `complexityDelta: { oldComplexity, newComplexity
 
 If the worktree allocation fails (bad ref, fs error), obscene falls back to the unaugmented delta view and surfaces a stderr warning — the rest of the report still works.
 
-A full before/after snapshot diff with tier transitions is tracked separately.
+#### Full delta mode (`--base --full-delta`)
+
+Adds a structured before/after snapshot diff alongside the standard ranking output. Where bare `--base` filters rankings to changed files and attaches per-file complexity deltas, `--full-delta` runs the *entire* hotspot pipeline against both refs and surfaces tier transitions, new/deleted files, and corpus-level deltas.
+
+```bash
+obscene --base main --full-delta
+obscene --base main --full-delta --format table
+```
+
+Output gains a top-level `fullDelta` block with `tierTransitions` (`enteredHot`/`enteredWarm`/`exitedHot`/`exitedWarm`), `newFiles`, `deletedFiles`, `scoreChanges` (per-file absolute and percent score deltas, sorted by magnitude), and `perDimensionDeltas` (corpus-wide complexity and file count totals). Rankings are shown for the *full* corpus at HEAD — not filtered — so you can correlate global hotspots against the diff.
+
+##### When to use which mode
+
+| Flag | Cost | Output |
+|------|------|--------|
+| `--base` alone | One extra scc run on the base worktree (filtered to changed files) | Rankings filtered to changed files + per-file `Δ` column |
+| `--base --full-delta` | One full pipeline run on the base worktree (scc + git log + ranking) | Full-corpus rankings at HEAD + `fullDelta` block with tier transitions, new/deleted files, corpus deltas |
+
+Use `--base` alone for PR-scoped review. Use `--full-delta` for trend reports (release-to-release, weekly snapshot) where you want to see how the whole codebase moved, not just the diff.
+
+##### Relative-percentile tier caveat
+
+Tiers are percentile bands within each snapshot's own corpus, not absolute risk grades. A file can enter HOT because its absolute score moved up, **or** because the rest of the corpus moved down around it. The two are not the same story:
+
+- "rising.ts entered HOT" might mean rising.ts got 5× more complex *or* it stayed the same while everything around it got cleaned up.
+- `scoreChanges` carries the **absolute** score delta and percent change, so you can disambiguate. Use `tierTransitions` to know what bands moved, and `scoreChanges` to know how far.
 
 ### `obscene coupling`
 
@@ -143,6 +168,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--months <n>` | `3` | Churn window in months |
 | `--format <type>` | `json` | `json` or `table` |
 | `--base [ref]` | — | Delta mode (hotspots only): filter rankings to files changed since this ref. Bare flag auto-detects `main`/`master` |
+| `--full-delta` | — | With `--base`: emit a structured before/after diff with tier transitions and corpus deltas (slower; runs the full pipeline against both refs) |
 | `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
 | `--exclude <patterns...>` | — | Additional exclusion patterns (also reads `.obsignore` / `.obsceneignore`) |
 

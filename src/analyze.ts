@@ -11,9 +11,12 @@ import type {
   CouplingEntry,
   FileMetrics,
   HistoryCoverageInfo,
+  HotspotDelta,
+  HotspotSnapshot,
   RankingEntry,
   RankingOutput,
   SccLanguage,
+  ScoreChange,
   SkippedRanking,
   Tier,
 } from "./types.js";
@@ -1313,6 +1316,203 @@ export function computeComposite(
     showing: limited.length,
     entries: limited,
     confidence,
+  };
+}
+
+/**
+ * Build the rankings + composite + corpus for a given file set. Extracted
+ * from runHotspots so Mode C can call it twice (HEAD and base worktree)
+ * with the same logic.
+ */
+export function computeHotspotsCore(
+  files: FileMetrics[],
+  months: number,
+  top: number,
+  cwd?: string,
+): {
+  rankings: Record<string, RankingOutput>;
+  skipped: Record<string, SkippedRanking>;
+  composite: CompositeOutput;
+  corpus: { fileCount: number; totalComplexity: number };
+  churn: Map<string, number>;
+} {
+  const churn = getChurn(months, cwd);
+  const defects = getDefects(months, cwd);
+  const authorCommitCounts = getAuthorCommitCounts(months, cwd);
+  const authors = new Map<string, number>();
+  for (const [file, perAuthor] of authorCommitCounts) {
+    authors.set(file, perAuthor.size);
+  }
+  const nestingDepths = getNestingDepths(
+    files.map((f) => f.file),
+    cwd,
+  );
+  const { rankings, skipped } = computeAllRankings(
+    files,
+    churn,
+    defects,
+    nestingDepths,
+    authors,
+    top,
+    authorCommitCounts,
+  );
+  const composite = computeComposite(rankings, churn, top);
+  let totalComplexity = 0;
+  for (const f of files) totalComplexity += f.complexity;
+  return {
+    rankings,
+    skipped,
+    composite,
+    corpus: { fileCount: files.length, totalComplexity },
+    churn,
+  };
+}
+
+/**
+ * Run the full snapshot pipeline (scc + git history + ranking) against a
+ * single working tree. Mode C runs this twice — once at HEAD, once inside
+ * a detached worktree at the base ref — and passes both to `computeDelta`.
+ *
+ * `top` is set to 0 here so the snapshot keeps every file; the diff is
+ * computed against the full corpus and the CLI applies its own `top` cap
+ * to the resulting score-change list.
+ */
+export function computeSnapshot(opts: {
+  months: number;
+  excludes: string[];
+  cwd?: string;
+}): HotspotSnapshot {
+  const files = runScc(opts.excludes, opts.cwd);
+  const core = computeHotspotsCore(files, opts.months, 0, opts.cwd);
+  return {
+    files,
+    rankings: core.rankings,
+    skipped: core.skipped,
+    composite: core.composite,
+    corpus: core.corpus,
+  };
+}
+
+/**
+ * Compare two HotspotSnapshot results and produce a structured diff. Tier
+ * transitions are computed on the relative (percentile) tiers carried by
+ * each snapshot — see the HotspotDelta doc and the README for the
+ * relativity caveat. `scoreChanges` carries absolute deltas so callers can
+ * disambiguate "file got worse" from "rest of corpus got better".
+ */
+export function computeDelta(
+  base: string,
+  head: string,
+  baseSnapshot: HotspotSnapshot,
+  headSnapshot: HotspotSnapshot,
+): HotspotDelta {
+  const baseEntries = new Map<string, { score: number; tier: Tier }>();
+  for (const e of baseSnapshot.composite.entries) {
+    baseEntries.set(e.file, { score: e.score, tier: e.tier });
+  }
+  const headEntries = new Map<string, { score: number; tier: Tier }>();
+  for (const e of headSnapshot.composite.entries) {
+    headEntries.set(e.file, { score: e.score, tier: e.tier });
+  }
+
+  const baseFiles = new Set(baseSnapshot.files.map((f) => f.file));
+  const headFiles = new Set(headSnapshot.files.map((f) => f.file));
+
+  const newFiles: string[] = [];
+  const deletedFiles: string[] = [];
+  for (const f of headFiles) {
+    if (!baseFiles.has(f)) newFiles.push(f);
+  }
+  for (const f of baseFiles) {
+    if (!headFiles.has(f)) deletedFiles.push(f);
+  }
+  newFiles.sort();
+  deletedFiles.sort();
+
+  const allFiles = new Set<string>([
+    ...baseEntries.keys(),
+    ...headEntries.keys(),
+  ]);
+  const scoreChanges: ScoreChange[] = [];
+  const enteredHot: string[] = [];
+  const enteredWarm: string[] = [];
+  const exitedHot: string[] = [];
+  const exitedWarm: string[] = [];
+
+  for (const file of allFiles) {
+    const before = baseEntries.get(file);
+    const after = headEntries.get(file);
+    const oldScore = before?.score ?? null;
+    const newScore = after?.score ?? null;
+    const oldTier = before?.tier ?? null;
+    const newTier = after?.tier ?? null;
+    const change =
+      oldScore !== null && newScore !== null ? newScore - oldScore : null;
+    const percentChange =
+      change !== null && oldScore !== null && oldScore !== 0
+        ? Math.round((change / oldScore) * 1000) / 10
+        : null;
+
+    let transition: ScoreChange["transition"];
+    if (oldTier === null) transition = "new";
+    else if (newTier === null) transition = "deleted";
+    else if (oldTier !== "hot" && newTier === "hot") transition = "entered-hot";
+    else if (oldTier === "cool" && newTier === "warm")
+      transition = "entered-warm";
+    else if (oldTier === "hot" && newTier !== "hot") transition = "exited-hot";
+    else if (oldTier === "warm" && newTier === "cool")
+      transition = "exited-warm";
+    else transition = "stable";
+
+    if (transition === "entered-hot") enteredHot.push(file);
+    else if (transition === "entered-warm") enteredWarm.push(file);
+    else if (transition === "exited-hot") exitedHot.push(file);
+    else if (transition === "exited-warm") exitedWarm.push(file);
+
+    scoreChanges.push({
+      file,
+      oldScore,
+      newScore,
+      change: change !== null ? Math.round(change * 10000) / 10000 : null,
+      percentChange,
+      oldTier,
+      newTier,
+      transition,
+    });
+  }
+
+  scoreChanges.sort((a, b) => {
+    const aMag = Math.abs(a.change ?? 0);
+    const bMag = Math.abs(b.change ?? 0);
+    if (aMag !== bMag) return bMag - aMag;
+    return a.file.localeCompare(b.file);
+  });
+  enteredHot.sort();
+  enteredWarm.sort();
+  exitedHot.sort();
+  exitedWarm.sort();
+
+  return {
+    base,
+    head,
+    newFiles,
+    deletedFiles,
+    tierTransitions: { enteredHot, enteredWarm, exitedHot, exitedWarm },
+    scoreChanges,
+    perDimensionDeltas: {
+      complexity: {
+        oldTotal: baseSnapshot.corpus.totalComplexity,
+        newTotal: headSnapshot.corpus.totalComplexity,
+        change:
+          headSnapshot.corpus.totalComplexity -
+          baseSnapshot.corpus.totalComplexity,
+      },
+      fileCount: {
+        oldTotal: baseSnapshot.corpus.fileCount,
+        newTotal: headSnapshot.corpus.fileCount,
+        change: headSnapshot.corpus.fileCount - baseSnapshot.corpus.fileCount,
+      },
+    },
   };
 }
 

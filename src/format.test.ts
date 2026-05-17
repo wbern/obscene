@@ -9,6 +9,7 @@ import type {
   CompositeOutput,
   ConfidenceInfo,
   CouplingOutput,
+  HotspotDelta,
   HotspotsOutput,
   ReportOutput,
 } from "./types.js";
@@ -1429,5 +1430,101 @@ describe("formatCompositeTable", () => {
     const headerLine = result.split("\n").find((l) => l.includes("Score"));
     expect(headerLine).toContain("Δ");
     expect(result).toMatch(/\s+0\s+/);
+  });
+});
+
+describe("formatHotspotsTable fullDelta section", () => {
+  function baseFullDelta(over: Partial<HotspotDelta> = {}): HotspotDelta {
+    return {
+      base: "main",
+      head: "HEAD",
+      newFiles: [],
+      deletedFiles: [],
+      tierTransitions: {
+        enteredHot: [],
+        enteredWarm: [],
+        exitedHot: [],
+        exitedWarm: [],
+      },
+      scoreChanges: [],
+      perDimensionDeltas: {
+        complexity: { oldTotal: 100, newTotal: 100, change: 0 },
+        fileCount: { oldTotal: 10, newTotal: 10, change: 0 },
+      },
+      ...over,
+    };
+  }
+
+  function outputWithFullDelta(fd: HotspotDelta): HotspotsOutput {
+    return {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {},
+      corpus: { fileCount: 0, totalComplexity: 0 },
+      fullDelta: fd,
+    };
+  }
+
+  it("renders an empty state when nothing transitioned or moved", () => {
+    const out = formatHotspotsTable(outputWithFullDelta(baseFullDelta()));
+    expect(out).toContain("Full Delta — main → HEAD");
+    expect(out).toContain("No tier transitions, no new/deleted files.");
+    expect(out).toContain("complexity 100 → 100 (0)");
+    expect(out).toContain("files 10 → 10 (0)");
+  });
+
+  it("renders all four tier transitions and signed corpus deltas", () => {
+    const fd = baseFullDelta({
+      tierTransitions: {
+        enteredHot: ["a.ts"],
+        enteredWarm: ["b.ts"],
+        exitedHot: ["c.ts"],
+        exitedWarm: ["d.ts"],
+      },
+      perDimensionDeltas: {
+        complexity: { oldTotal: 100, newTotal: 150, change: 50 },
+        fileCount: { oldTotal: 10, newTotal: 12, change: 2 },
+      },
+    });
+    const out = formatHotspotsTable(outputWithFullDelta(fd));
+    expect(out).toContain("entered HOT (1)");
+    expect(out).toContain("a.ts");
+    expect(out).toContain("entered WARM (1)");
+    expect(out).toContain("b.ts");
+    expect(out).toContain("exited HOT (1)");
+    expect(out).toContain("c.ts");
+    expect(out).toContain("exited WARM (1)");
+    expect(out).toContain("d.ts");
+    expect(out).toContain("complexity 100 → 150 (+50)");
+    expect(out).toContain("files 10 → 12 (+2)");
+  });
+
+  it("lists new and deleted files, with overflow ellipsis past 10", () => {
+    const many = Array.from({ length: 12 }, (_, i) => `new${i}.ts`);
+    const manyDeleted = Array.from({ length: 11 }, (_, i) => `old${i}.ts`);
+    const fd = baseFullDelta({
+      newFiles: many,
+      deletedFiles: manyDeleted,
+    });
+    const out = formatHotspotsTable(outputWithFullDelta(fd));
+    expect(out).toContain("new files (12)");
+    expect(out).toContain("new0.ts");
+    expect(out).toContain("… and 2 more");
+    expect(out).toContain("deleted files (11)");
+    expect(out).toContain("… and 1 more");
+  });
+
+  it("renders short new/deleted lists inline without ellipsis", () => {
+    const fd = baseFullDelta({
+      newFiles: ["x.ts"],
+      deletedFiles: ["y.ts"],
+    });
+    const out = formatHotspotsTable(outputWithFullDelta(fd));
+    expect(out).toContain("new files (1)");
+    expect(out).toContain("x.ts");
+    expect(out).toContain("deleted files (1)");
+    expect(out).toContain("y.ts");
+    expect(out).not.toContain("more");
   });
 });

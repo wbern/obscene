@@ -14,6 +14,7 @@ import type {
   ConfidenceInfo,
   ConfidenceLevel,
   CouplingOutput,
+  HotspotDelta,
   HotspotsOutput,
   RankingOutput,
   ReportOutput,
@@ -267,9 +268,80 @@ function formatRankingTable(
   return lines;
 }
 
+function formatFullDeltaSection(fd: HotspotDelta): string[] {
+  const lines: string[] = [];
+  lines.push("");
+  lines.push(pc.cyan(`Full Delta — ${fd.base} → ${fd.head}`));
+  lines.push(
+    pc.dim(
+      "Tier transitions are relative percentile bands — a file can shift tiers " +
+        "because its absolute score moved OR because the rest of the corpus " +
+        "moved around it. scoreChanges carries the absolute delta.",
+    ),
+  );
+
+  const { enteredHot, enteredWarm, exitedHot, exitedWarm } = fd.tierTransitions;
+  if (
+    enteredHot.length === 0 &&
+    enteredWarm.length === 0 &&
+    exitedHot.length === 0 &&
+    exitedWarm.length === 0 &&
+    fd.newFiles.length === 0 &&
+    fd.deletedFiles.length === 0
+  ) {
+    lines.push(pc.dim("No tier transitions, no new/deleted files."));
+  } else {
+    if (enteredHot.length > 0) {
+      lines.push(pc.red(`  ↑ entered HOT (${enteredHot.length}):`));
+      for (const f of enteredHot) lines.push(`    ${truncate(f, 80)}`);
+    }
+    if (enteredWarm.length > 0) {
+      lines.push(pc.yellow(`  ↑ entered WARM (${enteredWarm.length}):`));
+      for (const f of enteredWarm) lines.push(`    ${truncate(f, 80)}`);
+    }
+    if (exitedHot.length > 0) {
+      lines.push(pc.green(`  ↓ exited HOT (${exitedHot.length}):`));
+      for (const f of exitedHot) lines.push(`    ${truncate(f, 80)}`);
+    }
+    if (exitedWarm.length > 0) {
+      lines.push(pc.green(`  ↓ exited WARM (${exitedWarm.length}):`));
+      for (const f of exitedWarm) lines.push(`    ${truncate(f, 80)}`);
+    }
+    if (fd.newFiles.length > 0) {
+      lines.push(pc.cyan(`  + new files (${fd.newFiles.length}):`));
+      for (const f of fd.newFiles.slice(0, 10))
+        lines.push(`    ${truncate(f, 80)}`);
+      if (fd.newFiles.length > 10) {
+        lines.push(pc.dim(`    … and ${fd.newFiles.length - 10} more`));
+      }
+    }
+    if (fd.deletedFiles.length > 0) {
+      lines.push(pc.cyan(`  − deleted files (${fd.deletedFiles.length}):`));
+      for (const f of fd.deletedFiles.slice(0, 10))
+        lines.push(`    ${truncate(f, 80)}`);
+      if (fd.deletedFiles.length > 10) {
+        lines.push(pc.dim(`    … and ${fd.deletedFiles.length - 10} more`));
+      }
+    }
+  }
+
+  const cx = fd.perDimensionDeltas.complexity;
+  const fc = fd.perDimensionDeltas.fileCount;
+  const cxSign = cx.change > 0 ? "+" : "";
+  const fcSign = fc.change > 0 ? "+" : "";
+  lines.push("");
+  lines.push(
+    pc.dim(
+      `Corpus: complexity ${cx.oldTotal} → ${cx.newTotal} (${cxSign}${cx.change}) · ` +
+        `files ${fc.oldTotal} → ${fc.newTotal} (${fcSign}${fc.change})`,
+    ),
+  );
+  return lines;
+}
+
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
-  const { churnWindow, rankings, corpus, delta } = output;
+  const { churnWindow, rankings, corpus, delta, fullDelta } = output;
 
   if (delta) {
     lines.push(
@@ -284,6 +356,9 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
       lines.push(pc.dim("No changes — nothing to rank."));
       return lines.join("\n");
     }
+  }
+  if (fullDelta) {
+    lines.push(...formatFullDeltaSection(fullDelta));
   }
   lines.push(`Hotspots — ${churnWindow} churn window`);
   if (corpus && corpus.fileCount > 0 && corpus.totalComplexity === 0) {
