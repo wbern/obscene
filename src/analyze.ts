@@ -764,6 +764,9 @@ export function runSccOnFiles(
       "scc not found. Install it: https://github.com/boyter/scc#install",
     );
   }
+  if (proc.error) {
+    throw new Error(`scc spawn failed: ${proc.error.message}`);
+  }
   if (proc.status !== 0) {
     throw new Error(
       `scc failed on base worktree: ${proc.stderr?.toString().trim() || "unknown error"}`,
@@ -801,31 +804,26 @@ export function withWorktreeAt<T>(ref: string, fn: (path: string) => T): T {
   for (const key of Object.keys(gitEnv)) {
     if (key.startsWith("GIT_")) delete gitEnv[key];
   }
-  try {
-    execSync(`git worktree add --detach ${JSON.stringify(dir)} ${ref}`, {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: gitEnv,
-    });
-  } catch (err: unknown) {
+  const add = spawnSync("git", ["worktree", "add", "--detach", dir, ref], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: gitEnv,
+  });
+  if (add.status !== 0) {
     rmSync(dir, { recursive: true, force: true });
-    const detail =
-      err && typeof err === "object" && "stderr" in err && err.stderr
-        ? `: ${String(err.stderr).trim()}`
-        : "";
+    const detail = add.stderr?.toString().trim();
     throw new Error(
-      `Could not create worktree at '${ref}'${detail}. ` +
+      `Could not create worktree at '${ref}'${detail ? `: ${detail}` : ""}. ` +
         "Verify the ref exists (e.g. 'git rev-parse --verify <ref>').",
     );
   }
   try {
     return fn(dir);
   } finally {
-    try {
-      execSync(`git worktree remove --force ${JSON.stringify(dir)}`, {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: gitEnv,
-      });
-    } catch {
+    const remove = spawnSync("git", ["worktree", "remove", "--force", dir], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: gitEnv,
+    });
+    if (remove.status !== 0) {
       // Worktree may already be gone or git failed; force-remove the dir to
       // avoid leaving a stale tree on disk. The next worktree-prune will
       // sweep the metadata.

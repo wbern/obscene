@@ -684,8 +684,8 @@ describe("CLI Integration", () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Δ");
-    // New file row labelled "new"
-    expect(result.stdout).toMatch(/new\.ts.*new/);
+    // New file row labelled "new" in the Δ column (before the Tier column).
+    expect(result.stdout).toMatch(/new\.ts\s+.*?\s+new\s+.*?(HOT|WARM|COOL)/);
   });
 
   it("should fail bare --base when no default branch exists", {

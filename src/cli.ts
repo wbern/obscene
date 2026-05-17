@@ -333,13 +333,13 @@ function runHotspots(opts: HotspotsOpts): void {
 
   if (delta) {
     const newComplexity = new Map<string, number>();
-    for (const f of files) newComplexity.set(f.file, f.complexity);
+    const fileList: string[] = [];
+    for (const f of files) {
+      newComplexity.set(f.file, f.complexity);
+      fileList.push(f.file);
+    }
     try {
-      const deltas = getComplexityDeltas(
-        delta.base,
-        files.map((f) => f.file),
-        newComplexity,
-      );
+      const deltas = getComplexityDeltas(delta.base, fileList, newComplexity);
       attachComplexityDeltas(rankings, composite, deltas);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

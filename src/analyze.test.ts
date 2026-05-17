@@ -2519,6 +2519,25 @@ describe("runSccOnFiles", () => {
     );
   });
 
+  it("surfaces non-ENOENT spawn errors", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: null,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from(""),
+      error: Object.assign(new Error("EACCES: permission denied"), {
+        code: "EACCES",
+      }),
+      pid: 0,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    expect(() => runSccOnFiles("/tmp/wt", ["src/a.ts"])).toThrow(
+      /scc spawn failed: EACCES: permission denied/,
+    );
+  });
+
   it("throws when scc exits non-zero", () => {
     mockExistsSync.mockReturnValue(true);
     mockSpawnSync.mockReturnValue({
@@ -2551,31 +2570,75 @@ describe("runSccOnFiles", () => {
 });
 
 describe("withWorktreeAt", () => {
+  const worktreeOk = {
+    status: 0,
+    stdout: Buffer.from(""),
+    stderr: Buffer.from(""),
+  } as unknown as ReturnType<typeof spawnSync>;
+
   it("creates a worktree, runs the callback, and removes the worktree", () => {
     mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
-    mockExecSync.mockReturnValue(Buffer.from(""));
+    mockSpawnSync.mockReturnValue(worktreeOk);
 
     const result = withWorktreeAt("main", (path) => `ran-in:${path}`);
 
     expect(result).toBe("ran-in:/tmp/obscene-base-xyz");
-    expect(mockExecSync).toHaveBeenCalledTimes(2);
-    expect(mockExecSync.mock.calls[0][0]).toMatch(/git worktree add --detach/);
-    expect(mockExecSync.mock.calls[1][0]).toMatch(
-      /git worktree remove --force/,
-    );
+    expect(mockSpawnSync).toHaveBeenCalledTimes(2);
+    expect(mockSpawnSync.mock.calls[0][0]).toBe("git");
+    expect(mockSpawnSync.mock.calls[0][1]).toEqual([
+      "worktree",
+      "add",
+      "--detach",
+      "/tmp/obscene-base-xyz",
+      "main",
+    ]);
+    expect(mockSpawnSync.mock.calls[1][1]).toEqual([
+      "worktree",
+      "remove",
+      "--force",
+      "/tmp/obscene-base-xyz",
+    ]);
+  });
+
+  it("scrubs GIT_* env vars before spawning git", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    mockSpawnSync.mockReturnValue(worktreeOk);
+    const original = {
+      GIT_DIR: process.env.GIT_DIR,
+      GIT_INDEX_FILE: process.env.GIT_INDEX_FILE,
+      GIT_PREFIX: process.env.GIT_PREFIX,
+    };
+    process.env.GIT_DIR = "/some/parent/.git";
+    process.env.GIT_INDEX_FILE = "/some/parent/.git/index";
+    process.env.GIT_PREFIX = "subdir/";
+    try {
+      withWorktreeAt("main", () => null);
+    } finally {
+      for (const [k, v] of Object.entries(original)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+
+    for (const call of mockSpawnSync.mock.calls) {
+      const env = (call[2] as { env?: NodeJS.ProcessEnv }).env;
+      expect(env).toBeDefined();
+      expect(env?.GIT_DIR).toBeUndefined();
+      expect(env?.GIT_INDEX_FILE).toBeUndefined();
+      expect(env?.GIT_PREFIX).toBeUndefined();
+    }
   });
 
   it("removes the temp dir and throws when worktree creation fails", () => {
     mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
-    mockExecSync.mockImplementation(() => {
-      const err = Object.assign(new Error("bad ref"), {
-        stderr: Buffer.from("fatal: invalid reference: nope"),
-      });
-      throw err;
-    });
+    mockSpawnSync.mockReturnValue({
+      status: 128,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from("fatal: invalid reference: nope"),
+    } as unknown as ReturnType<typeof spawnSync>);
 
     expect(() => withWorktreeAt("nope", () => 0)).toThrow(
-      /Could not create worktree at 'nope'/,
+      /Could not create worktree at 'nope': fatal: invalid reference: nope/,
     );
     expect(mockRmSync).toHaveBeenCalledWith("/tmp/obscene-base-xyz", {
       recursive: true,
@@ -2585,9 +2648,11 @@ describe("withWorktreeAt", () => {
 
   it("omits stderr detail when the worktree error has no stderr", () => {
     mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
-    mockExecSync.mockImplementation(() => {
-      throw new Error("opaque");
-    });
+    mockSpawnSync.mockReturnValue({
+      status: 128,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from(""),
+    } as unknown as ReturnType<typeof spawnSync>);
 
     expect(() => withWorktreeAt("nope", () => 0)).toThrow(
       /Could not create worktree at 'nope'\. Verify the ref exists/,
@@ -2597,11 +2662,16 @@ describe("withWorktreeAt", () => {
   it("cleans up via rmSync when the teardown worktree-remove fails", () => {
     mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
     let call = 0;
-    mockExecSync.mockImplementation(() => {
-      call++;
-      if (call === 1) return Buffer.from(""); // worktree add succeeds
-      throw new Error("remove failed"); // worktree remove fails
-    });
+    mockSpawnSync.mockImplementation(
+      () =>
+        (call++ === 0
+          ? worktreeOk
+          : {
+              status: 1,
+              stdout: Buffer.from(""),
+              stderr: Buffer.from("remove failed"),
+            }) as unknown as ReturnType<typeof spawnSync>,
+    );
 
     const result = withWorktreeAt("main", () => "done");
 
@@ -2614,7 +2684,7 @@ describe("withWorktreeAt", () => {
 
   it("still tears the worktree down when the callback throws", () => {
     mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
-    mockExecSync.mockReturnValue(Buffer.from(""));
+    mockSpawnSync.mockReturnValue(worktreeOk);
 
     expect(() =>
       withWorktreeAt("main", () => {
@@ -2622,9 +2692,12 @@ describe("withWorktreeAt", () => {
       }),
     ).toThrow("callback failed");
 
-    expect(mockExecSync.mock.calls.at(-1)?.[0]).toMatch(
-      /git worktree remove --force/,
-    );
+    expect(mockSpawnSync.mock.calls.at(-1)?.[1]).toEqual([
+      "worktree",
+      "remove",
+      "--force",
+      "/tmp/obscene-base-xyz",
+    ]);
   });
 });
 
