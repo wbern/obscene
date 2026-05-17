@@ -9,6 +9,17 @@
 
 <p align="center">Find hotspot files — complex code that changes frequently.</p>
 
+<p align="center">
+  <a href="https://www.npmjs.com/package/@wbern/obscene"><img src="https://img.shields.io/npm/v/@wbern/obscene" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@wbern/obscene"><img src="https://img.shields.io/npm/dm/@wbern/obscene" alt="npm downloads"></a>
+  <a href="https://github.com/wbern/obscene/actions/workflows/release.yml"><img src="https://github.com/wbern/obscene/actions/workflows/release.yml/badge.svg" alt="CI"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <br>
+  <a href="https://claude.ai/code"><img src="https://img.shields.io/badge/Made%20with-Claude%20Code-blueviolet" alt="Made with Claude Code"></a>
+  <a href="https://github.com/wbern/obscene/graphs/contributors"><img src="https://img.shields.io/github/contributors/wbern/obscene" alt="Contributors"></a>
+  <a href="https://github.com/wbern/obscene/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
+</p>
+
 Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Based on Adam Tornhill's *Your Code as a Crime Scene*.
 
 Works on any language scc supports. No configuration needed.
