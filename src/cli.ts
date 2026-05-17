@@ -264,6 +264,36 @@ function attachComplexityDeltas(
   }
 }
 
+/**
+ * Trim a `computeHotspotsCore(..., top=0)` result down to a top-N slice for
+ * display. Mode C runs the head pipeline at top=0 (so the snapshot diff sees
+ * the whole corpus), then reuses that result here instead of paying for a
+ * second git-log pass.
+ */
+function sliceCoreForDisplay(
+  core: ReturnType<typeof computeHotspotsCore>,
+  top: number,
+): ReturnType<typeof computeHotspotsCore> {
+  if (top <= 0) return core;
+  const rankings: typeof core.rankings = {};
+  for (const [k, r] of Object.entries(core.rankings)) {
+    const sliced = r.entries.slice(0, top);
+    rankings[k] = { ...r, entries: sliced, showing: sliced.length };
+  }
+  const compositeSliced = core.composite.entries.slice(0, top);
+  return {
+    rankings,
+    skipped: core.skipped,
+    composite: {
+      ...core.composite,
+      entries: compositeSliced,
+      showing: compositeSliced.length,
+    },
+    corpus: core.corpus,
+    churn: core.churn,
+  };
+}
+
 function resolveBaseRef(raw: string | boolean): string {
   if (typeof raw === "string") return raw;
   // Commander emits `true` for bare `--base` with no value. (`false` is not
@@ -295,6 +325,7 @@ function runHotspots(opts: HotspotsOpts): void {
 
   let delta: DeltaInfo | undefined;
   let fullDelta: HotspotDelta | undefined;
+  let modeCHeadCore: ReturnType<typeof computeHotspotsCore> | undefined;
   if (opts.base !== undefined) {
     const baseRef = resolveBaseRef(opts.base);
     const changed = getChangedFiles(baseRef);
@@ -326,37 +357,37 @@ function runHotspots(opts: HotspotsOpts): void {
       // Mode C: full corpus on both sides. Don't filter `files`; the user
       // wants whole-codebase rankings plus a cross-snapshot diff.
       try {
-        const headCore = computeHotspotsCore(files, months, 0);
-        const headSnapshot: HotspotSnapshot = {
-          files,
-          rankings: headCore.rankings,
-          skipped: headCore.skipped,
-          composite: headCore.composite,
-          corpus: headCore.corpus,
-        };
         const baseSnapshot = withWorktreeAt(baseRef, (path) =>
           computeSnapshot({ months, excludes: allExcludes, cwd: path }),
         );
+        modeCHeadCore = computeHotspotsCore(files, months, 0);
+        const headSnapshot: HotspotSnapshot = {
+          files,
+          rankings: modeCHeadCore.rankings,
+          skipped: modeCHeadCore.skipped,
+          composite: modeCHeadCore.composite,
+          corpus: modeCHeadCore.corpus,
+        };
         fullDelta = computeDelta(baseRef, "HEAD", baseSnapshot, headSnapshot);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         process.stderr.write(
           `warning: full-delta unavailable (${message}). ` +
-            "Continuing with HEAD-only rankings.\n",
+            "Falling back to filtered rankings.\n",
         );
+        files = files.filter((f) => changed.has(f.file));
+        modeCHeadCore = undefined;
       }
     } else {
       files = files.filter((f) => changed.has(f.file));
     }
   }
 
-  const { rankings, skipped, composite, corpus } = computeHotspotsCore(
-    files,
-    months,
-    top,
-  );
+  const { rankings, skipped, composite, corpus } = modeCHeadCore
+    ? sliceCoreForDisplay(modeCHeadCore, top)
+    : computeHotspotsCore(files, months, top);
 
-  if (delta && !opts.fullDelta) {
+  if (delta && fullDelta === undefined) {
     const newComplexity = new Map<string, number>();
     const fileList: string[] = [];
     for (const f of files) {

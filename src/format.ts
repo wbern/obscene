@@ -291,38 +291,32 @@ function formatFullDeltaSection(fd: HotspotDelta): string[] {
   ) {
     lines.push(pc.dim("No tier transitions, no new/deleted files."));
   } else {
-    if (enteredHot.length > 0) {
-      lines.push(pc.red(`  ↑ entered HOT (${enteredHot.length}):`));
-      for (const f of enteredHot) lines.push(`    ${truncate(f, 80)}`);
-    }
-    if (enteredWarm.length > 0) {
-      lines.push(pc.yellow(`  ↑ entered WARM (${enteredWarm.length}):`));
-      for (const f of enteredWarm) lines.push(`    ${truncate(f, 80)}`);
-    }
-    if (exitedHot.length > 0) {
-      lines.push(pc.green(`  ↓ exited HOT (${exitedHot.length}):`));
-      for (const f of exitedHot) lines.push(`    ${truncate(f, 80)}`);
-    }
-    if (exitedWarm.length > 0) {
-      lines.push(pc.green(`  ↓ exited WARM (${exitedWarm.length}):`));
-      for (const f of exitedWarm) lines.push(`    ${truncate(f, 80)}`);
-    }
-    if (fd.newFiles.length > 0) {
-      lines.push(pc.cyan(`  + new files (${fd.newFiles.length}):`));
-      for (const f of fd.newFiles.slice(0, 10))
-        lines.push(`    ${truncate(f, 80)}`);
-      if (fd.newFiles.length > 10) {
-        lines.push(pc.dim(`    … and ${fd.newFiles.length - 10} more`));
+    const pushFileList = (label: string, files: string[]): void => {
+      if (files.length === 0) return;
+      lines.push(label);
+      for (const f of files.slice(0, 10)) lines.push(`    ${truncate(f, 80)}`);
+      if (files.length > 10) {
+        lines.push(pc.dim(`    … and ${files.length - 10} more`));
       }
-    }
-    if (fd.deletedFiles.length > 0) {
-      lines.push(pc.cyan(`  − deleted files (${fd.deletedFiles.length}):`));
-      for (const f of fd.deletedFiles.slice(0, 10))
-        lines.push(`    ${truncate(f, 80)}`);
-      if (fd.deletedFiles.length > 10) {
-        lines.push(pc.dim(`    … and ${fd.deletedFiles.length - 10} more`));
-      }
-    }
+    };
+    pushFileList(pc.red(`  ↑ entered HOT (${enteredHot.length}):`), enteredHot);
+    pushFileList(
+      pc.yellow(`  ↑ entered WARM (${enteredWarm.length}):`),
+      enteredWarm,
+    );
+    pushFileList(pc.green(`  ↓ exited HOT (${exitedHot.length}):`), exitedHot);
+    pushFileList(
+      pc.green(`  ↓ exited WARM (${exitedWarm.length}):`),
+      exitedWarm,
+    );
+    pushFileList(
+      pc.cyan(`  + new files (${fd.newFiles.length}):`),
+      fd.newFiles,
+    );
+    pushFileList(
+      pc.cyan(`  − deleted files (${fd.deletedFiles.length}):`),
+      fd.deletedFiles,
+    );
   }
 
   const cx = fd.perDimensionDeltas.complexity;

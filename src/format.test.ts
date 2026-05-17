@@ -1515,6 +1515,22 @@ describe("formatHotspotsTable fullDelta section", () => {
     expect(out).toContain("… and 1 more");
   });
 
+  it("truncates tier-transition lists past 10 entries", () => {
+    const manyHot = Array.from({ length: 13 }, (_, i) => `hot${i}.ts`);
+    const fd = baseFullDelta({
+      tierTransitions: {
+        enteredHot: manyHot,
+        enteredWarm: [],
+        exitedHot: [],
+        exitedWarm: [],
+      },
+    });
+    const out = formatHotspotsTable(outputWithFullDelta(fd));
+    expect(out).toContain("entered HOT (13)");
+    expect(out).toContain("hot0.ts");
+    expect(out).toContain("… and 3 more");
+  });
+
   it("renders short new/deleted lists inline without ellipsis", () => {
     const fd = baseFullDelta({
       newFiles: ["x.ts"],
