@@ -737,6 +737,17 @@ describe("getNestingDepths", () => {
     expect(result.get("src/missing.ts")).toBe(0);
   });
 
+  it("reads from the given cwd when one is provided", () => {
+    mockReadFileSync.mockReturnValue("function foo() {\n  return;\n}\n");
+
+    getNestingDepths(["src/foo.ts"], "/tmp/worktree");
+
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      "/tmp/worktree/src/foo.ts",
+      "utf-8",
+    );
+  });
+
   it("skips blank lines when measuring depth", () => {
     const content = "function foo() {\n\n  return;\n}\n";
     mockReadFileSync.mockReturnValue(content);

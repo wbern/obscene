@@ -172,7 +172,7 @@ function normalizePath(p: string): string {
  * Run scc and parse per-file complexity metrics.
  * Requires scc to be installed: https://github.com/boyter/scc#install
  */
-export function runScc(excludes: string[] = []): FileMetrics[] {
+export function runScc(excludes: string[] = [], cwd?: string): FileMetrics[] {
   const patterns = excludes.map(globToRegex);
 
   let raw: Buffer;
@@ -180,6 +180,7 @@ export function runScc(excludes: string[] = []): FileMetrics[] {
     raw = execSync("scc --by-file --format json --no-cocomo --no-gen", {
       maxBuffer: 50 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
+      cwd,
     });
   } catch (err: unknown) {
     if (
@@ -223,12 +224,14 @@ export function runScc(excludes: string[] = []): FileMetrics[] {
 function gitFileCount(
   gitArgs: string,
   errorMessage: string,
+  cwd?: string,
 ): Map<string, number> {
   let raw: Buffer;
   try {
     raw = execSync(gitArgs, {
       maxBuffer: 50 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
+      cwd,
     });
   } catch {
     throw new Error(errorMessage);
@@ -244,22 +247,26 @@ function gitFileCount(
 }
 
 /**
- * Count commits per file over a given time window via git log.
+ * Count commits per file over a given time window via git log. When `cwd`
+ * is provided, runs git in that directory (used by Mode C to operate
+ * against a base-ref worktree).
  */
-export function getChurn(months: number): Map<string, number> {
+export function getChurn(months: number, cwd?: string): Map<string, number> {
   return gitFileCount(
     `git log --since="${months} months ago" --format="" --name-only`,
     "Not a git repository or git is not installed.",
+    cwd,
   );
 }
 
 /**
  * Count fix commits (conventional commit `fix:` prefix) per file.
  */
-export function getDefects(months: number): Map<string, number> {
+export function getDefects(months: number, cwd?: string): Map<string, number> {
   return gitFileCount(
     `git log --since="${months} months ago" --grep="^fix" --format="" --name-only`,
     "Not a git repository or git is not installed.",
+    cwd,
   );
 }
 
@@ -304,12 +311,17 @@ function parseAuthorsLine(line: string): string[] {
  */
 export function getAuthorCommitCounts(
   months: number,
+  cwd?: string,
 ): Map<string, Map<string, number>> {
   let raw: Buffer;
   try {
     raw = execSync(
       `git log --since="${months} months ago" --format="COMMIT_SEP%n%aN%x09%(trailers:key=Co-authored-by,valueonly,separator=%x09)" --name-only`,
-      { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+      {
+        maxBuffer: 50 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+      },
     );
   } catch {
     throw new Error("Not a git repository or git is not installed.");
@@ -350,6 +362,7 @@ const MAX_FILES_PER_COMMIT = 20;
 export function getCoChanges(
   months: number,
   excludes: string[] = [],
+  cwd?: string,
 ): Map<string, number> {
   const patterns = excludes.map(globToRegex);
 
@@ -357,7 +370,11 @@ export function getCoChanges(
   try {
     raw = execSync(
       `git log --since="${months} months ago" --format="COMMIT_SEP%n" --name-only`,
-      { maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+      {
+        maxBuffer: 50 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+      },
     );
   } catch {
     throw new Error("Not a git repository or git is not installed.");
@@ -879,12 +896,13 @@ export function getComplexityDeltas(
  * members no longer exist (renamed away, deleted) so they aren't presented as
  * actionable hotspots.
  */
-export function getTrackedFiles(): Set<string> {
+export function getTrackedFiles(cwd?: string): Set<string> {
   let raw: Buffer;
   try {
     raw = execSync("git ls-files", {
       maxBuffer: 50 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
+      cwd,
     });
   } catch {
     throw new Error("Not a git repository or git is not installed.");
@@ -972,13 +990,16 @@ export function computeCoupling(
  * multiline strings, embedded SQL/JSON) inflating depths by an order of
  * magnitude.
  */
-export function getNestingDepths(filePaths: string[]): Map<string, number> {
+export function getNestingDepths(
+  filePaths: string[],
+  cwd?: string,
+): Map<string, number> {
   const depths = new Map<string, number>();
 
   for (const filePath of filePaths) {
     let content: string;
     try {
-      content = readFileSync(filePath, "utf-8");
+      content = readFileSync(cwd ? join(cwd, filePath) : filePath, "utf-8");
     } catch {
       depths.set(filePath, 0);
       continue;
@@ -1317,11 +1338,11 @@ export function couplingConfidence(commitsInWindow: number): ConfidenceInfo {
  * Count distinct commits in the churn window. Used by coupling analysis to
  * compute its confidence level.
  */
-export function getCommitsInWindow(months: number): number {
+export function getCommitsInWindow(months: number, cwd?: string): number {
   try {
     const out = execSync(
       `git rev-list --count --since="${months} months ago" HEAD`,
-      { stdio: ["pipe", "pipe", "pipe"] },
+      { stdio: ["pipe", "pipe", "pipe"], cwd },
     );
     return parseInt(out.toString().trim(), 10) || 0;
   } catch {
@@ -1338,13 +1359,17 @@ const DAYS_PER_MONTH = 30;
  * on a 2-month repo still passes the commit-count floors but doesn't earn
  * time-based trust. Callers use `underCovered` to render a banner.
  */
-export function getHistoryCoverage(months: number): HistoryCoverageInfo {
+export function getHistoryCoverage(
+  months: number,
+  cwd?: string,
+): HistoryCoverageInfo {
   const windowDays = months * DAYS_PER_MONTH;
   let firstCommitSeconds: number;
   try {
     const out = execSync("git log --format=%ct --reverse HEAD", {
       maxBuffer: 50 * 1024 * 1024,
       stdio: ["pipe", "pipe", "pipe"],
+      cwd,
     });
     const firstLine = out.toString().split("\n", 1)[0].trim();
     firstCommitSeconds = parseInt(firstLine, 10);
