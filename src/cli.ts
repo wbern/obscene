@@ -15,6 +15,7 @@ import {
   getChurn,
   getCoChanges,
   getCommitsInWindow,
+  getComplexityDeltas,
   getDefects,
   getHistoryCoverage,
   getNestingDepths,
@@ -30,6 +31,7 @@ import {
   formatReportTable,
 } from "./format.js";
 import type {
+  ComplexityDelta,
   CouplingOutput,
   DeltaInfo,
   HistoryCoverageInfo,
@@ -237,6 +239,25 @@ function runReport(opts: SharedOpts): void {
   }
 }
 
+function attachComplexityDeltas(
+  rankings: HotspotsOutput["rankings"],
+  composite: HotspotsOutput["composite"],
+  deltas: Map<string, ComplexityDelta>,
+): void {
+  for (const ranking of Object.values(rankings)) {
+    for (const entry of ranking.entries) {
+      const d = deltas.get(entry.file);
+      if (d) entry.complexityDelta = d;
+    }
+  }
+  if (composite) {
+    for (const entry of composite.entries) {
+      const d = deltas.get(entry.file);
+      if (d) entry.complexityDelta = d;
+    }
+  }
+}
+
 function resolveBaseRef(raw: string | boolean): string {
   if (typeof raw === "string") return raw;
   // Commander emits `true` for bare `--base` with no value. (`false` is not
@@ -309,6 +330,25 @@ function runHotspots(opts: HotspotsOpts): void {
   );
 
   const composite = computeComposite(rankings, churn, top);
+
+  if (delta) {
+    const newComplexity = new Map<string, number>();
+    for (const f of files) newComplexity.set(f.file, f.complexity);
+    try {
+      const deltas = getComplexityDeltas(
+        delta.base,
+        files.map((f) => f.file),
+        newComplexity,
+      );
+      attachComplexityDeltas(rankings, composite, deltas);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `warning: complexity delta unavailable (${message}). ` +
+          "Falling back to filtered rankings without per-file deltas.\n",
+      );
+    }
+  }
 
   let corpusTotalComplexity = 0;
   for (const f of files) corpusTotalComplexity += f.complexity;

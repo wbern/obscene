@@ -39,6 +39,17 @@ export interface ConfidenceInfo {
   source: string;
 }
 
+/**
+ * Per-file complexity change from a base ref to HEAD. Only attached when
+ * `--base` is set on the hotspots command. `oldComplexity` is null for files
+ * that didn't exist at the base ref; `change` is null in the same case.
+ */
+export interface ComplexityDelta {
+  oldComplexity: number | null;
+  newComplexity: number;
+  change: number | null;
+}
+
 export interface RankingEntry {
   file: string;
   score: number;
@@ -55,6 +66,7 @@ export interface RankingEntry {
    * × Churn ranking.
    */
   minorAuthors?: number | null;
+  complexityDelta?: ComplexityDelta;
 }
 
 export interface RankingOutput {
@@ -122,6 +134,7 @@ export interface CompositeEntry {
   tier: Tier;
   churn: number;
   dimensionCount: number;
+  complexityDelta?: ComplexityDelta;
 }
 
 export interface CompositeOutput {

@@ -1,6 +1,9 @@
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
+  ComplexityDelta,
   CompositeEntry,
   CompositeOutput,
   ConfidenceInfo,
@@ -733,6 +736,144 @@ export function detectDefaultBranch(): string | undefined {
     } catch {}
   }
   return undefined;
+}
+
+/**
+ * Run scc on a specific list of files inside `cwd`. Returns metrics keyed by
+ * the file path relative to cwd. Files that don't exist at `cwd` are skipped
+ * — useful when computing the base side of a delta, where files new in HEAD
+ * are absent from the base worktree.
+ */
+export function runSccOnFiles(
+  cwd: string,
+  files: string[],
+): Map<string, FileMetrics> {
+  const result = new Map<string, FileMetrics>();
+  if (files.length === 0) return result;
+
+  const existing = files.filter((f) => existsSync(join(cwd, f)));
+  if (existing.length === 0) return result;
+
+  const proc = spawnSync(
+    "scc",
+    ["--by-file", "--format", "json", "--no-cocomo", "--no-gen", ...existing],
+    { cwd, maxBuffer: 50 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+  );
+  if (proc.error && "code" in proc.error && proc.error.code === "ENOENT") {
+    throw new Error(
+      "scc not found. Install it: https://github.com/boyter/scc#install",
+    );
+  }
+  if (proc.status !== 0) {
+    throw new Error(
+      `scc failed on base worktree: ${proc.stderr?.toString().trim() || "unknown error"}`,
+    );
+  }
+  const languages: SccLanguage[] = JSON.parse(proc.stdout.toString());
+  for (const lang of languages) {
+    for (const f of lang.Files) {
+      const normalized = normalizePath(f.Location);
+      result.set(normalized, {
+        file: normalized,
+        code: f.Code,
+        lines: f.Lines,
+        complexity: f.Complexity,
+        comments: f.Comment,
+        complexityDensity:
+          f.Code > 0 ? Math.round((f.Complexity / f.Code) * 100) / 100 : 0,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Allocate a detached git worktree at `ref` in a temp directory, run `fn`
+ * against the worktree path, and always tear the worktree down on the way
+ * out. Throws if the ref can't be checked out.
+ */
+export function withWorktreeAt<T>(ref: string, fn: (path: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), "obscene-base-"));
+  // Strip GIT_* env vars inherited from a parent git hook (pre-commit,
+  // post-checkout, etc.) — they redirect git at the parent repo and break
+  // worktree creation in the caller's cwd.
+  const gitEnv = { ...process.env };
+  for (const key of Object.keys(gitEnv)) {
+    if (key.startsWith("GIT_")) delete gitEnv[key];
+  }
+  try {
+    execSync(`git worktree add --detach ${JSON.stringify(dir)} ${ref}`, {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: gitEnv,
+    });
+  } catch (err: unknown) {
+    rmSync(dir, { recursive: true, force: true });
+    const detail =
+      err && typeof err === "object" && "stderr" in err && err.stderr
+        ? `: ${String(err.stderr).trim()}`
+        : "";
+    throw new Error(
+      `Could not create worktree at '${ref}'${detail}. ` +
+        "Verify the ref exists (e.g. 'git rev-parse --verify <ref>').",
+    );
+  }
+  try {
+    return fn(dir);
+  } finally {
+    try {
+      execSync(`git worktree remove --force ${JSON.stringify(dir)}`, {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: gitEnv,
+      });
+    } catch {
+      // Worktree may already be gone or git failed; force-remove the dir to
+      // avoid leaving a stale tree on disk. The next worktree-prune will
+      // sweep the metadata.
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+/**
+ * Compute per-file complexity deltas between `baseRef` and HEAD for the given
+ * file set. Files absent at base are reported with `oldComplexity: null`.
+ *
+ * `newMetrics` maps file → current FileMetrics (already on hand from the HEAD
+ * scc run). Mode B doesn't re-run scc on HEAD; the caller passes what they
+ * already have.
+ */
+export function getComplexityDeltas(
+  baseRef: string,
+  files: string[],
+  newMetrics: Map<string, number>,
+): Map<string, ComplexityDelta> {
+  const deltas = new Map<string, ComplexityDelta>();
+  if (files.length === 0) return deltas;
+
+  const baseMetrics = withWorktreeAt(baseRef, (path) =>
+    runSccOnFiles(path, files),
+  );
+
+  for (const file of files) {
+    const newComplexity = newMetrics.get(file);
+    if (newComplexity === undefined) continue;
+    const old = baseMetrics.get(file);
+    if (old === undefined) {
+      deltas.set(file, {
+        oldComplexity: null,
+        newComplexity,
+        change: null,
+      });
+    } else {
+      deltas.set(file, {
+        oldComplexity: old.complexity,
+        newComplexity,
+        change: newComplexity - old.complexity,
+      });
+    }
+  }
+
+  return deltas;
 }
 
 /**

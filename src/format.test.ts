@@ -848,6 +848,196 @@ describe("formatHotspotsTable", () => {
     // The normal "Hotspots — churn window" header should NOT render
     expect(result).not.toContain("Hotspots — 3 months");
   });
+
+  it("renders a Δ column when ranking entries carry complexityDelta", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "main",
+        head: "HEAD",
+        changedFiles: ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"],
+      },
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 100,
+          tierCounts: { hot: 4, warm: 0, cool: 0 },
+          totalEntries: 4,
+          showing: 4,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/a.ts",
+              score: 30,
+              percentOfTotal: 30,
+              tier: "hot",
+              churn: 3,
+              metricValue: 10,
+              metricDensity: 0.1,
+              complexityDelta: {
+                oldComplexity: 5,
+                newComplexity: 17,
+                change: 12,
+              },
+            },
+            {
+              file: "src/b.ts",
+              score: 20,
+              percentOfTotal: 20,
+              tier: "hot",
+              churn: 2,
+              metricValue: 10,
+              metricDensity: 0.1,
+              complexityDelta: {
+                oldComplexity: 10,
+                newComplexity: 7,
+                change: -3,
+              },
+            },
+            {
+              file: "src/c.ts",
+              score: 20,
+              percentOfTotal: 20,
+              tier: "hot",
+              churn: 2,
+              metricValue: 10,
+              metricDensity: 0.1,
+              complexityDelta: {
+                oldComplexity: null,
+                newComplexity: 8,
+                change: null,
+              },
+            },
+            {
+              file: "src/d.ts",
+              score: 30,
+              percentOfTotal: 30,
+              tier: "hot",
+              churn: 3,
+              metricValue: 10,
+              metricDensity: 0.1,
+              complexityDelta: {
+                oldComplexity: 4,
+                newComplexity: 4,
+                change: 0,
+              },
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 4, totalComplexity: 36 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Δ");
+    expect(result).toContain("+12");
+    expect(result).toContain("-3");
+    expect(result).toContain("new");
+    // Unchanged complexity renders as plain "0"
+    expect(result).toMatch(/\s+0\s+/);
+  });
+
+  it("falls back to '·' for ranking entries missing a complexityDelta when the column is on", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "main",
+        head: "HEAD",
+        changedFiles: ["src/a.ts", "src/b.ts"],
+      },
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 20,
+          tierCounts: { hot: 2, warm: 0, cool: 0 },
+          totalEntries: 2,
+          showing: 2,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/a.ts",
+              score: 10,
+              percentOfTotal: 50,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+              complexityDelta: {
+                oldComplexity: 1,
+                newComplexity: 3,
+                change: 2,
+              },
+            },
+            {
+              file: "src/b.ts",
+              score: 10,
+              percentOfTotal: 50,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+              // No complexityDelta — this entry triggers the '·' fallback.
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 2, totalComplexity: 4 },
+    };
+
+    const result = formatHotspotsTable(output);
+    expect(result).toContain("+2");
+    expect(result).toContain("·");
+  });
+
+  it("omits the Δ column when delta is set but entries have no complexityDelta", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "main",
+        head: "HEAD",
+        changedFiles: ["src/a.ts"],
+      },
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/a.ts",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 1, totalComplexity: 10 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    // Δ column header should not appear when no entry has delta data —
+    // this is the fallback-after-warning path.
+    const headerLine = result.split("\n").find((l) => l.includes("Score"));
+    expect(headerLine).not.toContain("Δ");
+  });
 });
 
 describe("formatCouplingTable", () => {
@@ -1116,5 +1306,128 @@ describe("formatCompositeTable", () => {
     expect(result).toContain("Showing: 2 of 2");
     // Emphasis separator line before composite header
     expect(result).toContain("═");
+  });
+
+  it("renders a Δ column in the composite table when entries carry deltas", () => {
+    const output: CompositeOutput = {
+      label: "Combined",
+      scoreFormula: "reciprocal rank fusion across all dimensions",
+      totalScore: 0.5,
+      tierCounts: { hot: 1, warm: 1, cool: 1 },
+      totalDimensions: 4,
+      totalEntries: 3,
+      showing: 3,
+      confidence: STUB_CONFIDENCE,
+      entries: [
+        {
+          file: "src/grew.ts",
+          score: 0.3,
+          percentOfTotal: 60,
+          tier: "hot",
+          churn: 15,
+          dimensionCount: 4,
+          complexityDelta: { oldComplexity: 8, newComplexity: 15, change: 7 },
+        },
+        {
+          file: "src/shrank.ts",
+          score: 0.15,
+          percentOfTotal: 30,
+          tier: "warm",
+          churn: 5,
+          dimensionCount: 3,
+          complexityDelta: { oldComplexity: 12, newComplexity: 7, change: -5 },
+        },
+        {
+          file: "src/added.ts",
+          score: 0.05,
+          percentOfTotal: 10,
+          tier: "cool",
+          churn: 2,
+          dimensionCount: 2,
+          complexityDelta: {
+            oldComplexity: null,
+            newComplexity: 3,
+            change: null,
+          },
+        },
+      ],
+    };
+
+    const result = formatCompositeTable(output);
+
+    const headerLine = result.split("\n").find((l) => l.includes("Score"));
+    expect(headerLine).toContain("Δ");
+    expect(result).toContain("+7");
+    expect(result).toContain("-5");
+    expect(result).toContain("new");
+  });
+
+  it("falls back to '·' for composite entries missing a complexityDelta when the column is on", () => {
+    const output: CompositeOutput = {
+      label: "Combined",
+      scoreFormula: "rrf",
+      totalScore: 0.2,
+      tierCounts: { hot: 1, warm: 1, cool: 0 },
+      totalDimensions: 4,
+      totalEntries: 2,
+      showing: 2,
+      confidence: STUB_CONFIDENCE,
+      entries: [
+        {
+          file: "src/with-delta.ts",
+          score: 0.1,
+          percentOfTotal: 50,
+          tier: "hot",
+          churn: 5,
+          dimensionCount: 4,
+          complexityDelta: { oldComplexity: 2, newComplexity: 5, change: 3 },
+        },
+        {
+          file: "src/no-delta.ts",
+          score: 0.1,
+          percentOfTotal: 50,
+          tier: "warm",
+          churn: 3,
+          dimensionCount: 2,
+          // No complexityDelta — triggers the composite '·' fallback.
+        },
+      ],
+    };
+
+    const result = formatCompositeTable(output);
+
+    expect(result).toContain("+3");
+    expect(result).toContain("·");
+  });
+
+  it("renders unchanged-complexity cell as '0' in the composite Δ column", () => {
+    const output: CompositeOutput = {
+      label: "Combined",
+      scoreFormula: "rrf",
+      totalScore: 0.1,
+      tierCounts: { hot: 0, warm: 0, cool: 1 },
+      totalDimensions: 4,
+      totalEntries: 1,
+      showing: 1,
+      confidence: STUB_CONFIDENCE,
+      entries: [
+        {
+          file: "src/same.ts",
+          score: 0.1,
+          percentOfTotal: 100,
+          tier: "cool",
+          churn: 2,
+          dimensionCount: 1,
+          complexityDelta: { oldComplexity: 6, newComplexity: 6, change: 0 },
+        },
+      ],
+    };
+
+    const result = formatCompositeTable(output);
+
+    // Header includes Δ, row shows 0 (no '+' or '-')
+    const headerLine = result.split("\n").find((l) => l.includes("Score"));
+    expect(headerLine).toContain("Δ");
+    expect(result).toMatch(/\s+0\s+/);
   });
 });

@@ -9,6 +9,7 @@ import {
   truncate,
 } from "./color.js";
 import type {
+  ComplexityDelta,
   CompositeOutput,
   ConfidenceInfo,
   ConfidenceLevel,
@@ -88,7 +89,17 @@ interface RankingColumnDef {
   value: (entry: RankingOutput["entries"][0]) => string;
 }
 
-function getRankingColumns(key: string): RankingColumnDef[] {
+function formatDeltaValue(d: ComplexityDelta | undefined): string {
+  if (!d) return "·";
+  if (d.oldComplexity === null || d.change === null) return "new";
+  if (d.change === 0) return "0";
+  return d.change > 0 ? `+${d.change}` : String(d.change);
+}
+
+function getRankingColumns(
+  key: string,
+  includeDelta: boolean,
+): RankingColumnDef[] {
   const base: RankingColumnDef[] = [
     {
       header: "File",
@@ -182,7 +193,19 @@ function getRankingColumns(key: string): RankingColumnDef[] {
     value: (e) => tierLabel(e.tier),
   };
 
-  return [...base, ...(metricCols[key] ?? []), tierCol];
+  const deltaCol: RankingColumnDef = {
+    header: "Δ",
+    width: 7,
+    align: "right",
+    value: (e) => formatDeltaValue(e.complexityDelta),
+  };
+
+  return [
+    ...base,
+    ...(metricCols[key] ?? []),
+    ...(includeDelta ? [deltaCol] : []),
+    tierCol,
+  ];
 }
 
 const METRIC_EMOJI: Record<string, string> = {
@@ -195,10 +218,11 @@ const METRIC_EMOJI: Record<string, string> = {
 function formatRankingTable(
   key: string,
   ranking: RankingOutput,
-  description?: string,
+  description: string | undefined,
+  includeDelta: boolean,
 ): string[] {
   const lines: string[] = [];
-  const cols = getRankingColumns(key);
+  const cols = getRankingColumns(key, includeDelta);
   const emoji = METRIC_EMOJI[key];
   const prefix = emoji ? `${emoji} ` : "";
 
@@ -277,10 +301,22 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   }
   lines.push("");
 
+  const includeDelta =
+    delta !== undefined &&
+    Object.values(rankings).some((r) =>
+      r.entries.some((e) => e.complexityDelta !== undefined),
+    );
   const keys = Object.keys(rankings);
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    lines.push(...formatRankingTable(key, rankings[key], output.guide[key]));
+    lines.push(
+      ...formatRankingTable(
+        key,
+        rankings[key],
+        output.guide[key],
+        includeDelta,
+      ),
+    );
 
     if (i < keys.length - 1) {
       lines.push("");
@@ -404,7 +440,12 @@ export function formatCouplingTable(output: CouplingOutput): string {
 export function formatCompositeTable(output: CompositeOutput): string {
   const lines: string[] = [];
 
-  lines.push("═".repeat(84));
+  const includeDelta = output.entries.some(
+    (e) => e.complexityDelta !== undefined,
+  );
+  const width = includeDelta ? 91 : 84;
+
+  lines.push("═".repeat(width));
   lines.push(
     `★ ${output.label.toUpperCase()} — Total score: ${output.totalScore.toLocaleString()}`,
   );
@@ -414,22 +455,25 @@ export function formatCompositeTable(output: CompositeOutput): string {
   );
   lines.push("");
 
-  lines.push(
+  let header =
     padRight("File", 50) +
-      padLeft("Score", 9) +
-      padLeft("Churn", 7) +
-      padLeft("Dims", 6) +
-      padLeft("Tier", 12),
-  );
-  lines.push("─".repeat(84));
+    padLeft("Score", 9) +
+    padLeft("Churn", 7) +
+    padLeft("Dims", 6);
+  if (includeDelta) header += padLeft("Δ", 7);
+  header += padLeft("Tier", 12);
+  lines.push(header);
+  lines.push("─".repeat(width));
 
   for (const entry of output.entries) {
-    const rawRow =
+    let rawRow =
       padRight(truncate(entry.file, 48), 50) +
       padLeft(entry.score.toFixed(4), 9) +
       padLeft(String(entry.churn), 7) +
-      padLeft(`${entry.dimensionCount}/${output.totalDimensions}`, 6) +
-      padLeft(tierLabel(entry.tier), 12);
+      padLeft(`${entry.dimensionCount}/${output.totalDimensions}`, 6);
+    if (includeDelta)
+      rawRow += padLeft(formatDeltaValue(entry.complexityDelta), 7);
+    rawRow += padLeft(tierLabel(entry.tier), 12);
     lines.push(colorRow(entry.tier, rawRow));
   }
 

@@ -560,6 +560,134 @@ describe("CLI Integration", () => {
     expect(result.stderr).toContain("Failed to compute diff against base ref");
   });
 
+  // Mode B fixture: needs ≥3 complex files at HEAD so the complexity ranking
+  // surfaces entries (confidence floor is 3). scc requires whitespace after
+  // `if` to recognize the branch, so each file is multi-line.
+  function setupDeltaRepoB(): void {
+    spawnSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const writeFile = (name: string, body: string) =>
+      fs.writeFileSync(path.join(tempDir, name), body);
+
+    // Base: three complex files, one trivial file we won't touch.
+    writeFile(
+      "a.ts",
+      "export function a(x: number) {\n  if (x > 0) {\n    if (x > 10) return 1;\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "b.ts",
+      "export function b(x: number) {\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "c.ts",
+      "export function c(x: number) {\n  if (x > 0) {\n    if (x > 10) return 3;\n  }\n  return 0;\n}\n",
+    );
+    writeFile("stable.ts", "export const x = 1;\n");
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "base"], { cwd: tempDir, stdio: "pipe" });
+
+    spawnSync("git", ["checkout", "-b", "feature"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    // PR: modify a.ts (deepen nesting), modify b.ts (touch comment only),
+    // add new.ts. Leave c.ts and stable.ts untouched.
+    writeFile(
+      "a.ts",
+      "export function a(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) {\n        if (x > 1000) return 1;\n      }\n    }\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "b.ts",
+      "// touched\nexport function b(x: number) {\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "new.ts",
+      "export function n(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) return 4;\n    }\n  }\n  return 0;\n}\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "pr"], { cwd: tempDir, stdio: "pipe" });
+  }
+
+  // Mode B: complexity delta. The base worktree gives us oldComplexity for
+  // changed files; files new in HEAD get oldComplexity=null.
+  it("should attach complexity deltas to ranking entries under --base", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+
+    const entriesByFile = new Map<
+      string,
+      {
+        complexityDelta?: {
+          oldComplexity: number | null;
+          newComplexity: number;
+          change: number | null;
+        };
+      }
+    >();
+    for (const ranking of Object.values(parsed.rankings) as Array<{
+      entries: Array<{
+        file: string;
+        complexityDelta?: {
+          oldComplexity: number | null;
+          newComplexity: number;
+          change: number | null;
+        };
+      }>;
+    }>) {
+      for (const e of ranking.entries) entriesByFile.set(e.file, e);
+    }
+
+    // a.ts existed at base — should have numeric old + change > 0 (got deeper)
+    const a = entriesByFile.get("a.ts");
+    expect(a?.complexityDelta).toBeDefined();
+    expect(typeof a?.complexityDelta?.oldComplexity).toBe("number");
+    expect(a?.complexityDelta?.change).toBeGreaterThan(0);
+
+    // new.ts didn't exist at base — old should be null, change should be null
+    const fresh = entriesByFile.get("new.ts");
+    expect(fresh?.complexityDelta).toBeDefined();
+    expect(fresh?.complexityDelta?.oldComplexity).toBeNull();
+    expect(fresh?.complexityDelta?.change).toBeNull();
+    expect(fresh?.complexityDelta?.newComplexity).toBeGreaterThan(0);
+
+    // stable.ts was never touched — must not be in any ranking
+    expect(entriesByFile.has("stable.ts")).toBe(false);
+  });
+
+  it("should render the Δ column in the delta table view", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--format", "table"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Δ");
+    // New file row labelled "new"
+    expect(result.stdout).toMatch(/new\.ts.*new/);
+  });
+
   it("should fail bare --base when no default branch exists", {
     timeout: 30000,
   }, () => {

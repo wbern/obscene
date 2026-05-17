@@ -13,13 +13,16 @@ import {
   getChurn,
   getCoChanges,
   getCommitsInWindow,
+  getComplexityDeltas,
   getDefects,
   getHistoryCoverage,
   getNestingDepths,
   getTrackedFiles,
   readIgnoreFile,
   runScc,
+  runSccOnFiles,
   UNIVERSAL_IGNORE_GROUPS,
+  withWorktreeAt,
 } from "./analyze.js";
 import type {
   ConfidenceInfo,
@@ -30,17 +33,25 @@ import type {
 
 vi.mock("node:child_process", () => ({
   execSync: vi.fn(),
+  spawnSync: vi.fn(),
 }));
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdtempSync: vi.fn(),
+  rmSync: vi.fn(),
 }));
 
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 
 const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 const mockReadFileSync = vi.mocked(readFileSync);
+const mockExistsSync = vi.mocked(existsSync);
+const mockMkdtempSync = vi.mocked(mkdtempSync);
+const mockRmSync = vi.mocked(rmSync);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -2428,5 +2439,276 @@ describe("formatIgnoreFile", () => {
     expect(result).toContain("# Custom group");
     expect(result).toContain("custom.*");
     expect(result).not.toContain("# Test files and test infrastructure");
+  });
+});
+
+describe("runSccOnFiles", () => {
+  it("returns empty map when given no files", () => {
+    const result = runSccOnFiles("/tmp/wt", []);
+    expect(result.size).toBe(0);
+  });
+
+  it("returns empty map when no input file exists in cwd", () => {
+    mockExistsSync.mockReturnValue(false);
+    const result = runSccOnFiles("/tmp/wt", ["src/a.ts", "src/b.ts"]);
+    expect(result.size).toBe(0);
+    expect(mockSpawnSync).not.toHaveBeenCalled();
+  });
+
+  it("parses scc JSON into a FileMetrics map", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: Buffer.from(
+        JSON.stringify([
+          {
+            Name: "TypeScript",
+            Files: [
+              {
+                Location: "src/a.ts",
+                Code: 10,
+                Lines: 12,
+                Complexity: 4,
+                Comment: 1,
+              },
+              {
+                Location: "src/b.ts",
+                Code: 0,
+                Lines: 1,
+                Complexity: 0,
+                Comment: 0,
+              },
+            ],
+          },
+        ]),
+      ),
+      stderr: Buffer.from(""),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    const result = runSccOnFiles("/tmp/wt", ["src/a.ts", "src/b.ts"]);
+
+    expect(result.get("src/a.ts")).toEqual({
+      file: "src/a.ts",
+      code: 10,
+      lines: 12,
+      complexity: 4,
+      comments: 1,
+      complexityDensity: 0.4,
+    });
+    // Zero-code files render density as 0 rather than NaN
+    expect(result.get("src/b.ts")?.complexityDensity).toBe(0);
+  });
+
+  it("throws when scc is not installed", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: null,
+      error: Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
+      stdout: Buffer.from(""),
+      stderr: Buffer.from(""),
+      pid: 0,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    expect(() => runSccOnFiles("/tmp/wt", ["src/a.ts"])).toThrow(
+      /scc not found/,
+    );
+  });
+
+  it("throws when scc exits non-zero", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: 1,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from("bad input"),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    expect(() => runSccOnFiles("/tmp/wt", ["src/a.ts"])).toThrow(/bad input/);
+  });
+
+  it("falls back to a generic message when stderr is empty", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: 1,
+      stdout: Buffer.from(""),
+      stderr: Buffer.from(""),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    expect(() => runSccOnFiles("/tmp/wt", ["src/a.ts"])).toThrow(
+      /unknown error/,
+    );
+  });
+});
+
+describe("withWorktreeAt", () => {
+  it("creates a worktree, runs the callback, and removes the worktree", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = withWorktreeAt("main", (path) => `ran-in:${path}`);
+
+    expect(result).toBe("ran-in:/tmp/obscene-base-xyz");
+    expect(mockExecSync).toHaveBeenCalledTimes(2);
+    expect(mockExecSync.mock.calls[0][0]).toMatch(/git worktree add --detach/);
+    expect(mockExecSync.mock.calls[1][0]).toMatch(
+      /git worktree remove --force/,
+    );
+  });
+
+  it("removes the temp dir and throws when worktree creation fails", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    mockExecSync.mockImplementation(() => {
+      const err = Object.assign(new Error("bad ref"), {
+        stderr: Buffer.from("fatal: invalid reference: nope"),
+      });
+      throw err;
+    });
+
+    expect(() => withWorktreeAt("nope", () => 0)).toThrow(
+      /Could not create worktree at 'nope'/,
+    );
+    expect(mockRmSync).toHaveBeenCalledWith("/tmp/obscene-base-xyz", {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it("omits stderr detail when the worktree error has no stderr", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    mockExecSync.mockImplementation(() => {
+      throw new Error("opaque");
+    });
+
+    expect(() => withWorktreeAt("nope", () => 0)).toThrow(
+      /Could not create worktree at 'nope'\. Verify the ref exists/,
+    );
+  });
+
+  it("cleans up via rmSync when the teardown worktree-remove fails", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    let call = 0;
+    mockExecSync.mockImplementation(() => {
+      call++;
+      if (call === 1) return Buffer.from(""); // worktree add succeeds
+      throw new Error("remove failed"); // worktree remove fails
+    });
+
+    const result = withWorktreeAt("main", () => "done");
+
+    expect(result).toBe("done");
+    expect(mockRmSync).toHaveBeenCalledWith("/tmp/obscene-base-xyz", {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it("still tears the worktree down when the callback throws", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/obscene-base-xyz");
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    expect(() =>
+      withWorktreeAt("main", () => {
+        throw new Error("callback failed");
+      }),
+    ).toThrow("callback failed");
+
+    expect(mockExecSync.mock.calls.at(-1)?.[0]).toMatch(
+      /git worktree remove --force/,
+    );
+  });
+});
+
+describe("getComplexityDeltas", () => {
+  it("returns empty map when no files are given", () => {
+    const result = getComplexityDeltas("main", [], new Map());
+    expect(result.size).toBe(0);
+  });
+
+  it("computes change for files present at base and HEAD", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/wt");
+    mockExecSync.mockReturnValue(Buffer.from(""));
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: Buffer.from(
+        JSON.stringify([
+          {
+            Name: "TypeScript",
+            Files: [
+              {
+                Location: "src/a.ts",
+                Code: 10,
+                Lines: 12,
+                Complexity: 5,
+                Comment: 1,
+              },
+            ],
+          },
+        ]),
+      ),
+      stderr: Buffer.from(""),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    const newMetrics = new Map([["src/a.ts", 9]]);
+    const result = getComplexityDeltas("main", ["src/a.ts"], newMetrics);
+
+    expect(result.get("src/a.ts")).toEqual({
+      oldComplexity: 5,
+      newComplexity: 9,
+      change: 4,
+    });
+  });
+
+  it("labels files absent at base with oldComplexity=null", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/wt");
+    mockExecSync.mockReturnValue(Buffer.from(""));
+    mockExistsSync.mockReturnValue(false); // file isn't at base
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: Buffer.from("[]"),
+      stderr: Buffer.from(""),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    const newMetrics = new Map([["src/new.ts", 7]]);
+    const result = getComplexityDeltas("main", ["src/new.ts"], newMetrics);
+
+    expect(result.get("src/new.ts")).toEqual({
+      oldComplexity: null,
+      newComplexity: 7,
+      change: null,
+    });
+  });
+
+  it("skips files that have no entry in the HEAD metrics map", () => {
+    mockMkdtempSync.mockReturnValue("/tmp/wt");
+    mockExecSync.mockReturnValue(Buffer.from(""));
+    mockExistsSync.mockReturnValue(true);
+    mockSpawnSync.mockReturnValue({
+      status: 0,
+      stdout: Buffer.from("[]"),
+      stderr: Buffer.from(""),
+      pid: 1,
+      output: [],
+      signal: null,
+    } as unknown as ReturnType<typeof spawnSync>);
+
+    const result = getComplexityDeltas("main", ["src/gone.ts"], new Map());
+    expect(result.size).toBe(0);
   });
 });

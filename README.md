@@ -113,7 +113,11 @@ What it does, mechanically: runs `git diff --name-only <ref>...HEAD` (three-dot:
 
 When nothing has changed, the command prints `No files changed since <ref>` to stderr and exits 0. The JSON output gains a top-level `delta` field with `{ base, head, changedFiles }`.
 
-This is the cheapest of three planned delta modes; complexity-delta and full-snapshot-diff modes are tracked separately.
+Each ranking entry also carries `complexityDelta: { oldComplexity, newComplexity, change }`, computed by allocating a detached git worktree at `<ref>` and running scc against only the changed file set. Table output shows the change in a `Δ` column — `+12` for an increase, `-3` for a decrease, `0` for no change, `new` for files that didn't exist at the base. Files removed at HEAD are not in the changed set, so they don't appear.
+
+If the worktree allocation fails (bad ref, fs error), obscene falls back to the unaugmented delta view and surfaces a stderr warning — the rest of the report still works.
+
+A full before/after snapshot diff with tier transitions is tracked separately.
 
 ### `obscene coupling`
 
