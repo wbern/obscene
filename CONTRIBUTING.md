@@ -6,6 +6,8 @@ The most useful contribution right now isn't code — it's an honest field repor
 
 The prompt below is designed to be copied verbatim into your agent of choice (Claude Code, Cursor, Aider, etc.) inside a repo you're willing to analyze. The agent runs, reads, and writes; you review and either open a PR adding it to the README or send it via issue.
 
+For a worked example of what the tool says about a real codebase, see the **Hotspots snapshot** auto-appended to every GitHub release of obscene itself — it's the same output you'll be reading on your own repo, applied to this one.
+
 ### What a good report looks like
 
 - **Honest, specific, numbered.** "5 hotspots flagged, top one had 12 fix-commits across 30 changes" beats "it found stuff."
@@ -48,11 +50,30 @@ don't have pnpm):
   pnpm dlx @wbern/obscene --format table             # hotspots, 3-month default
   pnpm dlx @wbern/obscene --format table --months 6  # wider window
   pnpm dlx @wbern/obscene coupling --format table    # coupling
+  pnpm dlx @wbern/obscene report --format table      # raw scc summary
+
+Then pick a base ref (a release tag, a branch you merged, or a SHA from
+~2 weeks ago) and run the delta views:
+
+  pnpm dlx @wbern/obscene --base <ref> --format table              # rankings filtered to changed files
+  pnpm dlx @wbern/obscene --base <ref> --full-delta --format table # full corpus diff (mode C)
+
+Note: as of v2.x, **`obscene` excludes nothing by default** — without an
+`.obsignore`, generated files / vendored code / lockfiles all show up in
+the ranking. Running `init` first is not optional cosmetics; it's how you
+opt into the filtering everyone else's rankings assume. If you skip it,
+mention that in the report.
 
 Also run each command without `--format table` to get JSON, and inspect the
 `confidence` fields on each ranking — `level`, `reason`, `inputs.value`,
 `inputs.thresholds`, and `source`. Note the file count after `.obsignore`
 filtering and roughly how long the runs took.
+
+Watch stderr for warnings like _"git history covers ~Nd, but --months
+window is 90d — count-based confidence won't reflect time-based trust on
+a young repo"_. If you see one, that's a verification target for the
+honesty claim — note whether it changed how you read the confidence
+column.
 
 ## Step 2: Read it critically
 
@@ -78,6 +99,20 @@ For coupling:
 - Did the `†` deleted-file marker show up, and did it help?
 - Anything surprise you about how Degree is computed or displayed?
 
+For the delta views:
+
+- Compare the `--base <ref>` run (filtered rankings) against the full
+  hotspots run — do the filtered entries look like the parts of the diff
+  worth careful review, or did the filter drop the file you would have
+  flagged from reading the diff yourself?
+- With `--full-delta`, look at the Δ columns and the Full Delta section.
+  Are the complexity / churn deltas directionally believable? Did a file
+  with a big Δ actually warrant attention, or was it a rename / format
+  churn?
+- Did `--full-delta` ever fall back to mode B (filtered rankings)? If so,
+  the JSON `fullDelta` will be missing and stderr will explain why —
+  worth noting what triggered it.
+
 On the confidence ladder specifically:
 
 - For each ranking, does the assigned level (INCONCLUSIVE / WEAK /
@@ -93,8 +128,9 @@ On the README's claims more broadly:
 
 - Pick 2–3 specific behavioral claims from the README (e.g. "refuses to
   rank thin samples", "exposes confidence inputs", "marks lockstep pairs",
-  "init picks up modern patterns") and verify them against the actual
-  output. Note any gap between claim and behavior.
+  "init picks up modern patterns", "exclusions are opt-in") and verify
+  them against the actual output. Note any gap between claim and
+  behavior.
 
 ## Step 3: Write the report
 
