@@ -24,6 +24,7 @@ import {
   readIgnoreFile,
   runScc,
   runSccOnFiles,
+  sliceCoreForDisplay,
   UNIVERSAL_IGNORE_GROUPS,
   withWorktreeAt,
 } from "./analyze.js";
@@ -3023,6 +3024,107 @@ describe("computeHotspotsCore", () => {
     expect(result.churn.get("src/a.ts")).toBe(2);
     expect(result.rankings.complexity?.entries.length ?? 0).toBeGreaterThan(0);
     expect(result.composite.totalEntries).toBeGreaterThan(0);
+  });
+});
+
+describe("sliceCoreForDisplay", () => {
+  // Build a deterministic "fully-computed" core (as produced by
+  // computeHotspotsCore(..., top=0)) we can slice without invoking the
+  // real pipeline. The fields we exercise are entries[]/showing across
+  // rankings and composite.
+  function makeCore(fileCount: number): ReturnType<typeof computeHotspotsCore> {
+    const entries = Array.from({ length: fileCount }, (_, i) => ({
+      file: `src/${String.fromCharCode(97 + i)}.ts`,
+      score: 1000 - i,
+      percentOfTotal: 10,
+      churn: 5,
+      tier: "hot" as Tier,
+      metricValue: 10,
+    }));
+    const compositeEntries = entries.map((e) => ({
+      file: e.file,
+      score: e.score,
+      percentOfTotal: e.percentOfTotal,
+      tier: e.tier,
+      churn: e.churn,
+      dimensionCount: 4,
+    }));
+    const confidence: ConfidenceInfo = {
+      level: "acceptable",
+      reason: "test",
+      source: "test",
+      inputs: {
+        metric: "test",
+        value: fileCount,
+        thresholds: { weak: 1, plausible: 2, acceptable: 3 },
+      },
+    };
+    const ranking: RankingOutput = {
+      label: "Test",
+      scoreFormula: "metric × churn",
+      totalScore: entries.reduce((s, e) => s + e.score, 0),
+      tierCounts: { hot: fileCount, warm: 0, cool: 0 },
+      totalEntries: fileCount,
+      showing: fileCount,
+      entries,
+      confidence,
+    };
+    const composite: CompositeOutput = {
+      label: "Composite",
+      scoreFormula: "RRF",
+      totalScore: entries.reduce((s, e) => s + e.score, 0),
+      tierCounts: { hot: fileCount, warm: 0, cool: 0 },
+      totalDimensions: 4,
+      totalEntries: fileCount,
+      showing: fileCount,
+      entries: compositeEntries,
+      confidence,
+    };
+    return {
+      rankings: { complexity: ranking, nesting: ranking },
+      skipped: {},
+      composite,
+      corpus: { fileCount, totalComplexity: 100 },
+      churn: new Map([["src/a.ts", 5]]),
+    };
+  }
+
+  it("returns the input unchanged when top <= 0", () => {
+    const core = makeCore(5);
+    expect(sliceCoreForDisplay(core, 0)).toBe(core);
+    expect(sliceCoreForDisplay(core, -1)).toBe(core);
+  });
+
+  it("trims rankings + composite entries to top N and updates `showing`", () => {
+    const core = makeCore(10);
+    const sliced = sliceCoreForDisplay(core, 3);
+    for (const r of Object.values(sliced.rankings)) {
+      expect(r.entries).toHaveLength(3);
+      expect(r.showing).toBe(3);
+      // totalEntries reflects the unsliced corpus — the slice is a display
+      // window, not a filter on what was computed.
+      expect(r.totalEntries).toBe(10);
+    }
+    expect(sliced.composite.entries).toHaveLength(3);
+    expect(sliced.composite.showing).toBe(3);
+    expect(sliced.composite.totalEntries).toBe(10);
+  });
+
+  it("passes corpus and churn through untouched", () => {
+    const core = makeCore(10);
+    const sliced = sliceCoreForDisplay(core, 3);
+    expect(sliced.corpus).toBe(core.corpus);
+    expect(sliced.churn).toBe(core.churn);
+  });
+
+  it("is a no-op when top exceeds the entry count", () => {
+    const core = makeCore(3);
+    const sliced = sliceCoreForDisplay(core, 50);
+    for (const r of Object.values(sliced.rankings)) {
+      expect(r.entries).toHaveLength(3);
+      expect(r.showing).toBe(3);
+    }
+    expect(sliced.composite.entries).toHaveLength(3);
   });
 });
 

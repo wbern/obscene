@@ -1369,6 +1369,40 @@ export function computeHotspotsCore(
 }
 
 /**
+ * Trim a `computeHotspotsCore(..., top=0)` result down to a top-N slice for
+ * display. Mode C runs the head pipeline at top=0 (so the snapshot diff sees
+ * the whole corpus), then reuses that result here instead of paying a second
+ * git-log pass for display.
+ *
+ * Invariant: `sliceCoreForDisplay(computeHotspotsCore(files, months, 0), N)`
+ * is observationally equivalent to `computeHotspotsCore(files, months, N)` —
+ * if that diverges, mode C's display rankings will drift from modes A/B.
+ */
+export function sliceCoreForDisplay(
+  core: ReturnType<typeof computeHotspotsCore>,
+  top: number,
+): ReturnType<typeof computeHotspotsCore> {
+  if (top <= 0) return core;
+  const rankings: typeof core.rankings = {};
+  for (const [k, r] of Object.entries(core.rankings)) {
+    const sliced = r.entries.slice(0, top);
+    rankings[k] = { ...r, entries: sliced, showing: sliced.length };
+  }
+  const compositeSliced = core.composite.entries.slice(0, top);
+  return {
+    rankings,
+    skipped: core.skipped,
+    composite: {
+      ...core.composite,
+      entries: compositeSliced,
+      showing: compositeSliced.length,
+    },
+    corpus: core.corpus,
+    churn: core.churn,
+  };
+}
+
+/**
  * Run the full snapshot pipeline (scc + git history + ranking) against a
  * single working tree. Mode C runs this twice — once at HEAD, once inside
  * a detached worktree at the base ref — and passes both to `computeDelta`.

@@ -110,6 +110,13 @@ export interface DeltaInfo {
   base: string;
   head: string;
   changedFiles: string[];
+  /**
+   * Set when the user asked for a richer delta mode (e.g. `--full-delta`)
+   * but the pipeline degraded to a smaller shape. The reason mirrors the
+   * stderr warning so programmatic consumers can detect the downgrade
+   * without scraping stderr.
+   */
+  fallback?: { from: "full-delta"; reason: string };
 }
 
 export interface HotspotsOutput {

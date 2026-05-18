@@ -20,6 +20,7 @@ import {
   getTrackedFiles,
   readIgnoreFile,
   runScc,
+  sliceCoreForDisplay,
   UNIVERSAL_IGNORE_GROUPS,
   withWorktreeAt,
 } from "./analyze.js";
@@ -264,36 +265,6 @@ function attachComplexityDeltas(
   }
 }
 
-/**
- * Trim a `computeHotspotsCore(..., top=0)` result down to a top-N slice for
- * display. Mode C runs the head pipeline at top=0 (so the snapshot diff sees
- * the whole corpus), then reuses that result here instead of paying for a
- * second git-log pass.
- */
-function sliceCoreForDisplay(
-  core: ReturnType<typeof computeHotspotsCore>,
-  top: number,
-): ReturnType<typeof computeHotspotsCore> {
-  if (top <= 0) return core;
-  const rankings: typeof core.rankings = {};
-  for (const [k, r] of Object.entries(core.rankings)) {
-    const sliced = r.entries.slice(0, top);
-    rankings[k] = { ...r, entries: sliced, showing: sliced.length };
-  }
-  const compositeSliced = core.composite.entries.slice(0, top);
-  return {
-    rankings,
-    skipped: core.skipped,
-    composite: {
-      ...core.composite,
-      entries: compositeSliced,
-      showing: compositeSliced.length,
-    },
-    corpus: core.corpus,
-    churn: core.churn,
-  };
-}
-
 function resolveBaseRef(raw: string | boolean): string {
   if (typeof raw === "string") return raw;
   // Commander emits `true` for bare `--base` with no value. (`false` is not
@@ -377,6 +348,9 @@ function runHotspots(opts: HotspotsOpts): void {
         );
         files = files.filter((f) => changed.has(f.file));
         modeCHeadCore = undefined;
+        // Surface the downgrade in the structured output so JSON consumers
+        // don't silently get a B-shape payload when they asked for C.
+        delta.fallback = { from: "full-delta", reason: message };
       }
     } else {
       files = files.filter((f) => changed.has(f.file));

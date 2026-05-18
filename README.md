@@ -128,7 +128,7 @@ obscene --base main --full-delta --format table
 
 Output gains a top-level `fullDelta` block with `tierTransitions` (`enteredHot`/`enteredWarm`/`exitedHot`/`exitedWarm`), `newFiles`, `deletedFiles`, `scoreChanges` (per-file absolute and percent score deltas, sorted by magnitude), and `perDimensionDeltas` (corpus-wide complexity and file count totals). Rankings are shown for the *full* corpus at HEAD — not filtered — so you can correlate global hotspots against the diff.
 
-If the worktree allocation or base pipeline fails, obscene falls back to the bare `--base` view (filtered rankings + per-file `Δ` column) and surfaces a stderr warning — you still get the PR-scoped report.
+If the worktree allocation or base pipeline fails, obscene falls back to the bare `--base` view (filtered rankings + per-file `Δ` column) and surfaces a stderr warning — you still get the PR-scoped report. The downgrade is also recorded in the JSON output as `delta.fallback: { from: "full-delta", reason: "<error>" }`, so programmatic consumers can detect it without scraping stderr.
 
 ##### When to use which mode
 

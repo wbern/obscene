@@ -740,6 +740,54 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("new.ts");
   });
 
+  // When --full-delta is requested but the worktree pipeline can't run, the
+  // CLI must degrade gracefully: filter rankings to changed files (Mode B
+  // shape), surface the downgrade in stderr AND in `delta.fallback` so JSON
+  // consumers can detect it without scraping stderr.
+  it("should fall back to filtered rankings when --full-delta worktree fails", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    // Point TMPDIR at a path that doesn't exist. withWorktreeAt's
+    // `mkdtempSync(join(tmpdir(), "obscene-base-"))` will throw ENOENT,
+    // while `git diff --name-only` (no temp space needed) still succeeds.
+    const badTmp = path.join(tempDir, "no-such-tmp-dir");
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--full-delta", "--top", "0"],
+      {
+        cwd: tempDir,
+        encoding: "utf-8",
+        env: { ...process.env, TMPDIR: badTmp, TMP: badTmp, TEMP: badTmp },
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("full-delta unavailable");
+    expect(result.stderr).toContain("Falling back to filtered rankings");
+
+    const parsed = JSON.parse(result.stdout);
+    // Mode C shape is gone; Mode B shape is in place.
+    expect(parsed.fullDelta).toBeUndefined();
+    expect(parsed.delta).toBeDefined();
+    expect(parsed.delta.fallback).toBeDefined();
+    expect(parsed.delta.fallback.from).toBe("full-delta");
+    expect(typeof parsed.delta.fallback.reason).toBe("string");
+    expect(parsed.delta.fallback.reason.length).toBeGreaterThan(0);
+
+    // Rankings should be filtered — stable.ts was never touched and must
+    // not appear; a.ts (modified) must.
+    const filesInRankings = new Set<string>();
+    for (const ranking of Object.values(parsed.rankings) as Array<{
+      entries: Array<{ file: string }>;
+    }>) {
+      for (const e of ranking.entries) filesInRankings.add(e.file);
+    }
+    expect(filesInRankings.has("stable.ts")).toBe(false);
+    expect(filesInRankings.has("a.ts")).toBe(true);
+  });
+
   it("should reject --full-delta without --base", {
     timeout: 30000,
   }, () => {

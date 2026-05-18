@@ -345,6 +345,13 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
         } changed since ${delta.base}`,
       ),
     );
+    if (delta.fallback) {
+      lines.push(
+        pc.yellow(
+          `  ⚠ full-delta unavailable — showing filtered view. Reason: ${delta.fallback.reason}`,
+        ),
+      );
+    }
     if (delta.changedFiles.length === 0) {
       lines.push("");
       lines.push(pc.dim("No changes — nothing to rank."));

@@ -832,6 +832,27 @@ describe("formatHotspotsTable", () => {
     expect(result).not.toContain("1 files");
   });
 
+  it("renders a fallback notice when the user asked for full-delta and got B", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      delta: {
+        base: "main",
+        head: "HEAD",
+        changedFiles: ["src/a.ts"],
+        fallback: { from: "full-delta", reason: "worktree alloc failed" },
+      },
+      rankings: {},
+      corpus: { fileCount: 1, totalComplexity: 10 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("full-delta unavailable");
+    expect(result).toContain("worktree alloc failed");
+  });
+
   it("renders the empty-delta message and skips rankings when nothing changed", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
