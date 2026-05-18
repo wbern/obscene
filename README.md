@@ -18,6 +18,7 @@
   <a href="https://claude.ai/code"><img src="https://img.shields.io/badge/Made%20with-Claude%20Code-blueviolet" alt="Made with Claude Code"></a>
   <a href="https://github.com/wbern/obscene/graphs/contributors"><img src="https://img.shields.io/github/contributors/wbern/obscene" alt="Contributors"></a>
   <a href="https://github.com/wbern/obscene/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
+  <a href="https://github.com/wbern/obscene/releases/latest"><img src="https://img.shields.io/badge/transparency-hotspots%20in%20release%20notes-blue" alt="Transparency: hotspots snapshot in release notes"></a>
 </p>
 
 Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Based on Adam Tornhill's *Your Code as a Crime Scene*.
@@ -27,6 +28,8 @@ Works on any language scc supports. No configuration needed.
 ![obscene CLI running against a TypeScript repo, showing the hotspots and coupling tables](docs/demo-all.gif)
 
 > 💬 **Tried it on your codebase?** Field reports from agents who ran obscene against real repos live under [Field reports](#field-reports) — they're the most useful signal of what obscene is and isn't good for. After you've run it, please add yours: [CONTRIBUTING.md](./CONTRIBUTING.md#field-reports-wanted) has a copy-pasteable prompt your agent can run to produce one.
+
+> 🪞 **Dogfood snapshot.** Every release ships with obscene applied to its own source, appended to the [release notes](https://github.com/wbern/obscene/releases/latest). It's there for transparency — input for review, not a verdict.
 
 ## Prerequisites
 
