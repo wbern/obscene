@@ -132,6 +132,17 @@ export interface HotspotsOutput {
   corpus?: {
     fileCount: number;
     totalComplexity: number;
+    /**
+     * `true` when an `.obsignore` or `.obsceneignore` was found and applied,
+     * `false` when the rankings include lockfiles, generated code, vendored
+     * dependencies — anything `obscene init` would normally exclude. Omitted
+     * by callers that don't know (test fixtures, older snapshots).
+     *
+     * Surfaces the gap structurally instead of forcing JSON consumers to
+     * scrape stderr — same philosophy as SARIF 2.1.0
+     * `invocation.toolConfigurationNotifications[]` (OASIS).
+     */
+    filtered?: boolean;
   };
 }
 

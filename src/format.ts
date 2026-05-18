@@ -304,9 +304,12 @@ function formatFullDeltaSection(fd: HotspotDelta): string[] {
       pc.yellow(`  ↑ entered WARM (${enteredWarm.length}):`),
       enteredWarm,
     );
-    pushFileList(pc.green(`  ↓ exited HOT (${exitedHot.length}):`), exitedHot);
     pushFileList(
-      pc.green(`  ↓ exited WARM (${exitedWarm.length}):`),
+      pc.green(`  ↓ cooled out of HOT (${exitedHot.length}):`),
+      exitedHot,
+    );
+    pushFileList(
+      pc.green(`  ↓ cooled out of WARM (${exitedWarm.length}):`),
       exitedWarm,
     );
     pushFileList(
@@ -432,6 +435,19 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
     ),
   );
   lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));
+
+  if (corpus?.filtered === false) {
+    lines.push("");
+    lines.push(
+      pc.yellow(
+        "⚠ Corpus unfiltered — no .obsignore found. Lockfiles, generated " +
+          "code, and vendored dependencies may dominate these rankings.",
+      ),
+    );
+    lines.push(
+      pc.dim("  Run `obscene init` to generate a starter .obsignore."),
+    );
+  }
 
   return lines.join("\n");
 }

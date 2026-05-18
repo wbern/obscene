@@ -1060,6 +1060,75 @@ describe("formatHotspotsTable", () => {
     const headerLine = result.split("\n").find((l) => l.includes("Score"));
     expect(headerLine).not.toContain("Δ");
   });
+
+  it("warns in the footer when the corpus is unfiltered", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "pnpm-lock.yaml",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 1, totalComplexity: 10, filtered: false },
+    };
+
+    const result = formatHotspotsTable(output);
+    expect(result).toContain("Corpus unfiltered");
+    expect(result).toContain("obscene init");
+  });
+
+  it("omits the unfiltered-corpus footer when filtered is true", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 10,
+          tierCounts: { hot: 1, warm: 0, cool: 0 },
+          totalEntries: 1,
+          showing: 1,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/a.ts",
+              score: 10,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 5,
+              metricValue: 2,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 1, totalComplexity: 10, filtered: true },
+    };
+
+    const result = formatHotspotsTable(output);
+    expect(result).not.toContain("Corpus unfiltered");
+  });
 });
 
 describe("formatCouplingTable", () => {
@@ -1513,9 +1582,9 @@ describe("formatHotspotsTable fullDelta section", () => {
     expect(out).toContain("a.ts");
     expect(out).toContain("entered WARM (1)");
     expect(out).toContain("b.ts");
-    expect(out).toContain("exited HOT (1)");
+    expect(out).toContain("cooled out of HOT (1)");
     expect(out).toContain("c.ts");
-    expect(out).toContain("exited WARM (1)");
+    expect(out).toContain("cooled out of WARM (1)");
     expect(out).toContain("d.ts");
     expect(out).toContain("complexity 100 → 150 (+50)");
     expect(out).toContain("files 10 → 12 (+2)");

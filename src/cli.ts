@@ -188,8 +188,12 @@ function resolveExcludes(cliExcludes?: string[]): string[] {
   return [...readIgnoreFile(), ...(cliExcludes ?? [])];
 }
 
+function hasIgnoreFile(): boolean {
+  return existsSync(".obsignore") || existsSync(".obsceneignore");
+}
+
 function warnIfNoIgnoreFile(): void {
-  if (!existsSync(".obsignore") && !existsSync(".obsceneignore")) {
+  if (!hasIgnoreFile()) {
     process.stderr.write(
       "hint: no .obsignore found — run `obscene init` to generate one with recommended exclusions\n",
     );
@@ -282,6 +286,7 @@ function resolveBaseRef(raw: string | boolean): string {
 
 function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
+  const filtered = hasIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const historyCoverage = warnHistoryCoverage(months);
@@ -309,7 +314,7 @@ function runHotspots(opts: HotspotsOpts): void {
         historyCoverage,
         delta: { base: baseRef, head: "HEAD", changedFiles: [] },
         rankings: {},
-        corpus: { fileCount: 0, totalComplexity: 0 },
+        corpus: { fileCount: 0, totalComplexity: 0, filtered },
       };
       if (opts.format === "table") {
         process.stdout.write(`${formatHotspotsTable(empty)}\n`);
@@ -390,7 +395,7 @@ function runHotspots(opts: HotspotsOpts): void {
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
-    corpus,
+    corpus: { ...corpus, filtered },
   };
 
   if (opts.format === "table") {
