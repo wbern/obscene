@@ -72,6 +72,10 @@ describe("ageInDays", () => {
   test("rounds down partial days", () => {
     expect(ageInDays(1_700_000_000, 1_700_000_000 + 86399)).toBe(0);
   });
+
+  test("clamps to 0 when `now` precedes `from` (clock skew)", () => {
+    expect(ageInDays(1_700_000_000, 1_699_000_000)).toBe(0);
+  });
 });
 
 describe("heaviestFile", () => {
@@ -112,6 +116,10 @@ describe("languageBreakdown", () => {
       { file: "z.go", code: 100 },
     ];
     expect(languageBreakdown(files)).toBe("JavaScript 67%, other 33%");
+  });
+
+  test("renders 'Lang 100%' when only one language is present", () => {
+    expect(languageBreakdown([{ file: "a.ts", code: 100 }])).toBe("TypeScript 100%");
   });
 });
 
@@ -169,5 +177,13 @@ describe("renderFunStatsSection", () => {
     const out = renderFunStatsSection({ ...baseInput, lastTag: "", release: null });
     expect(out).not.toContain("**This release**");
     expect(out).toContain("**The codebase**");
+  });
+
+  test("omits the Δ complexity row when the delta is unavailable", () => {
+    const release = { ...baseInput.release, complexityDelta: null };
+    const out = renderFunStatsSection({ ...baseInput, release });
+    expect(out).toContain("**This release**");
+    expect(out).not.toContain("Δ complexity");
+    expect(out).not.toContain("0 → 0");
   });
 });

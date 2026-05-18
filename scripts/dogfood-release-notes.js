@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
   ageInDays,
+  heaviestFile,
   languageBreakdown,
   renderFunStatsSection,
 } from "./dogfood-render.mjs";
@@ -51,7 +52,7 @@ try {
 
 function gatherCodebase() {
   const report = JSON.parse(runObscene(["report", "--format", "json"]));
-  const heaviest = report.files.reduce((a, b) => (b.lines > a.lines ? b : a));
+  const heaviest = heaviestFile(report.files);
   const totalComment = report.files.reduce((s, f) => s + (f.comments || 0), 0);
   const denom = report.summary.totalCode + totalComment;
   const commentRatio = denom === 0 ? 0 : totalComment / denom;
@@ -128,7 +129,7 @@ function gatherRelease(tag) {
     if (changed > largest.lines) largest = { sha, subject, lines: changed };
   }
 
-  let complexityDelta = { oldTotal: 0, newTotal: 0, change: 0 };
+  let complexityDelta = null;
   try {
     const json = JSON.parse(
       runObscene(["hotspots", "--base", tag, "--full-delta", "--format", "json"]),
@@ -137,7 +138,7 @@ function gatherRelease(tag) {
       complexityDelta = json.fullDelta.perDimensionDeltas.complexity;
     }
   } catch {
-    // delta missing — release section will show 0→0; acceptable degradation
+    // delta missing — renderer omits the Δ complexity row entirely
   }
 
   return {

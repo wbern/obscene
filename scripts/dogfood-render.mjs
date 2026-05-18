@@ -16,12 +16,14 @@ function renderReleaseTable(release, lastTag) {
     row("Net lines", `+${commas(netLines.added)} / −${commas(netLines.removed)}`),
   ];
   if (day) rows.push(row("Busiest day", `${day.day} _(${day.count} commits)_`));
-  rows.push(
-    row(
-      "Δ complexity",
-      `${commas(complexityDelta.oldTotal)} → ${commas(complexityDelta.newTotal)} _(${complexityDelta.change >= 0 ? "+" : "−"}${Math.abs(complexityDelta.change)})_`,
-    ),
-  );
+  if (complexityDelta) {
+    rows.push(
+      row(
+        "Δ complexity",
+        `${commas(complexityDelta.oldTotal)} → ${commas(complexityDelta.newTotal)} _(${complexityDelta.change >= 0 ? "+" : "−"}${Math.abs(complexityDelta.change)})_`,
+      ),
+    );
+  }
   return ["**This release**", "", "| | |", "|---|---|", ...rows].join("\n");
 }
 
@@ -132,7 +134,7 @@ export function commas(n) {
 }
 
 export function ageInDays(fromUnixSec, nowUnixSec) {
-  return Math.floor((nowUnixSec - fromUnixSec) / 86400);
+  return Math.max(0, Math.floor((nowUnixSec - fromUnixSec) / 86400));
 }
 
 export function heaviestFile(files) {
