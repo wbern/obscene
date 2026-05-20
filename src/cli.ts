@@ -62,6 +62,7 @@ interface HotspotsOpts extends SharedOpts {
   fullDelta?: boolean;
   paths?: string[];
   since?: string;
+  churnMode: string;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -157,6 +158,11 @@ addSharedOptions(
   .option(
     "--since <ref>",
     "shorthand for --paths $(git diff --name-only <ref>...HEAD) — filter to files changed since ref",
+  )
+  .option(
+    "--churn-mode <mode>",
+    "how to count churn: 'commits' counts commits touching each file; 'lines' sums added+deleted lines via git log --numstat",
+    "commits",
   )
   .action((opts: HotspotsOpts) => {
     try {
@@ -416,12 +422,20 @@ function applyPathScope(
   };
 }
 
+function parseChurnMode(value: string): "commits" | "lines" {
+  if (value === "commits" || value === "lines") return value;
+  throw new Error(
+    `Unknown --churn-mode '${value}'. Expected 'commits' or 'lines'.`,
+  );
+}
+
 function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
   warnIfNotRepoRoot();
   const filtered = hasIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
+  const churnMode = parseChurnMode(opts.churnMode);
   const historyCoverage = warnHistoryCoverage(months);
   const allExcludes = resolveExcludes(opts.exclude);
   let files = runScc(allExcludes);
@@ -453,6 +467,7 @@ function runHotspots(opts: HotspotsOpts): void {
         generated: new Date().toISOString(),
         guide: HOTSPOTS_GUIDE,
         churnWindow: `${months} months`,
+        churnMode,
         historyCoverage,
         delta: { base: baseRef, head: "HEAD", changedFiles: [] },
         rankings: {},
@@ -476,9 +491,20 @@ function runHotspots(opts: HotspotsOpts): void {
       // wants whole-codebase rankings plus a cross-snapshot diff.
       try {
         const baseSnapshot = withWorktreeAt(baseRef, (path) =>
-          computeSnapshot({ months, excludes: allExcludes, cwd: path }),
+          computeSnapshot({
+            months,
+            excludes: allExcludes,
+            cwd: path,
+            churnMode,
+          }),
         );
-        modeCHeadCore = computeHotspotsCore(files, months, 0);
+        modeCHeadCore = computeHotspotsCore(
+          files,
+          months,
+          0,
+          undefined,
+          churnMode,
+        );
         const headSnapshot: HotspotSnapshot = {
           files,
           rankings: modeCHeadCore.rankings,
@@ -506,7 +532,7 @@ function runHotspots(opts: HotspotsOpts): void {
 
   const { rankings, skipped, composite, corpus } = modeCHeadCore
     ? sliceCoreForDisplay(modeCHeadCore, top)
-    : computeHotspotsCore(files, months, top);
+    : computeHotspotsCore(files, months, top, undefined, churnMode);
 
   if (delta && fullDelta === undefined) {
     const newComplexity = new Map<string, number>();
@@ -531,6 +557,7 @@ function runHotspots(opts: HotspotsOpts): void {
     generated: new Date().toISOString(),
     guide: HOTSPOTS_GUIDE,
     churnWindow: `${months} months`,
+    churnMode,
     historyCoverage,
     delta,
     fullDelta,

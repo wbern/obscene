@@ -1029,4 +1029,131 @@ describe("CLI Integration", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("mutually exclusive");
   });
+
+  // Churn mode (GH#17): commits is the default; lines sums numstat
+  // added+deleted so big rewrites outweigh tiny typo fixes.
+  function setupChurnModeRepo(): void {
+    spawnSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const writeFile = (name: string, body: string) =>
+      fs.writeFileSync(path.join(tempDir, name), body);
+
+    // Baseline: small.ts gets many tiny commits, big.ts gets one large
+    // rewrite. Under --churn-mode commits, small.ts has the higher churn
+    // count; under --churn-mode lines, big.ts dominates.
+    writeFile(
+      "small.ts",
+      "export function s(x: number) {\n  if (x > 0) return 1;\n  return 0;\n}\n",
+    );
+    writeFile(
+      "big.ts",
+      "export function b(x: number) {\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n",
+    );
+    // Third file so the complexity ranking clears its 3-file confidence floor.
+    writeFile(
+      "third.ts",
+      "export function t(x: number) {\n  if (x > 0) {\n    if (x > 10) return 3;\n  }\n  return 0;\n}\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "base"], { cwd: tempDir, stdio: "pipe" });
+
+    // 3 tiny commits to small.ts (1 line each)
+    for (let i = 0; i < 3; i++) {
+      writeFile(
+        "small.ts",
+        `// tweak ${i}\nexport function s(x: number) {\n  if (x > 0) return 1;\n  return 0;\n}\n`,
+      );
+      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+      spawnSync("git", ["commit", "-m", `tweak ${i}`], {
+        cwd: tempDir,
+        stdio: "pipe",
+      });
+    }
+
+    // 1 big commit to big.ts (many lines)
+    const expanded = Array.from({ length: 40 }, (_, i) => `  // L${i}`).join(
+      "\n",
+    );
+    writeFile(
+      "big.ts",
+      `export function b(x: number) {\n${expanded}\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n`,
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "rewrite big"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+  }
+
+  it("defaults to --churn-mode commits and surfaces commit counts (GH#17)", {
+    timeout: 30000,
+  }, () => {
+    setupChurnModeRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--top", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.churnMode).toBe("commits");
+
+    const churns = new Map<string, number>();
+    for (const e of parsed.rankings.complexity.entries as Array<{
+      file: string;
+      churn: number;
+    }>) {
+      churns.set(e.file, e.churn);
+    }
+    expect(churns.get("small.ts")).toBe(4); // base + 3 tweaks
+    expect(churns.get("big.ts")).toBe(2); // base + rewrite
+  });
+
+  it("counts added+deleted lines under --churn-mode lines (GH#17)", {
+    timeout: 30000,
+  }, () => {
+    setupChurnModeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--top", "0", "--churn-mode", "lines"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.churnMode).toBe("lines");
+
+    const churns = new Map<string, number>();
+    for (const e of parsed.rankings.complexity.entries as Array<{
+      file: string;
+      churn: number;
+    }>) {
+      churns.set(e.file, e.churn);
+    }
+    // big.ts now dominates because its single commit was large
+    expect(churns.get("big.ts")).toBeGreaterThan(churns.get("small.ts") ?? 0);
+  });
+
+  it("rejects unknown --churn-mode values (GH#17)", {
+    timeout: 30000,
+  }, () => {
+    setupChurnModeRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--churn-mode", "bogus"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Unknown --churn-mode 'bogus'");
+  });
 });

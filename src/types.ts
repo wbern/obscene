@@ -143,6 +143,12 @@ export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
   churnWindow: string;
+  /**
+   * How "churn" was counted for this run. `commits` (default) counts the
+   * number of commits that touched each file; `lines` sums added+deleted
+   * lines via `git log --numstat`. See README "Churn modes" for tradeoffs.
+   */
+  churnMode: "commits" | "lines";
   historyCoverage?: HistoryCoverageInfo;
   delta?: DeltaInfo;
   fullDelta?: HotspotDelta;

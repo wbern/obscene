@@ -189,6 +189,7 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--full-delta` | — | With `--base`: emit a structured before/after diff with tier transitions and corpus deltas (slower; runs the full pipeline against both refs) |
 | `--paths <files...>` | — | Hotspots only: filter displayed entries to these paths while keeping tier labels anchored to the full corpus (the "are MY changes in hot territory?" view). Mutually exclusive with `--base` and `--since`. |
 | `--since <ref>` | — | Shorthand for `--paths $(git diff --name-only <ref>...HEAD)`. Same corpus-anchored semantics as `--paths`. |
+| `--churn-mode <mode>` | `commits` | Hotspots only: `commits` counts commits per file; `lines` sums added+deleted lines via `git log --numstat` so big rewrites outweigh tiny edits. |
 | `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
 | `--exclude <patterns...>` | — | Additional exclusion patterns (also reads `.obsignore` / `.obsceneignore`) |
 
@@ -203,6 +204,8 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 #### Churn (`Churn`)
 
 Number of commits touching the file within the configured time window (default: 3 months). Measures how actively the file is being modified.
+
+Pass `--churn-mode lines` to switch to **line-based churn**: added+deleted lines summed across the window via `git log --numstat`. Use this when commit-counting flattens the difference between substantive changes and trivial ones — a single 500-line rewrite outweighs five typo fixes under `lines`, where commits mode rates them as 1 vs 5. Binary files (which numstat reports as `-`) are skipped because line counts aren't meaningful there. The active mode is surfaced as `churnMode` in JSON output.
 
 #### Cyclomatic complexity (`Cmplx`)
 
@@ -488,7 +491,7 @@ Files that change together but live in different directories reveal implicit dep
 
 ### General
 
-- **Churn = commit count**, not lines changed. A one-line typo fix counts the same as a 500-line rewrite.
+- **Default churn is commit count**, not lines changed — a one-line typo fix counts the same as a 500-line rewrite. Pass `--churn-mode lines` to switch to line-based churn (added+deleted via `git log --numstat`), which makes large refactors outweigh micro-edits.
 - **Per-file granularity only.** A 1000-line file with many small functions scores higher than it probably should. No function-level breakdown.
 - **Must be run inside a git repo.** Churn data comes from `git log`.
 - **Only analyzes files that currently exist.** Deleted files don't appear, even if they churned heavily before removal.

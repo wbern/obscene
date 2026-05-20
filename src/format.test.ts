@@ -123,6 +123,7 @@ describe("formatHotspotsTable", () => {
           "complexity × churn. Ranks files by combined risk: complex code that changes often.",
       },
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -188,6 +189,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -250,6 +252,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -287,6 +290,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -324,6 +328,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -360,6 +365,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         defects: {
           label: "Fix Activity \u00D7 Churn",
@@ -398,6 +404,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         authors: {
           label: "Authors \u00D7 Churn",
@@ -446,6 +453,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         authors: {
           label: "Authors × Churn",
@@ -483,6 +491,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -518,6 +527,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         defects: {
           label: "Fix Activity \u00D7 Churn",
@@ -553,6 +563,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
       skipped: {
         someOther: {
@@ -573,6 +584,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         unknown: {
           label: "Custom Metric",
@@ -614,6 +626,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity \u00D7 Churn",
@@ -661,6 +674,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity × Churn",
@@ -698,6 +712,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity × Churn",
@@ -734,6 +749,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
       corpus: { fileCount: 0, totalComplexity: 0 },
     };
@@ -748,6 +764,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
     };
 
@@ -761,6 +778,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
       corpus: { fileCount: 5, totalComplexity: 0 },
     };
@@ -776,6 +794,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
       corpus: { fileCount: 5, totalComplexity: 120 },
     };
@@ -790,6 +809,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "main",
         head: "HEAD",
@@ -833,6 +853,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "abc123",
         head: "HEAD",
@@ -848,11 +869,27 @@ describe("formatHotspotsTable", () => {
     expect(result).not.toContain("1 files");
   });
 
+  it("annotates the Hotspots header with '(line-based)' under --churn-mode lines (GH#17)", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      churnMode: "lines",
+      rankings: {},
+      corpus: { fileCount: 1, totalComplexity: 10 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Hotspots — 3 months churn window (line-based)");
+  });
+
   it("renders a fallback notice when the user asked for full-delta and got B", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "main",
         head: "HEAD",
@@ -874,6 +911,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: { base: "main", head: "HEAD", changedFiles: [] },
       rankings: {},
       corpus: { fileCount: 0, totalComplexity: 0 },
@@ -892,6 +930,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "main",
         head: "HEAD",
@@ -985,6 +1024,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "main",
         head: "HEAD",
@@ -1041,6 +1081,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       delta: {
         base: "main",
         head: "HEAD",
@@ -1085,6 +1126,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity × Churn",
@@ -1121,6 +1163,7 @@ describe("formatHotspotsTable", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {
         complexity: {
           label: "Complexity × Churn",
@@ -1581,6 +1624,7 @@ describe("formatHotspotsTable fullDelta section", () => {
       generated: "2026-01-01T00:00:00.000Z",
       guide: {},
       churnWindow: "3 months",
+      churnMode: "commits",
       rankings: {},
       corpus: { fileCount: 0, totalComplexity: 0 },
       fullDelta: fd,

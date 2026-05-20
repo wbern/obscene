@@ -338,7 +338,7 @@ function formatFullDeltaSection(fd: HotspotDelta): string[] {
 
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
-  const { churnWindow, rankings, corpus, delta, fullDelta } = output;
+  const { churnWindow, churnMode, rankings, corpus, delta, fullDelta } = output;
 
   if (delta) {
     lines.push(
@@ -364,7 +364,8 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
   if (fullDelta) {
     lines.push(...formatFullDeltaSection(fullDelta));
   }
-  lines.push(`Hotspots — ${churnWindow} churn window`);
+  const modeSuffix = churnMode === "lines" ? " (line-based)" : "";
+  lines.push(`Hotspots — ${churnWindow} churn window${modeSuffix}`);
   if (corpus && corpus.fileCount > 0 && corpus.totalComplexity === 0) {
     lines.push("");
     lines.push(

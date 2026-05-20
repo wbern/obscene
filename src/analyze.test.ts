@@ -15,6 +15,7 @@ import {
   getAuthorCommitCounts,
   getChangedFiles,
   getChurn,
+  getChurnLines,
   getCoChanges,
   getCommitsInWindow,
   getComplexityDeltas,
@@ -513,6 +514,94 @@ describe("getChurn", () => {
     });
 
     expect(() => getChurn(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+});
+
+describe("getChurnLines (GH#17)", () => {
+  it("sums added+deleted lines per file across numstat records", () => {
+    const gitOutput = "10\t2\tsrc/foo.ts\n3\t1\tsrc/bar.ts\n5\t5\tsrc/foo.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.get("src/foo.ts")).toBe(22);
+    expect(result.get("src/bar.ts")).toBe(4);
+  });
+
+  it("skips binary files (numstat reports '-' for added/deleted)", () => {
+    const gitOutput = "-\t-\tassets/logo.png\n7\t3\tsrc/foo.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.has("assets/logo.png")).toBe(false);
+    expect(result.get("src/foo.ts")).toBe(10);
+  });
+
+  it("normalizes ./ prefix in git paths", () => {
+    const gitOutput = "4\t1\t./src/foo.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.get("src/foo.ts")).toBe(5);
+  });
+
+  it("ignores blank separator lines from --format= output", () => {
+    const gitOutput = "\n\n5\t1\tsrc/foo.ts\n\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.size).toBe(1);
+    expect(result.get("src/foo.ts")).toBe(6);
+  });
+
+  it("skips malformed lines that don't have three tab-separated fields", () => {
+    const gitOutput = "src/foo.ts\n5\t1\tsrc/bar.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.has("src/foo.ts")).toBe(false);
+    expect(result.get("src/bar.ts")).toBe(6);
+  });
+
+  it("skips lines whose path field is empty after normalization", () => {
+    const gitOutput = "5\t3\t\n4\t1\tsrc/bar.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.size).toBe(1);
+    expect(result.get("src/bar.ts")).toBe(5);
+  });
+
+  it("skips lines where added or deleted is not a finite number", () => {
+    const gitOutput = "abc\t1\tsrc/foo.ts\n5\t1\tsrc/bar.ts\n";
+
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getChurnLines(3);
+
+    expect(result.has("src/foo.ts")).toBe(false);
+    expect(result.get("src/bar.ts")).toBe(6);
+  });
+
+  it("throws when git is unavailable", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+
+    expect(() => getChurnLines(3)).toThrow(
       "Not a git repository or git is not installed",
     );
   });
@@ -3142,6 +3231,55 @@ describe("computeHotspotsCore", () => {
     expect(result.churn.get("src/a.ts")).toBe(2);
     expect(result.rankings.complexity?.entries.length ?? 0).toBeGreaterThan(0);
     expect(result.composite.totalEntries).toBeGreaterThan(0);
+  });
+
+  it("uses line-based churn when churnMode is 'lines' (GH#17)", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 30,
+        comments: 0,
+        complexityDensity: 0.3,
+      },
+      {
+        file: "src/b.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+      {
+        file: "src/c.ts",
+        code: 30,
+        lines: 35,
+        complexity: 5,
+        comments: 0,
+        complexityDensity: 0.16,
+      },
+    ];
+    // git log calls in order: getChurnLines (numstat), getDefects, getAuthorCommitCounts.
+    mockExecSync
+      .mockReturnValueOnce(
+        Buffer.from("10\t5\tsrc/a.ts\n2\t1\tsrc/b.ts\n1\t0\tsrc/c.ts\n"),
+      )
+      .mockReturnValueOnce(Buffer.from("src/a.ts\n"))
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
+        ),
+      );
+    mockReadFileSync.mockImplementation(
+      () =>
+        "function f() {\n  if (x) {\n    if (y) {\n      doit();\n    }\n  }\n}\n",
+    );
+    const result = computeHotspotsCore(files, 3, 0, undefined, "lines");
+    // src/a.ts was 10+5 = 15 lines, not 2 commits.
+    expect(result.churn.get("src/a.ts")).toBe(15);
+    expect(result.churn.get("src/b.ts")).toBe(3);
+    expect(result.churn.get("src/c.ts")).toBe(1);
   });
 });
 

@@ -263,6 +263,47 @@ export function getChurn(months: number, cwd?: string): Map<string, number> {
 }
 
 /**
+ * Sum added+deleted lines per file over the churn window via `git log --numstat`.
+ * Binary files (numstat reports `- - <path>` for them) are skipped — line counts
+ * aren't meaningful there. Used when `--churn-mode lines` is selected so a
+ * 500-line rewrite doesn't read the same as a one-line typo fix.
+ */
+export function getChurnLines(
+  months: number,
+  cwd?: string,
+): Map<string, number> {
+  let raw: Buffer;
+  try {
+    raw = execSync(
+      `git log --since="${months} months ago" --numstat --format=`,
+      {
+        maxBuffer: 50 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+      },
+    );
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+
+  const counts = new Map<string, number>();
+  for (const line of raw.toString().split("\n")) {
+    if (!line) continue;
+    const parts = line.split("\t");
+    if (parts.length < 3) continue;
+    const added = parts[0];
+    const deleted = parts[1];
+    if (added === "-" || deleted === "-") continue;
+    const path = normalizePath(parts[2].trim());
+    if (!path) continue;
+    const delta = parseInt(added, 10) + parseInt(deleted, 10);
+    if (!Number.isFinite(delta)) continue;
+    counts.set(path, (counts.get(path) ?? 0) + delta);
+  }
+  return counts;
+}
+
+/**
  * Count fix commits (conventional commit `fix:` prefix) per file.
  */
 export function getDefects(months: number, cwd?: string): Map<string, number> {
@@ -1349,6 +1390,7 @@ export function computeHotspotsCore(
   months: number,
   top: number,
   cwd?: string,
+  churnMode: "commits" | "lines" = "commits",
 ): {
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
@@ -1356,7 +1398,8 @@ export function computeHotspotsCore(
   corpus: { fileCount: number; totalComplexity: number };
   churn: Map<string, number>;
 } {
-  const churn = getChurn(months, cwd);
+  const churn =
+    churnMode === "lines" ? getChurnLines(months, cwd) : getChurn(months, cwd);
   const defects = getDefects(months, cwd);
   const authorCommitCounts = getAuthorCommitCounts(months, cwd);
   const authors = new Map<string, number>();
@@ -1435,9 +1478,16 @@ export function computeSnapshot(opts: {
   months: number;
   excludes: string[];
   cwd?: string;
+  churnMode?: "commits" | "lines";
 }): HotspotSnapshot {
   const files = runScc(opts.excludes, opts.cwd);
-  const core = computeHotspotsCore(files, opts.months, 0, opts.cwd);
+  const core = computeHotspotsCore(
+    files,
+    opts.months,
+    0,
+    opts.cwd,
+    opts.churnMode,
+  );
   return {
     files,
     rankings: core.rankings,
