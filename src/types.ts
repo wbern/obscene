@@ -74,6 +74,8 @@ export interface RankingOutput {
   scoreFormula: string;
   totalScore: number;
   tierCounts: Record<Tier, number>;
+  /** JSON alias of {@link tierCounts}, matching the table label "Tiers:" (GH#14). */
+  tiers: Record<Tier, number>;
   totalEntries: number;
   showing: number;
   entries: RankingEntry[];
@@ -227,6 +229,8 @@ export interface CompositeOutput {
   scoreFormula: string;
   totalScore: number;
   tierCounts: Record<Tier, number>;
+  /** JSON alias of {@link tierCounts}, matching the table label "Tiers:" (GH#14). */
+  tiers: Record<Tier, number>;
   totalDimensions: number;
   totalEntries: number;
   showing: number;
@@ -256,6 +260,8 @@ export interface CouplingOutput {
   minCochanges: number;
   totalScore: number;
   tierCounts: Record<Tier, number>;
+  /** JSON alias of {@link tierCounts}, matching the table label "Tiers:" (GH#14). */
+  tiers: Record<Tier, number>;
   totalCouplings: number;
   showing: number;
   couplings: CouplingEntry[];

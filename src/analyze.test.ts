@@ -1853,6 +1853,7 @@ describe("computeComposite", () => {
       scoreFormula: "stub",
       totalScore: files.length,
       tierCounts: { hot: 0, warm: 0, cool: files.length },
+      tiers: { hot: 0, warm: 0, cool: files.length },
       totalEntries: files.length,
       showing: files.length,
       confidence: STUB_RANKING_CONFIDENCE,
@@ -1968,6 +1969,92 @@ describe("computeComposite", () => {
 
     expect(result.confidence.level).toBe("weak");
     expect(result.confidence.reason).toContain("weakest: WEAK");
+  });
+});
+
+describe("tier-count JSON alias (GH#14)", () => {
+  // The table renderer prints "Tiers:" but the JSON field is `tierCounts`.
+  // Expose the same data under `tiers` so consumers can find it by the name
+  // shown in the table output.
+  const files: FileMetrics[] = [
+    {
+      file: "a.ts",
+      code: 100,
+      lines: 120,
+      complexity: 50,
+      comments: 10,
+      complexityDensity: 0.5,
+    },
+    {
+      file: "b.ts",
+      code: 200,
+      lines: 250,
+      complexity: 20,
+      comments: 5,
+      complexityDensity: 0.1,
+    },
+  ];
+
+  it("computeAllRankings exposes `tiers` on each ranking equal to `tierCounts`", () => {
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+    ]);
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    for (const key of Object.keys(result.rankings)) {
+      const ranking = result.rankings[key];
+      expect(ranking.tiers).toEqual(ranking.tierCounts);
+    }
+  });
+
+  it("computeComposite exposes `tiers` equal to `tierCounts`", () => {
+    function stub(filesIn: string[]): RankingOutput {
+      return {
+        label: "Stub",
+        scoreFormula: "stub",
+        totalScore: filesIn.length,
+        tierCounts: { hot: 0, warm: 0, cool: filesIn.length },
+        tiers: { hot: 0, warm: 0, cool: filesIn.length },
+        totalEntries: filesIn.length,
+        showing: filesIn.length,
+        confidence: {
+          level: "acceptable",
+          reason: "stub",
+          inputs: {
+            metric: "files",
+            value: filesIn.length,
+            thresholds: { weak: 3, plausible: 10, acceptable: 30 },
+          },
+          source: "stub",
+        },
+        entries: filesIn.map((f, i) => ({
+          file: f,
+          score: filesIn.length - i,
+          percentOfTotal: 0,
+          tier: "cool" as const,
+          churn: 0,
+          metricValue: 0,
+        })),
+      };
+    }
+    const rankings = { complexity: stub(["a.ts", "b.ts"]) };
+    const result = computeComposite(rankings, new Map(), 0);
+
+    expect(result.tiers).toEqual(result.tierCounts);
+  });
+
+  it("composite empty path also exposes `tiers`", () => {
+    const result = computeComposite({}, new Map(), 0);
+    expect(result.tiers).toEqual(result.tierCounts);
+    expect(result.tiers).toEqual({ hot: 0, warm: 0, cool: 0 });
   });
 });
 
@@ -2821,6 +2908,7 @@ function snapshotFrom(opts: {
     scoreFormula: "reciprocal rank fusion across all dimensions",
     totalScore: opts.compositeEntries.reduce((s, e) => s + e.score, 0),
     tierCounts: { hot: 0, warm: 0, cool: 0 },
+    tiers: { hot: 0, warm: 0, cool: 0 },
     totalDimensions: 4,
     totalEntries: opts.compositeEntries.length,
     showing: opts.compositeEntries.length,
@@ -3064,6 +3152,7 @@ describe("sliceCoreForDisplay", () => {
       scoreFormula: "metric × churn",
       totalScore: entries.reduce((s, e) => s + e.score, 0),
       tierCounts: { hot: fileCount, warm: 0, cool: 0 },
+      tiers: { hot: fileCount, warm: 0, cool: 0 },
       totalEntries: fileCount,
       showing: fileCount,
       entries,
@@ -3074,6 +3163,7 @@ describe("sliceCoreForDisplay", () => {
       scoreFormula: "RRF",
       totalScore: entries.reduce((s, e) => s + e.score, 0),
       tierCounts: { hot: fileCount, warm: 0, cool: 0 },
+      tiers: { hot: fileCount, warm: 0, cool: 0 },
       totalDimensions: 4,
       totalEntries: fileCount,
       showing: fileCount,

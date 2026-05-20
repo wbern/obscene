@@ -450,6 +450,7 @@ function runCoupling(opts: CouplingOpts): void {
     minCochanges,
     totalScore,
     tierCounts,
+    tiers: tierCounts,
     totalCouplings: couplings.length,
     showing: limited.length,
     couplings: limited,
