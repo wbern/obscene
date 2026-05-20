@@ -396,6 +396,47 @@ describe("CLI Integration", () => {
     expect(result.stderr).toContain("obscene init");
   });
 
+  it("warns when invoked from a subdirectory below the repo root (GH#13)", {
+    timeout: 30000,
+  }, () => {
+    spawnSync("git", ["init"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    fs.mkdirSync(path.join(tempDir, "frontend"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, "frontend", "app.ts"),
+      "console.log('hi');\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "init"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+
+    const fromSubdir = spawnSync("node", [BIN_PATH, "report"], {
+      cwd: path.join(tempDir, "frontend"),
+      encoding: "utf-8",
+    });
+
+    expect(fromSubdir.status).toBe(0);
+    expect(fromSubdir.stderr).toContain("scanning subtree 'frontend'");
+    expect(fromSubdir.stderr).toContain("GH#13");
+
+    const fromRoot = spawnSync("node", [BIN_PATH, "report"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(fromRoot.status).toBe(0);
+    expect(fromRoot.stderr).not.toContain("scanning subtree");
+  });
+
   // Delta mode A: --base filters rankings to files changed since the base ref.
   // Builds a tiny two-commit repo so the diff is deterministic and unaffected
   // by the parent project's history.

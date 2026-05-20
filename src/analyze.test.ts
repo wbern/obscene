@@ -10,6 +10,7 @@ import {
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
+  detectRepoRoot,
   formatIgnoreFile,
   getAuthorCommitCounts,
   getChangedFiles,
@@ -2310,6 +2311,35 @@ describe("detectDefaultBranch", () => {
     });
 
     expect(detectDefaultBranch()).toBeUndefined();
+  });
+});
+
+describe("detectRepoRoot (GH#13)", () => {
+  it("returns the absolute path reported by git rev-parse --show-toplevel", () => {
+    mockExecSync.mockImplementation((cmd: unknown) => {
+      if (
+        typeof cmd === "string" &&
+        cmd.includes("rev-parse --show-toplevel")
+      ) {
+        return Buffer.from("/path/to/repo\n");
+      }
+      throw new Error("no");
+    });
+
+    expect(detectRepoRoot()).toBe("/path/to/repo");
+  });
+
+  it("returns undefined outside a git repo", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("fatal: not a git repository");
+    });
+
+    expect(detectRepoRoot()).toBeUndefined();
+  });
+
+  it("returns undefined when git outputs only whitespace", () => {
+    mockExecSync.mockReturnValue(Buffer.from("   \n"));
+    expect(detectRepoRoot()).toBeUndefined();
   });
 });
 

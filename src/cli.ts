@@ -1,6 +1,7 @@
 declare const __VERSION__: string;
 
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { relative } from "node:path";
 import { Command } from "commander";
 import {
   computeCoupling,
@@ -10,6 +11,7 @@ import {
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
+  detectRepoRoot,
   formatIgnoreFile,
   getChangedFiles,
   getChurn,
@@ -200,6 +202,35 @@ function warnIfNoIgnoreFile(): void {
   }
 }
 
+/**
+ * Warn when invocation cwd is below the repo root — scc/git only see the
+ * subtree, which silently narrows results. Resolves both sides via realpath
+ * so macOS `/tmp` vs `/private/tmp` symlinks don't trigger false positives.
+ * See GH#13.
+ */
+function warnIfNotRepoRoot(): void {
+  const repoRoot = detectRepoRoot();
+  if (!repoRoot) return;
+  let cwd: string;
+  try {
+    cwd = realpathSync(process.cwd());
+  } catch {
+    return;
+  }
+  const resolvedRoot = (() => {
+    try {
+      return realpathSync(repoRoot);
+    } catch {
+      return repoRoot;
+    }
+  })();
+  if (cwd === resolvedRoot) return;
+  const sub = relative(resolvedRoot, cwd) || ".";
+  process.stderr.write(
+    `warning: scanning subtree '${sub}' only — cd to repo root for whole-repo results (GH#13)\n`,
+  );
+}
+
 function warnHistoryCoverage(months: number): HistoryCoverageInfo {
   const coverage = getHistoryCoverage(months);
   if (coverage.underCovered) {
@@ -213,6 +244,7 @@ function warnHistoryCoverage(months: number): HistoryCoverageInfo {
 
 function runReport(opts: SharedOpts): void {
   warnIfNoIgnoreFile();
+  warnIfNotRepoRoot();
   const top = parseInt(opts.top, 10);
   const allExcludes = resolveExcludes(opts.exclude);
   const files = runScc(allExcludes);
@@ -286,6 +318,7 @@ function resolveBaseRef(raw: string | boolean): string {
 
 function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
+  warnIfNotRepoRoot();
   const filtered = hasIgnoreFile();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
@@ -410,6 +443,7 @@ function runHotspots(opts: HotspotsOpts): void {
 
 function runCoupling(opts: CouplingOpts): void {
   warnIfNoIgnoreFile();
+  warnIfNotRepoRoot();
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const minCochanges = parseInt(opts.minCochanges, 10);

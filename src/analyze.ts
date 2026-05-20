@@ -760,6 +760,23 @@ export function detectDefaultBranch(): string | undefined {
 }
 
 /**
+ * Absolute path of the repo root as reported by git, or undefined when not
+ * inside a git working tree. Used by the CLI to warn when scan scope (cwd)
+ * is narrower than the whole repo — see GH#13.
+ */
+export function detectRepoRoot(): string | undefined {
+  try {
+    const out = execSync("git rev-parse --show-toplevel", {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const trimmed = out.toString().trim();
+    return trimmed || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Run scc on a specific list of files inside `cwd`. Returns metrics keyed by
  * the file path relative to cwd. Files that don't exist at `cwd` are skipped
  * — useful when computing the base side of a delta, where files new in HEAD
