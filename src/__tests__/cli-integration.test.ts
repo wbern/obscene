@@ -871,4 +871,162 @@ describe("CLI Integration", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("no default branch found");
   });
+
+  // Path scope (GH#12): corpus-anchored filter via --paths / --since.
+  // Tier labels stay anchored to the full corpus — these flags only filter
+  // displayed entries and add a stderr summary plus a `pathFilter` JSON block.
+  function setupPathScopeRepo(): { baseSha: string } {
+    spawnSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const writeFile = (name: string, body: string) =>
+      fs.writeFileSync(path.join(tempDir, name), body);
+
+    // Base: four complex files so the corpus has a non-trivial tier
+    // distribution. scc requires whitespace after `if` to count branches.
+    writeFile(
+      "alpha.ts",
+      "export function a(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) return 1;\n    }\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "beta.ts",
+      "export function b(x: number) {\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "gamma.ts",
+      "export function c(x: number) {\n  if (x > 0) {\n    if (x > 10) return 3;\n  }\n  return 0;\n}\n",
+    );
+    writeFile(
+      "delta.ts",
+      "export function d(x: number) {\n  if (x > 0) {\n    if (x > 10) return 4;\n  }\n  return 0;\n}\n",
+    );
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "base"], { cwd: tempDir, stdio: "pipe" });
+    const baseSha = spawnSync("git", ["rev-parse", "HEAD"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    }).stdout.trim();
+
+    // Subsequent edit so --since main has something to report. Modifying
+    // alpha.ts keeps it inside the corpus rather than introducing a new file.
+    writeFile(
+      "alpha.ts",
+      "export function a(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) {\n        if (x > 1000) return 1;\n      }\n    }\n  }\n  return 0;\n}\n",
+    );
+    spawnSync("git", ["checkout", "-b", "feature"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["commit", "-m", "edit alpha"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+
+    return { baseSha };
+  }
+
+  it("filters output and emits a pathFilter block under --paths (GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupPathScopeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "alpha.ts", "beta.ts", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("path filter --paths (2 files)");
+    expect(result.stderr).toContain("Corpus base rate:");
+
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.pathFilter).toBeDefined();
+    expect(parsed.pathFilter.source).toBe("--paths (2 files)");
+    expect(parsed.pathFilter.paths.sort()).toEqual(["alpha.ts", "beta.ts"]);
+    expect(parsed.pathFilter.notRanked).toEqual([]);
+    expect(parsed.pathFilter.corpusHotRate).not.toBeNull();
+
+    // Rankings should only display the filtered files
+    const seenFiles = new Set<string>();
+    for (const ranking of Object.values(parsed.rankings) as Array<{
+      entries: Array<{ file: string }>;
+    }>) {
+      for (const e of ranking.entries) seenFiles.add(e.file);
+    }
+    expect(seenFiles.has("gamma.ts")).toBe(false);
+    expect(seenFiles.has("delta.ts")).toBe(false);
+  });
+
+  it("flags net-new files under --paths as notRanked (GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupPathScopeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "alpha.ts", "nonexistent.ts", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.pathFilter.notRanked).toEqual(["nonexistent.ts"]);
+    expect(result.stderr).toContain("1 not in any ranking");
+  });
+
+  it("resolves --since <ref> to changed files (GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupPathScopeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--since", "main", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("path filter --since main");
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.pathFilter.source).toBe("--since main");
+    expect(parsed.pathFilter.paths).toContain("alpha.ts");
+  });
+
+  it("rejects --paths and --base together (GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupPathScopeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "alpha.ts", "--base", "main"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("mutually exclusive");
+  });
+
+  it("rejects --paths and --since together (GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupPathScopeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "alpha.ts", "--since", "main"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("mutually exclusive");
+  });
 });

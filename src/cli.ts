@@ -60,6 +60,8 @@ interface HotspotsOpts extends SharedOpts {
   months: string;
   base?: string | boolean;
   fullDelta?: boolean;
+  paths?: string[];
+  since?: string;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -147,6 +149,14 @@ addSharedOptions(
   .option(
     "--full-delta",
     "with --base, run the full hotspots pipeline against the base ref too and emit a structured before/after diff (slower; tier transitions, score deltas, new/deleted files)",
+  )
+  .option(
+    "--paths <files...>",
+    "filter displayed entries to these paths (tiers stay corpus-anchored — answers 'are MY changes in hot territory?')",
+  )
+  .option(
+    "--since <ref>",
+    "shorthand for --paths $(git diff --name-only <ref>...HEAD) — filter to files changed since ref",
   )
   .action((opts: HotspotsOpts) => {
     try {
@@ -316,6 +326,94 @@ function resolveBaseRef(raw: string | boolean): string {
   return detected;
 }
 
+/**
+ * Resolve the path-filter set from `--paths` or `--since`. Returns null when
+ * neither flag is set. See GH#12 for the corpus-anchored design rationale.
+ */
+function resolvePathScope(
+  opts: HotspotsOpts,
+): { paths: Set<string>; source: string } | null {
+  if (opts.paths && opts.paths.length > 0 && opts.since) {
+    throw new Error(
+      "--paths and --since are mutually exclusive — pick one path-source.",
+    );
+  }
+  if (opts.paths && opts.paths.length > 0) {
+    return {
+      paths: new Set(opts.paths),
+      source: `--paths (${opts.paths.length} file${opts.paths.length === 1 ? "" : "s"})`,
+    };
+  }
+  if (opts.since) {
+    const changed = getChangedFiles(opts.since);
+    return { paths: changed, source: `--since ${opts.since}` };
+  }
+  return null;
+}
+
+/**
+ * Apply a corpus-anchored path filter to ranked output. Filters displayed
+ * entries to the path set without recomputing tiers — tier labels on each
+ * entry stay anchored to the full-corpus distribution. Identifies "net-new"
+ * paths (in the filter set but absent from every ranking) so reviewers can
+ * tell "ranked but cool" apart from "untracked / no history yet". Emits a
+ * stderr summary including the corpus HOT base rate, which is the comparator
+ * that makes the filtered count actionable (see GH#12).
+ */
+function applyPathScope(
+  output: HotspotsOutput,
+  scope: { paths: Set<string>; source: string },
+): void {
+  const baseHot = output.composite?.tierCounts.hot ?? 0;
+  const baseTotal = output.composite?.totalEntries ?? 0;
+
+  const rankedFiles = new Set<string>();
+  for (const ranking of Object.values(output.rankings)) {
+    for (const e of ranking.entries) rankedFiles.add(e.file);
+  }
+  for (const e of output.composite?.entries ?? []) rankedFiles.add(e.file);
+
+  for (const ranking of Object.values(output.rankings)) {
+    ranking.entries = ranking.entries.filter((e) => scope.paths.has(e.file));
+    ranking.showing = ranking.entries.length;
+  }
+  if (output.composite) {
+    output.composite.entries = output.composite.entries.filter((e) =>
+      scope.paths.has(e.file),
+    );
+    output.composite.showing = output.composite.entries.length;
+  }
+
+  const filteredHot =
+    output.composite?.entries.filter((e) => e.tier === "hot").length ?? 0;
+  const filteredWarm =
+    output.composite?.entries.filter((e) => e.tier === "warm").length ?? 0;
+  const filteredCool =
+    output.composite?.entries.filter((e) => e.tier === "cool").length ?? 0;
+  const newFiles = [...scope.paths].filter((p) => !rankedFiles.has(p)).sort();
+
+  const corpusHotRate =
+    baseTotal > 0 ? `${Math.round((baseHot / baseTotal) * 100)}%` : "n/a";
+
+  const ranked = filteredHot + filteredWarm + filteredCool;
+  process.stderr.write(
+    `path filter ${scope.source}: ${filteredHot} HOT, ${filteredWarm} WARM, ${filteredCool} COOL ` +
+      `of ${ranked} ranked file${ranked === 1 ? "" : "s"}; ${newFiles.length} not in any ranking. ` +
+      `Corpus base rate: ${corpusHotRate} HOT.\n`,
+  );
+
+  output.pathFilter = {
+    source: scope.source,
+    paths: [...scope.paths].sort(),
+    rankedCount: ranked,
+    hotCount: filteredHot,
+    warmCount: filteredWarm,
+    coolCount: filteredCool,
+    notRanked: newFiles,
+    corpusHotRate: baseTotal > 0 ? baseHot / baseTotal : null,
+  };
+}
+
 function runHotspots(opts: HotspotsOpts): void {
   warnIfNoIgnoreFile();
   warnIfNotRepoRoot();
@@ -329,6 +427,15 @@ function runHotspots(opts: HotspotsOpts): void {
   if (opts.fullDelta && opts.base === undefined) {
     throw new Error(
       "--full-delta requires --base. Specify a base ref, e.g. --base main --full-delta.",
+    );
+  }
+
+  const pathScope = resolvePathScope(opts);
+  if (pathScope && opts.base !== undefined) {
+    throw new Error(
+      "--paths/--since and --base are mutually exclusive — they answer different questions. " +
+        '--paths gives corpus-anchored tiers ("are MY changes hot in the codebase?"); ' +
+        '--base re-ranks within the changed set ("of my changes, which is hottest?").',
     );
   }
 
@@ -430,6 +537,10 @@ function runHotspots(opts: HotspotsOpts): void {
     composite,
     corpus: { ...corpus, filtered },
   };
+
+  if (pathScope) {
+    applyPathScope(output, pathScope);
+  }
 
   if (opts.format === "table") {
     process.stdout.write(`${formatHotspotsTable(output)}\n`);

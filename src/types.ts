@@ -121,6 +121,24 @@ export interface DeltaInfo {
   fallback?: { from: "full-delta"; reason: string };
 }
 
+/**
+ * Summary of a corpus-anchored path filter (GH#12). `--paths` / `--since`
+ * keep tier labels anchored to the full-corpus distribution and filter
+ * displayed entries to a touched set. `corpusHotRate` is the comparator
+ * that makes `hotCount` actionable: 8/14 HOT files at a 14% corpus base
+ * rate is a 4× elevation — that ratio is the signal.
+ */
+export interface PathFilterInfo {
+  source: string;
+  paths: string[];
+  rankedCount: number;
+  hotCount: number;
+  warmCount: number;
+  coolCount: number;
+  notRanked: string[];
+  corpusHotRate: number | null;
+}
+
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
@@ -128,6 +146,7 @@ export interface HotspotsOutput {
   historyCoverage?: HistoryCoverageInfo;
   delta?: DeltaInfo;
   fullDelta?: HotspotDelta;
+  pathFilter?: PathFilterInfo;
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
