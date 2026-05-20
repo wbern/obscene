@@ -8,6 +8,8 @@ import type {
   CompositeOutput,
   ConfidenceInfo,
   ConfidenceLevel,
+  CorrelationEntry,
+  CorrelationsOutput,
   CouplingEntry,
   FileMetrics,
   HistoryCoverageInfo,
@@ -113,6 +115,7 @@ const CONFIDENCE = {
   defects: { weak: 5, plausible: 15, acceptable: 50 },
   authors: { weak: 2, plausible: 4, acceptable: 8 },
   coupling: { weak: 5, plausible: 30, acceptable: 100 },
+  correlations: { weak: 5, plausible: 15, acceptable: 30 },
 } as const;
 
 const CONFIDENCE_SOURCES = {
@@ -128,6 +131,8 @@ const CONFIDENCE_SOURCES = {
     "code-maat defaults (--min-revs 5, --max-changeset-size 30, Adam Tornhill). CodeScene's documented temporal-coupling default filters files with fewer than 10 commits. The 30/100 upper tiers are engineering judgment.",
   composite:
     "Reciprocal Rank Fusion (Cormack et al., SIGIR 2009) fuses multiple independent rankings; min-of-inputs is a strict monotone aggregator — when every input ranking is at confidence level L, the composite cannot exceed L.",
+  correlations:
+    "Spearman (1904) defines the rank correlation coefficient; no paper prescribes the sample-size tiers used here. Engineering judgment: below 5 paired observations the coefficient is too noisy to interpret; tiers scale from there.",
 } as const;
 
 function classifyConfidence(
@@ -531,6 +536,138 @@ function computeMinorAuthors(
   return minor;
 }
 
+/**
+ * Reference ranking that the correlation report compares every other ranking
+ * against. Fix Activity × Churn is the closest obscene has to a ground-truth
+ * defect signal — Spearman ρ against it tells the user, for this repo, how
+ * well each metric ranking lines up with fix activity. See the README's
+ * "Correlations" section for the framing.
+ */
+const CORRELATION_REFERENCE_KEY = "defects";
+
+/**
+ * Assign average ranks to a list of values. Ties share the average of the
+ * positions they would occupy if broken arbitrarily — the standard
+ * tie-handling rule for Spearman ρ. Returns ranks aligned to the input order.
+ */
+function rankValues(values: number[]): number[] {
+  const indexed = values.map((value, index) => ({ value, index }));
+  indexed.sort((a, b) => b.value - a.value);
+  const ranks = new Array(values.length).fill(0);
+  let i = 0;
+  while (i < indexed.length) {
+    let j = i;
+    while (j < indexed.length && indexed[j].value === indexed[i].value) j++;
+    const avg = (i + j - 1) / 2 + 1;
+    for (let k = i; k < j; k++) ranks[indexed[k].index] = avg;
+    i = j;
+  }
+  return ranks;
+}
+
+function pearson(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  let sx = 0;
+  let sy = 0;
+  for (let i = 0; i < n; i++) {
+    sx += xs[i];
+    sy += ys[i];
+  }
+  const mx = sx / n;
+  const my = sy / n;
+  let num = 0;
+  let dx2 = 0;
+  let dy2 = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - mx;
+    const dy = ys[i] - my;
+    num += dx * dy;
+    dx2 += dx * dx;
+    dy2 += dy * dy;
+  }
+  const denom = Math.sqrt(dx2 * dy2);
+  // denom = 0 means every paired observation has the same score on at least
+  // one side (no variance to correlate). Treat as ρ = 0 — the rank pairs
+  // carry no directional information.
+  return denom === 0 ? 0 : num / denom;
+}
+
+/**
+ * Spearman rank correlation between two score maps. Only files present in
+ * both maps contribute. Returns `n = 0` when there is no overlap and `rho = 0`
+ * when N < 2 (no correlation is defined on a single point).
+ */
+export function spearmanRho(
+  a: Map<string, number>,
+  b: Map<string, number>,
+): { rho: number; n: number } {
+  const common: string[] = [];
+  for (const f of a.keys()) {
+    if (b.has(f)) common.push(f);
+  }
+  if (common.length < 2) return { rho: 0, n: common.length };
+  const aValues = common.map((f) => a.get(f) as number);
+  const bValues = common.map((f) => b.get(f) as number);
+  const aRanks = rankValues(aValues);
+  const bRanks = rankValues(bValues);
+  return { rho: pearson(aRanks, bRanks), n: common.length };
+}
+
+/**
+ * Compare each non-reference ranking against the Fix Activity × Churn
+ * (`defects`) ranking via Spearman ρ. Operates on the unsliced ranking
+ * entries so the result doesn't depend on the user's `--top`. Returns
+ * `undefined` when the reference ranking is unavailable — the caller marks
+ * the skip in the existing `skipped` map.
+ */
+export function computeCorrelations(
+  allEntriesByKey: Record<string, RankingEntry[]>,
+): CorrelationsOutput | undefined {
+  const refEntries = allEntriesByKey[CORRELATION_REFERENCE_KEY];
+  if (!refEntries || refEntries.length === 0) return undefined;
+  // CORRELATION_REFERENCE_KEY is wired to a fixed RANKING_DEFS entry; the
+  // lookup is total by construction. If RANKING_DEFS loses 'defects', the
+  // whole defects pipeline above breaks long before this line.
+  const referenceLabel = RANKING_DEFS.find(
+    (d) => d.key === CORRELATION_REFERENCE_KEY,
+  )!.label;
+  const refScores = new Map<string, number>();
+  for (const e of refEntries) refScores.set(e.file, e.score);
+
+  const entries: CorrelationEntry[] = [];
+  for (const def of RANKING_DEFS) {
+    if (def.key === CORRELATION_REFERENCE_KEY) continue;
+    const other = allEntriesByKey[def.key];
+    if (!other || other.length === 0) continue;
+    const otherScores = new Map<string, number>();
+    for (const e of other) otherScores.set(e.file, e.score);
+    const { rho, n } = spearmanRho(refScores, otherScores);
+    const confidence = classifyConfidence(
+      "commonFiles",
+      n,
+      CONFIDENCE.correlations,
+      CONFIDENCE_SOURCES.correlations,
+      (level) =>
+        level === "inconclusive"
+          ? `${n} file${n === 1 ? "" : "s"} in both rankings — need ≥ ${CONFIDENCE.correlations.weak} for a meaningful coefficient.`
+          : `${n} files in both rankings (${level.toUpperCase()} sample size).`,
+    );
+    entries.push({
+      metric: def.key,
+      label: def.label,
+      rho: Math.round(rho * 10000) / 10000,
+      n,
+      confidence,
+    });
+  }
+
+  return {
+    reference: CORRELATION_REFERENCE_KEY,
+    referenceLabel,
+    entries,
+  };
+}
+
 export function computeAllRankings(
   files: FileMetrics[],
   churn: Map<string, number>,
@@ -542,6 +679,7 @@ export function computeAllRankings(
 ): {
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
+  correlations?: CorrelationsOutput;
 } {
   const extractors: Record<
     string,
@@ -664,6 +802,7 @@ export function computeAllRankings(
   }
 
   const rankings: Record<string, RankingOutput> = {};
+  const allEntriesByKey: Record<string, RankingEntry[]> = {};
 
   for (const def of RANKING_DEFS) {
     if (skipped[def.key]) continue;
@@ -685,6 +824,8 @@ export function computeAllRankings(
         );
       }
     }
+
+    allEntriesByKey[def.key] = allEntries;
 
     const limited = top > 0 ? allEntries.slice(0, top) : allEntries;
     const tierCounts: Record<Tier, number> = {
@@ -708,7 +849,33 @@ export function computeAllRankings(
     };
   }
 
-  return { rankings, skipped };
+  let correlations: CorrelationsOutput | undefined;
+  if (skipped[CORRELATION_REFERENCE_KEY]) {
+    // Same SkippedRanking shape as the existing skipped rankings, so format.ts
+    // can render the entry through the same path. The confidence stamp is
+    // INCONCLUSIVE because there is literally no reference ranking to
+    // correlate against.
+    const refLabel = RANKING_DEFS.find(
+      (d) => d.key === CORRELATION_REFERENCE_KEY,
+    )!.label;
+    skipped.correlations = {
+      reason: `${refLabel} unavailable — no reference ranking to correlate against`,
+      confidence: {
+        level: "inconclusive",
+        reason: "no reference ranking",
+        inputs: {
+          metric: "commonFiles",
+          value: 0,
+          thresholds: CONFIDENCE.correlations,
+        },
+        source: CONFIDENCE_SOURCES.correlations,
+      },
+    };
+  } else {
+    correlations = computeCorrelations(allEntriesByKey);
+  }
+
+  return { rankings, skipped, correlations };
 }
 
 /**
@@ -1333,6 +1500,7 @@ export function computeHotspotsCore(
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
   composite: CompositeOutput;
+  correlations?: CorrelationsOutput;
   corpus: { fileCount: number; totalComplexity: number };
   churn: Map<string, number>;
 } {
@@ -1347,7 +1515,7 @@ export function computeHotspotsCore(
     files.map((f) => f.file),
     cwd,
   );
-  const { rankings, skipped } = computeAllRankings(
+  const { rankings, skipped, correlations } = computeAllRankings(
     files,
     churn,
     defects,
@@ -1363,6 +1531,7 @@ export function computeHotspotsCore(
     rankings,
     skipped,
     composite,
+    correlations,
     corpus: { fileCount: files.length, totalComplexity },
     churn,
   };
@@ -1397,6 +1566,7 @@ export function sliceCoreForDisplay(
       entries: compositeSliced,
       showing: compositeSliced.length,
     },
+    correlations: core.correlations,
     corpus: core.corpus,
     churn: core.churn,
   };

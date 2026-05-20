@@ -13,6 +13,7 @@ import type {
   CompositeOutput,
   ConfidenceInfo,
   ConfidenceLevel,
+  CorrelationsOutput,
   CouplingOutput,
   HotspotDelta,
   HotspotsOutput,
@@ -32,9 +33,11 @@ function formatConfidenceStamp(c: ConfidenceInfo): string[] {
   return [color(`Confidence: ${c.level.toUpperCase()} — ${c.reason}`)];
 }
 
-const RANKING_LABELS_BY_KEY: Record<string, string> = Object.fromEntries(
-  RANKING_DEFS.map((d) => [d.key, d.label]),
-);
+const RANKING_LABELS_BY_KEY: Record<string, string> = {
+  ...Object.fromEntries(RANKING_DEFS.map((d) => [d.key, d.label])),
+  // Not a ranking, but shares the SkippedRanking shape — same render path.
+  correlations: "Correlations",
+};
 
 export function formatReportTable(output: ReportOutput): string {
   const lines: string[] = [];
@@ -336,6 +339,53 @@ function formatFullDeltaSection(fd: HotspotDelta): string[] {
   return lines;
 }
 
+function formatCorrelationsSection(
+  correlations: CorrelationsOutput,
+  description: string | undefined,
+): string[] {
+  const lines: string[] = [];
+  lines.push("");
+  lines.push(
+    `🔗 CORRELATIONS — Spearman ρ vs ${correlations.referenceLabel.toUpperCase().replace("CHURN", "🔄 CHURN")}`,
+  );
+  if (description) {
+    for (const line of description.split("\n")) {
+      lines.push(pc.dim(line));
+    }
+  }
+
+  if (correlations.entries.length === 0) {
+    lines.push(pc.dim("No other rankings available to correlate."));
+    return lines;
+  }
+
+  lines.push("");
+  lines.push(
+    padRight("Ranking", 32) +
+      padLeft("ρ", 8) +
+      padLeft("N", 6) +
+      padLeft("Confidence", 14),
+  );
+  lines.push("─".repeat(60));
+  for (const entry of correlations.entries) {
+    const color = CONFIDENCE_PALETTE[entry.confidence.level];
+    const rhoText = entry.rho.toFixed(3);
+    const rhoCell =
+      entry.rho > 0.5
+        ? pc.red(rhoText)
+        : entry.rho < -0.5
+          ? pc.green(rhoText)
+          : rhoText;
+    lines.push(
+      padRight(truncate(entry.label, 30), 32) +
+        padLeft(rhoCell, 8) +
+        padLeft(String(entry.n), 6) +
+        padLeft(color(entry.confidence.level.toUpperCase()), 14),
+    );
+  }
+  return lines;
+}
+
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
   const { churnWindow, rankings, corpus, delta, fullDelta } = output;
@@ -402,6 +452,17 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
       lines.push("· · ·");
       lines.push("");
     }
+  }
+
+  if (output.correlations) {
+    lines.push("");
+    lines.push("\u00B7 \u00B7 \u00B7");
+    lines.push(
+      ...formatCorrelationsSection(
+        output.correlations,
+        output.guide.correlations,
+      ),
+    );
   }
 
   if (output.skipped) {

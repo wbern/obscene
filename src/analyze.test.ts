@@ -3,6 +3,7 @@ import {
   assignTiers,
   computeAllRankings,
   computeComposite,
+  computeCorrelations,
   computeCoupling,
   computeDelta,
   computeHotspotsCore,
@@ -25,6 +26,7 @@ import {
   runScc,
   runSccOnFiles,
   sliceCoreForDisplay,
+  spearmanRho,
   UNIVERSAL_IGNORE_GROUPS,
   withWorktreeAt,
 } from "./analyze.js";
@@ -2056,6 +2058,310 @@ describe("getHistoryCoverage", () => {
     });
     expect(() => getHistoryCoverage(3)).toThrow(
       /Not a git repository or git is not installed/,
+    );
+  });
+});
+
+describe("spearmanRho", () => {
+  it("returns rho = 1 for identical orderings", () => {
+    const a = new Map([
+      ["a", 100],
+      ["b", 50],
+      ["c", 25],
+      ["d", 10],
+      ["e", 5],
+    ]);
+    const b = new Map([
+      ["a", 9],
+      ["b", 7],
+      ["c", 5],
+      ["d", 3],
+      ["e", 1],
+    ]);
+    const { rho, n } = spearmanRho(a, b);
+    expect(n).toBe(5);
+    expect(rho).toBe(1);
+  });
+
+  it("returns rho = -1 for opposite orderings", () => {
+    const a = new Map([
+      ["a", 100],
+      ["b", 50],
+      ["c", 25],
+      ["d", 10],
+      ["e", 5],
+    ]);
+    const b = new Map([
+      ["a", 1],
+      ["b", 3],
+      ["c", 5],
+      ["d", 7],
+      ["e", 9],
+    ]);
+    const { rho } = spearmanRho(a, b);
+    expect(rho).toBe(-1);
+  });
+
+  it("averages ranks for ties", () => {
+    // a, b, c all tie at score 10 on map A (ranks 1,2,3 → avg 2 each).
+    // On map B they have unique ranks 1,2,3. Pearson(ranks) with one side
+    // having zero variance → denom = 0 → ρ = 0.
+    const a = new Map([
+      ["a", 10],
+      ["b", 10],
+      ["c", 10],
+    ]);
+    const b = new Map([
+      ["a", 30],
+      ["b", 20],
+      ["c", 10],
+    ]);
+    const { rho, n } = spearmanRho(a, b);
+    expect(n).toBe(3);
+    expect(rho).toBe(0);
+  });
+
+  it("uses only files present in both maps", () => {
+    const a = new Map([
+      ["a", 10],
+      ["b", 5],
+      ["c", 1],
+      ["only-in-a", 100],
+    ]);
+    const b = new Map([
+      ["a", 10],
+      ["b", 5],
+      ["c", 1],
+      ["only-in-b", 100],
+    ]);
+    const { rho, n } = spearmanRho(a, b);
+    expect(n).toBe(3);
+    expect(rho).toBe(1);
+  });
+
+  it("returns n=0, rho=0 when there is no overlap", () => {
+    const a = new Map([["a", 1]]);
+    const b = new Map([["b", 1]]);
+    expect(spearmanRho(a, b)).toEqual({ rho: 0, n: 0 });
+  });
+
+  it("returns rho=0 for a single overlapping file", () => {
+    const a = new Map([["a", 1]]);
+    const b = new Map([["a", 99]]);
+    expect(spearmanRho(a, b)).toEqual({ rho: 0, n: 1 });
+  });
+});
+
+describe("computeCorrelations", () => {
+  const STUB_CONFIDENCE: ConfidenceInfo = {
+    level: "plausible",
+    reason: "stub",
+    inputs: {
+      metric: "stub",
+      value: 10,
+      thresholds: { weak: 3, plausible: 10, acceptable: 30 },
+    },
+    source: "stub",
+  };
+
+  function makeEntries(scored: [string, number][]) {
+    return scored.map(([file, score]) => ({
+      file,
+      score,
+      percentOfTotal: 0,
+      tier: "cool" as Tier,
+      churn: 1,
+      metricValue: score,
+    }));
+  }
+
+  it("returns undefined when the defects ranking is absent", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([["a.ts", 10]]),
+    });
+    expect(result).toBeUndefined();
+  });
+
+  it("emits one ρ entry per non-reference ranking against defects", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([
+        ["a.ts", 100],
+        ["b.ts", 50],
+        ["c.ts", 25],
+        ["d.ts", 10],
+        ["e.ts", 5],
+      ]),
+      nesting: makeEntries([
+        ["a.ts", 5],
+        ["b.ts", 4],
+        ["c.ts", 3],
+        ["d.ts", 2],
+        ["e.ts", 1],
+      ]),
+      defects: makeEntries([
+        ["a.ts", 9],
+        ["b.ts", 7],
+        ["c.ts", 5],
+        ["d.ts", 3],
+        ["e.ts", 1],
+      ]),
+    });
+
+    expect(result).toBeDefined();
+    expect(result?.reference).toBe("defects");
+    expect(result?.referenceLabel).toBe("Fix Activity × Churn");
+    const metrics = result?.entries.map((e) => e.metric).sort();
+    expect(metrics).toEqual(["complexity", "nesting"]);
+    for (const entry of result?.entries ?? []) {
+      expect(entry.rho).toBe(1);
+      expect(entry.n).toBe(5);
+      expect(entry.confidence.level).toBe("weak");
+    }
+  });
+
+  it("singularizes the inconclusive reason when only one file overlaps", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([["a.ts", 1]]),
+      defects: makeEntries([["a.ts", 1]]),
+    });
+    expect(result?.entries[0].n).toBe(1);
+    expect(result?.entries[0].confidence.reason).toContain(
+      "1 file in both rankings",
+    );
+  });
+
+  it("stamps inconclusive confidence below the weak sample-size floor", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([
+        ["a.ts", 3],
+        ["b.ts", 2],
+      ]),
+      defects: makeEntries([
+        ["a.ts", 3],
+        ["b.ts", 2],
+      ]),
+    });
+    expect(result?.entries[0].confidence.level).toBe("inconclusive");
+    expect(result?.entries[0].confidence.reason).toContain("need ≥ 5");
+  });
+
+  it("rounds rho to 4 decimal places", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([
+        ["a.ts", 100],
+        ["b.ts", 50],
+        ["c.ts", 25],
+        ["d.ts", 10],
+        ["e.ts", 5],
+      ]),
+      defects: makeEntries([
+        ["a.ts", 9],
+        ["b.ts", 7],
+        ["c.ts", 1],
+        ["d.ts", 3],
+        ["e.ts", 5],
+      ]),
+    });
+    const rho = result?.entries[0].rho ?? 0;
+    expect(Number.isInteger(rho * 10000)).toBe(true);
+  });
+
+  it("skips a non-defects ranking that has no entries", () => {
+    const result = computeCorrelations({
+      complexity: makeEntries([
+        ["a.ts", 1],
+        ["b.ts", 2],
+      ]),
+      nesting: [],
+      defects: makeEntries([
+        ["a.ts", 1],
+        ["b.ts", 2],
+      ]),
+    });
+    expect(result?.entries.map((e) => e.metric)).toEqual(["complexity"]);
+  });
+
+  // Wired-in path: computeAllRankings should hand the same correlations back.
+  it("is produced by computeAllRankings when defects has signal", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 50,
+        comments: 0,
+        complexityDensity: 0.5,
+      },
+      {
+        file: "b.ts",
+        code: 80,
+        lines: 90,
+        complexity: 20,
+        comments: 0,
+        complexityDensity: 0.25,
+      },
+      {
+        file: "c.ts",
+        code: 60,
+        lines: 70,
+        complexity: 5,
+        comments: 0,
+        complexityDensity: 0.08,
+      },
+    ];
+    const churn = new Map([
+      ["a.ts", 10],
+      ["b.ts", 5],
+      ["c.ts", 3],
+    ]);
+    const defects = new Map([
+      ["a.ts", 4],
+      ["b.ts", 2],
+      ["c.ts", 1],
+    ]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      defects,
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.correlations).toBeDefined();
+    expect(result.correlations?.reference).toBe("defects");
+    // Single STUB_CONFIDENCE unused, silence the linter.
+    expect(STUB_CONFIDENCE.level).toBe("plausible");
+  });
+
+  it("skips correlations and surfaces it in skipped[] when defects is unavailable", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 50,
+        comments: 0,
+        complexityDensity: 0.5,
+      },
+    ];
+    const churn = new Map([["a.ts", 10]]);
+
+    const result = computeAllRankings(
+      files,
+      churn,
+      new Map(),
+      new Map(),
+      new Map(),
+      0,
+    );
+
+    expect(result.correlations).toBeUndefined();
+    expect(result.skipped.correlations).toBeDefined();
+    expect(result.skipped.correlations.confidence.level).toBe("inconclusive");
+    expect(result.skipped.correlations.reason).toContain(
+      "no reference ranking",
     );
   });
 });
