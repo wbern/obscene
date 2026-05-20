@@ -119,27 +119,6 @@ export interface DeltaInfo {
   fallback?: { from: "full-delta"; reason: string };
 }
 
-/**
- * Spearman rank correlation between one of the metric × churn rankings and the
- * Fix Activity × Churn ranking. Lets a repo answer "in *this* repo, how well
- * do hotspots predict fixes?" with a number rather than transitively trusting
- * the (Tornhill & Borg 2022) result. `rho` is rounded to 4 decimals; `n` is
- * the count of files appearing in both rankings.
- */
-export interface CorrelationEntry {
-  metric: string;
-  label: string;
-  rho: number;
-  n: number;
-  confidence: ConfidenceInfo;
-}
-
-export interface CorrelationsOutput {
-  reference: string;
-  referenceLabel: string;
-  entries: CorrelationEntry[];
-}
-
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
@@ -150,7 +129,6 @@ export interface HotspotsOutput {
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
-  correlations?: CorrelationsOutput;
   corpus?: {
     fileCount: number;
     totalComplexity: number;

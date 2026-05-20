@@ -149,7 +149,6 @@ describe("CLI Integration", () => {
       "composite",
       "confidence",
       "corpus",
-      "correlations",
       "defects",
       "nesting",
       "rankings",
@@ -203,50 +202,6 @@ describe("CLI Integration", () => {
     // Combined table with emphasis
     expect(result.stdout).toContain("★ COMBINED");
     expect(result.stdout).toContain("Dims");
-  });
-
-  it("should attach correlations against Fix Activity × Churn in JSON output", {
-    timeout: 30000,
-  }, () => {
-    // obscene itself uses conventional commits, so fix: activity is real and
-    // the defects ranking computes — correlations should be emitted.
-    const result = spawnSync("node", [BIN_PATH, "--top", "5"], {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-    });
-
-    expect(result.status).toBe(0);
-    const parsed = JSON.parse(result.stdout);
-    expect(parsed).toHaveProperty("correlations");
-    expect(parsed.correlations).toHaveProperty("reference", "defects");
-    expect(parsed.correlations).toHaveProperty(
-      "referenceLabel",
-      "Fix Activity × Churn",
-    );
-    expect(Array.isArray(parsed.correlations.entries)).toBe(true);
-    for (const entry of parsed.correlations.entries) {
-      expect(entry).toHaveProperty("metric");
-      expect(entry).toHaveProperty("label");
-      expect(entry).toHaveProperty("rho");
-      expect(entry).toHaveProperty("n");
-      expect(entry).toHaveProperty("confidence");
-      expect(entry.rho).toBeGreaterThanOrEqual(-1);
-      expect(entry.rho).toBeLessThanOrEqual(1);
-      expect(entry.metric).not.toBe("defects");
-    }
-  });
-
-  it("should render the correlations section in table output", {
-    timeout: 30000,
-  }, () => {
-    const result = spawnSync("node", [BIN_PATH, "--format", "table"], {
-      cwd: PROJECT_ROOT,
-      encoding: "utf-8",
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain("CORRELATIONS");
-    expect(result.stdout).toContain("Spearman ρ vs FIX ACTIVITY × 🔄 CHURN");
   });
 
   it("should produce valid JSON output with coupling command", {

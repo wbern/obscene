@@ -87,8 +87,6 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
     "authors × churn. Files touched by many authors and changing often may lack clear ownership. MinAuth side-column counts contributors with <5% of file commits (Bird et al. FSE 2011) — '—' means the file has fewer than 2 commits, too few to call anyone *minor*.\nMetric concept: code ownership research (Bird et al. 2011, Microsoft); Co-authored-by trailers folded into author set to close the squash-merge gap · Strength: flags diffuse ownership risk · Limit: doesn't measure expertise depth, bot authors filtered automatically",
   composite:
     "Combined ranking using Reciprocal Rank Fusion (RRF) across all dimensions. Files appearing near the top of multiple rankings score highest.\nMetric concept: RRF (Cormack et al. 2009) · Strength: robust to outliers, no normalization needed · Limit: equal weight across all dimensions",
-  correlations:
-    "Spearman rank correlation (ρ) between each metric × churn ranking and Fix Activity × Churn. Lets THIS repo answer 'how well do hotspots predict fixes here?' instead of transitively trusting prior cross-repo studies (e.g. Tornhill & Borg 2022). ρ ranges from −1 (opposite orderings) to +1 (identical); 0 means no monotonic relationship. Sample-size confidence stamp follows the same INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE ladder.",
   tier: "Relative ranking within THIS codebase (top 50% = hot, next 30% = warm, bottom 20% = cool). NOT an absolute quality grade — a hot file is under heavy load, not necessarily broken.",
   corpus:
     "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
@@ -364,7 +362,7 @@ function runHotspots(opts: HotspotsOpts): void {
     }
   }
 
-  const { rankings, skipped, composite, correlations, corpus } = modeCHeadCore
+  const { rankings, skipped, composite, corpus } = modeCHeadCore
     ? sliceCoreForDisplay(modeCHeadCore, top)
     : computeHotspotsCore(files, months, top);
 
@@ -397,7 +395,6 @@ function runHotspots(opts: HotspotsOpts): void {
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
-    correlations,
     corpus: { ...corpus, filtered },
   };
 
