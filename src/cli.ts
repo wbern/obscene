@@ -384,12 +384,14 @@ function applyPathScope(
     output.composite.showing = output.composite.entries.length;
   }
 
-  const filteredHot =
-    output.composite?.entries.filter((e) => e.tier === "hot").length ?? 0;
-  const filteredWarm =
-    output.composite?.entries.filter((e) => e.tier === "warm").length ?? 0;
-  const filteredCool =
-    output.composite?.entries.filter((e) => e.tier === "cool").length ?? 0;
+  let filteredHot = 0;
+  let filteredWarm = 0;
+  let filteredCool = 0;
+  for (const e of output.composite?.entries ?? []) {
+    if (e.tier === "hot") filteredHot++;
+    else if (e.tier === "warm") filteredWarm++;
+    else filteredCool++;
+  }
   const newFiles = [...scope.paths].filter((p) => !rankedFiles.has(p)).sort();
 
   const corpusHotRate =

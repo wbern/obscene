@@ -149,6 +149,19 @@ Tiers are percentile bands within each snapshot's own corpus, not absolute risk 
 - "rising.ts entered HOT" might mean rising.ts got 5× more complex *or* it stayed the same while everything around it got cleaned up.
 - `scoreChanges` carries the **absolute** score delta and percent change, so you can disambiguate. Use `tierTransitions` to know what bands moved, and `scoreChanges` to know how far.
 
+#### Corpus-anchored path filter (`--paths` / `--since`)
+
+Where `--base` re-ranks within the changed set ("of my changes, which is hottest?"), `--paths` and `--since` filter the *display* but keep tier labels anchored to the full-corpus distribution ("are MY changes in hot territory?"). Pick the one that matches the question you're answering.
+
+```bash
+obscene --paths src/auth.ts src/session.ts     # explicit file set
+obscene --since main                            # files changed since main
+```
+
+Both add a `pathFilter` block to JSON output: filtered HOT/WARM/COOL counts, the list of paths not present in any ranking (net-new files with no history yet), and the corpus HOT base rate. The base rate is the comparator — 8 HOT files at a 14% corpus rate is a 4× elevation, which is the actionable signal. Stderr also prints a one-line summary.
+
+`--paths` is mutually exclusive with `--base` and with `--since`.
+
 ### `obscene coupling`
 
 **Temporal coupling** (co-change history), not structural / type-level coupling. Detects files that frequently change together in the same commit but live in different directories — Tornhill's "temporal coupling" analysis from *Your Code as a Crime Scene* (2015). Surfaces hidden dependencies that aren't visible in imports or the module graph: pairs of files that *in practice* can't be changed independently, even when the type system says they can.
@@ -174,6 +187,8 @@ Per-file complexity without churn. Useful for raw complexity distribution.
 | `--format <type>` | `json` | `json` or `table` |
 | `--base [ref]` | — | Delta mode (hotspots only): filter rankings to files changed since this ref. Bare flag auto-detects `main`/`master` |
 | `--full-delta` | — | With `--base`: emit a structured before/after diff with tier transitions and corpus deltas (slower; runs the full pipeline against both refs) |
+| `--paths <files...>` | — | Hotspots only: filter displayed entries to these paths while keeping tier labels anchored to the full corpus (the "are MY changes in hot territory?" view). Mutually exclusive with `--base` and `--since`. |
+| `--since <ref>` | — | Shorthand for `--paths $(git diff --name-only <ref>...HEAD)`. Same corpus-anchored semantics as `--paths`. |
 | `--min-cochanges <n>` | `2` | Minimum shared commits (coupling only) |
 | `--exclude <patterns...>` | — | Additional exclusion patterns (also reads `.obsignore` / `.obsceneignore`) |
 
