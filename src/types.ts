@@ -312,6 +312,12 @@ export interface CouplingEntry {
   lockstep?: boolean;
 }
 
+export interface SumOfCouplingEntry {
+  file: string;
+  partners: number;
+  strength: number;
+}
+
 export interface CouplingOutput {
   generated: string;
   guide: Record<string, string>;
@@ -325,5 +331,6 @@ export interface CouplingOutput {
   totalCouplings: number;
   showing: number;
   couplings: CouplingEntry[];
+  sumOfCoupling?: SumOfCouplingEntry[];
   confidence: ConfidenceInfo;
 }

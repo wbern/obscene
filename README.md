@@ -174,6 +174,19 @@ obscene coupling --min-cochanges 1        # include single co-occurrences
 obscene coupling --format table --top 10  # human-readable, top 10
 ```
 
+#### Sum of Coupling (experimental)
+
+The same `coupling` invocation also emits a per-file aggregate at the bottom of the table (and as a `sumOfCoupling` field in JSON): for each file appearing in cross-directory cochange pairs, two columns —
+
+- `Partners` — distinct cross-directory partner files (graph-theoretic node degree)
+- `Strength` — sum of pair cochange counts (weighted degree)
+
+Pair coupling answers *"which two files are entangled?"*. Sum of Coupling answers *"which files sit at the center of cross-subsystem gravity?"* — a documentation hub or a service router will appear here even when no single pair dominates. The aggregate runs off the same cochanges Map as the pair view, so it inherits the same filters (`--min-cochanges`, same-directory exclusion, `>20-file commit` skip) for free.
+
+Naming note: graph-theoretically `Partners` is the node degree and `Strength` is the weighted degree. We chose these names to avoid colliding with `Degree` in the pair table (a *percentage*, `shared / min(churn) × 100`).
+
+The metric is inspired by code-maat's `summary` analysis but uses pair-derived aggregates (`partners`, `strength`) rather than code-maat's `Σ(changeset_size − 1)` formula — different math, similar question. **The surface is experimental and may change or be removed**; field-report feedback welcome.
+
 ### `obscene report`
 
 Per-file complexity without churn. Useful for raw complexity distribution.

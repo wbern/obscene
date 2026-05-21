@@ -227,6 +227,7 @@ describe("CLI Integration", () => {
       "degree",
       "deleted",
       "lockstep",
+      "sumOfCoupling",
       "tier",
       "totalComplexity",
     ]);

@@ -1456,6 +1456,81 @@ describe("formatCouplingTable", () => {
 
     expect(result).toContain("…");
   });
+
+  it("renders Sum of Coupling section when entries are present", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      confidence: STUB_CONFIDENCE,
+      couplings: [
+        {
+          file1: "src/a.ts",
+          file2: "lib/b.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 10,
+          couplingScore: 5,
+          percentOfTotal: 100,
+          tier: "hot",
+        },
+      ],
+      sumOfCoupling: [
+        { file: "src/hub.ts", partners: 4, strength: 17 },
+        {
+          file: "src/very/deeply/nested/long-named/component-implementation.ts",
+          partners: 2,
+          strength: 6,
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).toContain("Sum of Coupling");
+    expect(result).toContain("experimental");
+    expect(result).toContain("src/hub.ts");
+    expect(result).toContain("Partners");
+    expect(result).toContain("Strength");
+    expect(result).toContain("EXPERIMENTAL");
+    // long file path is truncated via the existing truncate() helper
+    expect(result).toContain("…");
+  });
+
+  it("omits the Sum of Coupling section when no entries are present", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      confidence: STUB_CONFIDENCE,
+      couplings: [
+        {
+          file1: "src/a.ts",
+          file2: "lib/b.ts",
+          cochanges: 5,
+          degree: 50.0,
+          totalComplexity: 10,
+          couplingScore: 5,
+          percentOfTotal: 100,
+          tier: "hot",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    expect(result).not.toContain("Sum of Coupling");
+  });
 });
 
 describe("formatCompositeTable", () => {

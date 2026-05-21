@@ -20,6 +20,7 @@ import type {
   SccLanguage,
   ScoreChange,
   SkippedRanking,
+  SumOfCouplingEntry,
   Tier,
 } from "./types.js";
 
@@ -1127,6 +1128,65 @@ export function computeCoupling(
     entries[i].percentOfTotal = adapted[i].percentOfTotal;
     entries[i].tier = adapted[i].tier;
   }
+
+  return entries;
+}
+
+/**
+ * Per-file "Sum of Coupling": aggregates the pair-level cochanges Map up to
+ * individual files. For each file appearing in at least one cross-directory
+ * cochange pair meeting `minCochanges`, returns:
+ *   - partners: distinct file-partners (graph node degree)
+ *   - strength: sum of pair cochange counts (weighted degree)
+ *
+ * Cross-directory-only because the underlying cochanges Map is already filtered
+ * by `getCoChanges` (same-dir pairs and >MAX_FILES_PER_COMMIT commits dropped).
+ * The signal answers "which files sit at the center of cross-subsystem
+ * gravity?" — distinct from pairwise coupling which answers "which two files
+ * are entangled?".
+ *
+ * Naming note: graph-theoretically `partners` is the node degree and
+ * `strength` is the weighted degree; we name them this way to avoid colliding
+ * with `CouplingEntry.degree` (pair percentage `shared/min(churn)*100`).
+ *
+ * Sort: strength desc, partners desc, file ascending (stable tie-break).
+ */
+export function computeSumOfCoupling(
+  cochanges: Map<string, number>,
+  minCochanges: number,
+): SumOfCouplingEntry[] {
+  const partners = new Map<string, Set<string>>();
+  const strength = new Map<string, number>();
+
+  for (const [key, count] of cochanges) {
+    if (count < minCochanges) continue;
+    const [file1, file2] = key.split("\0");
+
+    if (!partners.has(file1)) partners.set(file1, new Set());
+    if (!partners.has(file2)) partners.set(file2, new Set());
+    partners.get(file1)?.add(file2);
+    partners.get(file2)?.add(file1);
+
+    strength.set(file1, (strength.get(file1) ?? 0) + count);
+    strength.set(file2, (strength.get(file2) ?? 0) + count);
+  }
+
+  const entries: SumOfCouplingEntry[] = [];
+  for (const [file, partnerSet] of partners) {
+    // strength is populated in lockstep with partners, so the lookup
+    // is guaranteed to hit.
+    entries.push({
+      file,
+      partners: partnerSet.size,
+      strength: strength.get(file) as number,
+    });
+  }
+
+  entries.sort((a, b) => {
+    if (b.strength !== a.strength) return b.strength - a.strength;
+    if (b.partners !== a.partners) return b.partners - a.partners;
+    return a.file.localeCompare(b.file);
+  });
 
   return entries;
 }

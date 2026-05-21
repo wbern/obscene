@@ -10,6 +10,7 @@ import {
   computeDelta,
   computeHotspotsCore,
   computeSnapshot,
+  computeSumOfCoupling,
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
@@ -118,6 +119,8 @@ const COUPLING_GUIDE: Record<string, string> = {
     "Set when shared commits / max(churn) ≥ 0.9 — both files almost always change together over the window. Typical of generator/mirror pairs (README ↔ src/README, *.pb.go ↔ *.proto). The coupling signal is real but uninformative; treat the pair as a single unit from git's perspective.",
   confidence:
     "Epistemic stamp on the coupling table — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to the number of commits in the analysis window. The weak floor of 5 matches code-maat's --min-revs default (Adam Tornhill); higher tiers are engineering judgment. ACCEPTABLE means the sample supports the ranking; it never asserts the couplings themselves are bad.",
+  sumOfCoupling:
+    "Per-file aggregate over the cross-directory cochange pairs in this report. `partners` = distinct cross-dir partners. `strength` = sum of pair cochange counts (weighted degree). Identifies files at the center of cross-subsystem gravity — distinct from pairwise coupling (which two files are entangled). EXPERIMENTAL: this surface is being validated for usefulness and may change or be removed.",
 };
 
 function addSharedOptions(cmd: Command): Command {
@@ -668,6 +671,12 @@ function runCoupling(opts: CouplingOpts): void {
 
   const totalScore = couplings.reduce((sum, c) => sum + c.couplingScore, 0);
 
+  // EXPERIMENTAL: Sum of Coupling — per-file aggregate over the same cochanges
+  // input as the pair view. Surfaces files at the center of cross-subsystem
+  // gravity. Trimmed to the same `top` window as the coupling table.
+  const sumOfCoupling = computeSumOfCoupling(cochanges, minCochanges);
+  const sumLimited = top > 0 ? sumOfCoupling.slice(0, top) : sumOfCoupling;
+
   const output: CouplingOutput = {
     generated: new Date().toISOString(),
     guide: COUPLING_GUIDE,
@@ -680,6 +689,7 @@ function runCoupling(opts: CouplingOpts): void {
     totalCouplings: couplings.length,
     showing: limited.length,
     couplings: limited,
+    sumOfCoupling: sumLimited.length > 0 ? sumLimited : undefined,
     confidence: couplingConfidence(getCommitsInWindow(months)),
   };
 

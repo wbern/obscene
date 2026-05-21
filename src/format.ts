@@ -559,7 +559,46 @@ export function formatCouplingTable(output: CouplingOutput): string {
   );
   lines.push(pc.dim("Docs: https://github.com/wbern/obscene#metrics"));
 
+  if (output.sumOfCoupling && output.sumOfCoupling.length > 0) {
+    lines.push("");
+    lines.push(...formatSumOfCouplingSection(output.sumOfCoupling));
+  }
+
   return lines.join("\n");
+}
+
+function formatSumOfCouplingSection(
+  entries: { file: string; partners: number; strength: number }[],
+): string[] {
+  const lines: string[] = [];
+  lines.push("─".repeat(58));
+  lines.push(
+    `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental)")} — files at the center of cross-subsystem gravity`,
+  );
+  lines.push("");
+  lines.push(
+    padRight("File", 40) + padLeft("Partners", 10) + padLeft("Strength", 10),
+  );
+  lines.push("─".repeat(60));
+  for (const e of entries) {
+    lines.push(
+      padRight(truncate(e.file, 38), 40) +
+        padLeft(String(e.partners), 10) +
+        padLeft(String(e.strength), 10),
+    );
+  }
+  lines.push("");
+  lines.push(
+    pc.dim(
+      "Partners=distinct cross-dir co-change partners | Strength=sum of pair cochange counts",
+    ),
+  );
+  lines.push(
+    pc.dim(
+      "EXPERIMENTAL: aggregated over the same cochange pairs as above. May change or be removed.",
+    ),
+  );
+  return lines;
 }
 
 export function formatCompositeTable(output: CompositeOutput): string {

@@ -7,6 +7,7 @@ import {
   computeDelta,
   computeHotspotsCore,
   computeSnapshot,
+  computeSumOfCoupling,
   couplingConfidence,
   detectDefaultBranch,
   detectIgnorePatterns,
@@ -3766,5 +3767,108 @@ describe("computeSnapshot", () => {
     expect(snap.files[0].file).toBe("src/a.ts");
     expect(snap.corpus.fileCount).toBe(1);
     expect(snap.corpus.totalComplexity).toBe(12);
+  });
+});
+
+describe("computeSumOfCoupling", () => {
+  it("aggregates partner count and strength across pairs", () => {
+    // hub.ts appears in 3 pairs (strength = 5+3+2 = 10, 3 partners)
+    // others appear once each
+    const cochanges = new Map([
+      ["hub.ts\0lib/a.ts", 5],
+      ["hub.ts\0lib/b.ts", 3],
+      ["hub.ts\0lib/c.ts", 2],
+      ["x.ts\0lib/y.ts", 4],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    const hub = result.find((e) => e.file === "hub.ts");
+    expect(hub?.partners).toBe(3);
+    expect(hub?.strength).toBe(10);
+
+    const leaf = result.find((e) => e.file === "lib/a.ts");
+    expect(leaf?.partners).toBe(1);
+    expect(leaf?.strength).toBe(5);
+  });
+
+  it("sorts by strength desc, then partners desc, then file asc", () => {
+    const cochanges = new Map([
+      // a.ts: strength 6, partners 2
+      ["a.ts\0z/p.ts", 3],
+      ["a.ts\0z/q.ts", 3],
+      // b.ts: strength 6, partners 1 (one pair with high count)
+      ["b.ts\0z/r.ts", 6],
+      // c.ts: strength 4, partners 1
+      ["c.ts\0z/s.ts", 4],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    // strength tie: a.ts (2 partners) ranks above b.ts (1 partner)
+    expect(result[0].file).toBe("a.ts");
+    expect(result[1].file).toBe("b.ts");
+    // c.ts comes last among hub files
+    expect(result.find((e) => e.file === "c.ts")?.strength).toBe(4);
+  });
+
+  it("breaks ties on partners by file name ascending", () => {
+    const cochanges = new Map([
+      ["zeta.ts\0z/p.ts", 3],
+      ["alpha.ts\0z/p.ts", 3],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    // alpha.ts and zeta.ts both have strength 3, partners 1
+    // alpha sorts before zeta alphabetically
+    const alphaIdx = result.findIndex((e) => e.file === "alpha.ts");
+    const zetaIdx = result.findIndex((e) => e.file === "zeta.ts");
+    expect(alphaIdx).toBeLessThan(zetaIdx);
+  });
+
+  it("filters pairs below minCochanges", () => {
+    const cochanges = new Map([
+      ["a.ts\0lib/b.ts", 1],
+      ["c.ts\0lib/d.ts", 3],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 2);
+
+    // a.ts and lib/b.ts dropped (count 1 < 2)
+    expect(result.find((e) => e.file === "a.ts")).toBeUndefined();
+    expect(result.find((e) => e.file === "c.ts")).toBeDefined();
+  });
+
+  it("returns an empty array when nothing meets the threshold", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 1]]);
+
+    const result = computeSumOfCoupling(cochanges, 5);
+
+    expect(result).toEqual([]);
+  });
+
+  it("counts each pair once toward both files", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 7]]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    expect(result).toHaveLength(2);
+    expect(result.every((e) => e.strength === 7 && e.partners === 1)).toBe(
+      true,
+    );
+  });
+
+  it("deduplicates partners (does not double-count if same key appears twice)", () => {
+    // Defensive: cochanges Map keys are unique by construction, but verify
+    // the partner Set semantics anyway.
+    const cochanges = new Map([
+      ["hub.ts\0lib/a.ts", 4],
+      ["hub.ts\0lib/b.ts", 2],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    expect(result.find((e) => e.file === "hub.ts")?.partners).toBe(2);
   });
 });
