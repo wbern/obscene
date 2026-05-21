@@ -3546,6 +3546,51 @@ describe("computeHotspotsCore", () => {
     expect(result.reawakened.entries[0].churn).toBe(0);
   });
 
+  it("sorts reawakened entries by dormancyMultiple desc, file asc on ties (GH#19)", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "src/z.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+      {
+        file: "src/a.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+    ];
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const daysAgo = (n: number): number => nowSeconds - n * 86400;
+    // Both files dormant for the same ~400d gap → identical dormancyMultiple
+    // → tie-break orders by file path ascending (a.ts before z.ts).
+    mockExecSync
+      .mockReturnValueOnce(Buffer.from("src/a.ts\nsrc/z.ts\n"))
+      .mockReturnValueOnce(Buffer.from(""))
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nalice\nsrc/z.ts\n",
+        ),
+      )
+      .mockReturnValueOnce(
+        Buffer.from(
+          `${daysAgo(10)}\n\nsrc/a.ts\nsrc/z.ts\n\n${daysAgo(400)}\n\nsrc/a.ts\nsrc/z.ts\n`,
+        ),
+      );
+    mockReadFileSync.mockImplementation(() => "if (x) {\n  do();\n}\n");
+
+    const result = computeHotspotsCore(files, 3, 0);
+
+    expect(result.reawakened.entries).toHaveLength(2);
+    expect(result.reawakened.entries[0].file).toBe("src/a.ts");
+    expect(result.reawakened.entries[1].file).toBe("src/z.ts");
+  });
+
   it("filters reawakened entries to corpus files (GH#19)", () => {
     // git log can report files that aren't in the scc corpus — e.g. an
     // .obsignore'd file or a file outside the scc-recognized languages.

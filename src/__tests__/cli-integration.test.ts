@@ -1338,4 +1338,33 @@ describe("CLI Integration", () => {
     const parsed = JSON.parse(result.stdout);
     expect(parsed.reawakened).toBeUndefined();
   });
+
+  it("filters reawakened entries by --paths and omits when filter excludes all (GH#19, GH#12)", {
+    timeout: 30000,
+  }, () => {
+    setupReawakeningRepo();
+
+    // Filter to a path that DOESN'T include the reawakened file → section
+    // is dropped (not rendered as an empty stub).
+    const excluded = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "active.ts", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(excluded.status).toBe(0);
+    expect(JSON.parse(excluded.stdout).reawakened).toBeUndefined();
+
+    // Filter to a path that DOES include the reawakened file → section
+    // survives with just that entry.
+    const kept = spawnSync(
+      "node",
+      [BIN_PATH, "--paths", "legacy.ts", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(kept.status).toBe(0);
+    const parsed = JSON.parse(kept.stdout);
+    expect(parsed.reawakened).toBeDefined();
+    expect(parsed.reawakened.entries).toHaveLength(1);
+    expect(parsed.reawakened.entries[0].file).toBe("legacy.ts");
+  });
 });

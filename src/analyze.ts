@@ -1527,7 +1527,10 @@ export function computeHotspotsCore(
       churn: churn.get(file) ?? 0,
     });
   }
-  reawakenedEntries.sort((a, b) => b.dormancyMultiple - a.dormancyMultiple);
+  reawakenedEntries.sort(
+    (a, b) =>
+      b.dormancyMultiple - a.dormancyMultiple || a.file.localeCompare(b.file),
+  );
   const reawakened: ReawakenedSection = {
     windowDays,
     minDormancyMultiple: REAWAKENING_MIN_DORMANCY_MULTIPLE,
