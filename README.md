@@ -179,18 +179,18 @@ obscene coupling --format table --top 10  # human-readable, top 10
 The same `coupling` invocation also emits a per-file aggregate at the bottom of the table (and as a `sumOfCoupling` field in JSON). For each file appearing in cross-directory cochange pairs:
 
 - `Partners` — distinct cross-directory partner files (graph-theoretic node degree)
-- `Strength` — sum of pair cochange counts; **mathematically equivalent to code-maat's Sum of Coupling** (`Σ(changeset_size − 1)` per Tornhill, [code-maat](https://github.com/adamtornhill/code-maat)) since each commit contributes a clique whose edge weights sum to the same value. Two filters tighten the signal over bare code-maat:
+- `Strength` — sum of pair cochange counts; equivalent at the formula level to [code-maat](https://github.com/adamtornhill/code-maat)'s Sum of Coupling analysis (`Σ(changeset_size − 1)`), since each commit contributes a clique whose edge weights sum to the same value. Three filters tighten the signal over bare code-maat:
   - Same-directory pairs excluded (cross-subsystem focus)
-  - Commits touching >20 files skipped (CodeScene-style noise filter — sweeping mass-edits dominate raw SoC otherwise)
+  - Commits touching >20 files skipped (mass-edit noise filter)
   - Near-lockstep pairs suppressed (`count / max(churn) ≥ 0.9`), so mirror/generator artifacts like `*.proto ↔ *.pb.go` don't masquerade as architectural hubs.
 
-Framing matters: Tornhill positions SoC as a **prioritization signal** — *"which file to investigate first when there are many couples"* (see *Your Code as a Crime Scene*) — not a defect predictor. The pair table tells you *which two files are entangled*; SoC tells you *which file's couples are worth your time*.
+Framing matters — and the framing below is *obscene's* opinion, not a claim about other tools: we surface SoC as a **navigation aid**, answering *"which file's couplings deserve a closer look?"* It is **not** a defect predictor; we have not validated it against bug data and don't claim it correlates with defects. The pair table tells you *which two files are entangled*; SoC tells you *which file is the most entangled overall*. What you do with that is your call.
 
 Tier and confidence stamps mirror the pair table: tier is a cumulative-distribution rank within this report (top 50% = hot, next 30% = warm), and the confidence ladder is gated on the same `commitsInWindow` floor that pair coupling uses. Deleted files (no longer at HEAD) are marked with `†`; the signal is historical, not actionable in the current tree.
 
 Naming note: graph-theoretically `Partners` is the node degree and `Strength` is the weighted degree. We chose these names to avoid colliding with `Degree` in the pair table (a *percentage*, `shared / min(churn) × 100`).
 
-**The surface is experimental and may change or be removed**; field-report feedback welcome.
+> **EXPERIMENTAL.** This metric has NOT been independently validated against defect data or any other ground-truth outcome. We are dogfooding it to find out whether it earns its place. It may change, be reframed, or be removed. Field-report feedback (especially "this surfaced something useful" or "this surfaced noise") is welcome.
 
 ### `obscene report`
 

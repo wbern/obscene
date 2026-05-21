@@ -577,7 +577,7 @@ function formatSumOfCouplingSection(
   const lines: string[] = [];
   lines.push("─".repeat(58));
   lines.push(
-    `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental)")} — which file to investigate first when there are many couples`,
+    `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental — not independently validated)")} — files whose couplings concentrate the most cross-dir change traffic`,
   );
   lines.push(...formatConfidenceStamp(confidence));
   lines.push("");
@@ -609,17 +609,17 @@ function formatSumOfCouplingSection(
   }
   lines.push(
     pc.dim(
-      "Partners=distinct cross-dir co-change partners | Strength=Σ pair cochange counts (= code-maat Sum of Coupling, filtered to cross-dir pairs and ≤20-file commits).",
+      "Partners=distinct cross-dir co-change partners | Strength=Σ pair cochange counts (= code-maat's SoC analysis, filtered to cross-dir pairs and ≤20-file commits).",
     ),
   );
   lines.push(
     pc.dim(
-      "Prioritization signal (Tornhill, Your Code as a Crime Scene) — surfaces architecturally central files, not defect likelihood.",
+      'Navigation aid: high strength means "worth a look at this file\'s couplings", not "this file is defect-prone".',
     ),
   );
   lines.push(
     pc.dim(
-      "EXPERIMENTAL: this surface is being validated; framing or fields may change.",
+      "EXPERIMENTAL: NOT independently validated against defect data; may change, be reframed, or be removed.",
     ),
   );
   return lines;
