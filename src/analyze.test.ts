@@ -22,7 +22,9 @@ import {
   getDefects,
   getHistoryCoverage,
   getNestingDepths,
+  getReawakenedFiles,
   getTrackedFiles,
+  REAWAKENING_MIN_DORMANCY_MULTIPLE,
   readIgnoreFile,
   runScc,
   runSccOnFiles,
@@ -604,6 +606,160 @@ describe("getChurnLines (GH#17)", () => {
     expect(() => getChurnLines(3)).toThrow(
       "Not a git repository or git is not installed",
     );
+  });
+});
+
+// A reawakened file is one with at least 1 commit inside the window AND
+// at least 1 commit before it, where the gap between (last commit before
+// the window) and (first commit inside the window) is ≥ the dormancy
+// threshold of REAWAKENING_MIN_DORMANCY_MULTIPLE × the window in days.
+// Default window of 3 months ≈ 90d, so the minimum dormancy is 270d.
+describe("getReawakenedFiles (GH#19)", () => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const daysAgo = (n: number): number => nowSeconds - n * 86400;
+
+  it("flags a file with clear pre-window dormancy as reawakened", () => {
+    // src/legacy.ts: one commit 400d ago (before the 90d window),
+    // one commit 10d ago (inside it). Gap = 390d ≥ 270d → reawakened.
+    const gitOutput = `${daysAgo(10)}\n\nsrc/legacy.ts\n\n${daysAgo(400)}\n\nsrc/legacy.ts\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    const record = result.get("src/legacy.ts");
+    expect(record).toBeDefined();
+    expect(record?.dormancyDays).toBeGreaterThanOrEqual(389);
+    expect(record?.dormancyDays).toBeLessThanOrEqual(391);
+  });
+
+  it("throws when git is unavailable", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+    expect(() => getReawakenedFiles(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+
+  it("exports REAWAKENING_MIN_DORMANCY_MULTIPLE as 3", () => {
+    expect(REAWAKENING_MIN_DORMANCY_MULTIPLE).toBe(3);
+  });
+
+  it("does not flag files whose dormancy is below the 3x threshold", () => {
+    // Gap from -200d to -10d = 190d; minimum is 270d for a 90d window.
+    const gitOutput = `${daysAgo(10)}\n\nsrc/near.ts\n\n${daysAgo(200)}\n\nsrc/near.ts\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    expect(result.has("src/near.ts")).toBe(false);
+  });
+
+  it("exposes the boundary timestamps for the dormancy gap", () => {
+    const before = daysAgo(400);
+    const inside = daysAgo(10);
+    const gitOutput = `${inside}\n\nsrc/legacy.ts\n\n${before}\n\nsrc/legacy.ts\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    const record = result.get("src/legacy.ts");
+    expect(record?.lastTouchedBeforeWindow).toBe(before);
+    expect(record?.firstTouchedInWindow).toBe(inside);
+  });
+
+  it("reports dormancyMultiple rounded to one decimal place", () => {
+    // Gap from -400d to -10d ≈ 390d; 390 / 90 ≈ 4.333 → rounds to 4.3.
+    const gitOutput = `${daysAgo(10)}\n\nsrc/legacy.ts\n\n${daysAgo(400)}\n\nsrc/legacy.ts\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    const record = result.get("src/legacy.ts");
+    expect(record?.dormancyMultiple).toBeGreaterThanOrEqual(4.3);
+    expect(record?.dormancyMultiple).toBeLessThanOrEqual(4.4);
+  });
+
+  it("uses the inner-edge commits — latest pre-window, earliest in-window", () => {
+    // Multiple commits on both sides; gap from inner edges (-300d to -50d)
+    // is 250d < 270d → NOT flagged, even though outer edges (-900d to -10d)
+    // would suggest "ancient." The inner edges are the relevant signal.
+    const gitOutput = [
+      `${daysAgo(10)}`,
+      "",
+      "src/edge.ts",
+      "",
+      `${daysAgo(50)}`,
+      "",
+      "src/edge.ts",
+      "",
+      `${daysAgo(300)}`,
+      "",
+      "src/edge.ts",
+      "",
+      `${daysAgo(900)}`,
+      "",
+      "src/edge.ts",
+      "",
+    ].join("\n");
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    expect(result.has("src/edge.ts")).toBe(false);
+  });
+
+  it("does not flag truly new files (no pre-window history)", () => {
+    // src/brand-new.ts only has commits inside the window — there's no
+    // "before" so reawakening doesn't apply.
+    const gitOutput = `${daysAgo(5)}\n\nsrc/brand-new.ts\n\n${daysAgo(40)}\n\nsrc/brand-new.ts\n`;
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    expect(result.has("src/brand-new.ts")).toBe(false);
+  });
+
+  it("tolerates malformed git output (orphan file lines, whitespace-only lines)", () => {
+    // Defensive guards against malformed input:
+    //   - file line before any timestamp → skipped (currentTs guard)
+    //   - whitespace-only line after a timestamp → skipped (empty file guard)
+    // Neither is producible by git's actual `--format=%ct` output, but the
+    // parser handles them rather than crashing.
+    const gitOutput = "src/orphan.ts\n1234567890\n \n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("does not flag files with continuous activity (no clear dormancy)", () => {
+    // src/active.ts: commits roughly every 50 days. Latest before window
+    // is -100d, earliest inside is -10d → gap = 90d < 270d → NOT flagged.
+    const gitOutput = [
+      `${daysAgo(10)}`,
+      "",
+      "src/active.ts",
+      "",
+      `${daysAgo(100)}`,
+      "",
+      "src/active.ts",
+      "",
+      `${daysAgo(200)}`,
+      "",
+      "src/active.ts",
+      "",
+      `${daysAgo(400)}`,
+      "",
+      "src/active.ts",
+      "",
+    ].join("\n");
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getReawakenedFiles(3);
+
+    expect(result.has("src/active.ts")).toBe(false);
   });
 });
 
@@ -3053,6 +3209,12 @@ function snapshotFrom(opts: {
     rankings: {},
     skipped: {},
     composite,
+    reawakened: {
+      windowDays: 90,
+      minDormancyMultiple: 3,
+      minDormancyDays: 270,
+      entries: [],
+    },
     corpus: { fileCount: opts.files.length, totalComplexity },
   };
 }
@@ -3210,7 +3372,8 @@ describe("computeHotspotsCore", () => {
         complexityDensity: 0.16,
       },
     ];
-    // git log calls in order: getChurn, getDefects, getAuthorCommitCounts.
+    // git log calls in order: getChurn, getDefects, getAuthorCommitCounts,
+    // getReawakenedFiles.
     mockExecSync
       .mockReturnValueOnce(
         Buffer.from("src/a.ts\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\n"),
@@ -3220,7 +3383,8 @@ describe("computeHotspotsCore", () => {
         Buffer.from(
           "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/a.ts\nCOMMIT_SEP\nalice\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
         ),
-      );
+      )
+      .mockReturnValueOnce(Buffer.from(""));
     // getNestingDepths reads each file.
     mockReadFileSync.mockImplementation(
       () =>
@@ -3260,7 +3424,8 @@ describe("computeHotspotsCore", () => {
         complexityDensity: 0.16,
       },
     ];
-    // git log calls in order: getChurnLines (numstat), getDefects, getAuthorCommitCounts.
+    // git log calls in order: getChurnLines (numstat), getDefects,
+    // getAuthorCommitCounts, getReawakenedFiles.
     mockExecSync
       .mockReturnValueOnce(
         Buffer.from("10\t5\tsrc/a.ts\n2\t1\tsrc/b.ts\n1\t0\tsrc/c.ts\n"),
@@ -3270,7 +3435,8 @@ describe("computeHotspotsCore", () => {
         Buffer.from(
           "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
         ),
-      );
+      )
+      .mockReturnValueOnce(Buffer.from(""));
     mockReadFileSync.mockImplementation(
       () =>
         "function f() {\n  if (x) {\n    if (y) {\n      doit();\n    }\n  }\n}\n",
@@ -3280,6 +3446,136 @@ describe("computeHotspotsCore", () => {
     expect(result.churn.get("src/a.ts")).toBe(15);
     expect(result.churn.get("src/b.ts")).toBe(3);
     expect(result.churn.get("src/c.ts")).toBe(1);
+  });
+
+  it("exposes a reawakened section with the threshold rule (GH#19)", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 30,
+        comments: 0,
+        complexityDensity: 0.3,
+      },
+      {
+        file: "src/b.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+      {
+        file: "src/c.ts",
+        code: 30,
+        lines: 35,
+        complexity: 5,
+        comments: 0,
+        complexityDensity: 0.16,
+      },
+    ];
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const daysAgo = (n: number): number => nowSeconds - n * 86400;
+    // 4 git log calls in order: getChurn, getDefects, getAuthorCommitCounts,
+    // getReawakenedFiles. The 4th sets src/a.ts up as dormant for ~400d.
+    mockExecSync
+      .mockReturnValueOnce(
+        Buffer.from("src/a.ts\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\n"),
+      )
+      .mockReturnValueOnce(Buffer.from(""))
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
+        ),
+      )
+      .mockReturnValueOnce(
+        Buffer.from(
+          `${daysAgo(10)}\n\nsrc/a.ts\n\n${daysAgo(400)}\n\nsrc/a.ts\n`,
+        ),
+      );
+    mockReadFileSync.mockImplementation(
+      () =>
+        "function f() {\n  if (x) {\n    if (y) {\n      doit();\n    }\n  }\n}\n",
+    );
+    const result = computeHotspotsCore(files, 3, 0);
+    expect(result.reawakened).toBeDefined();
+    expect(result.reawakened.windowDays).toBe(90);
+    expect(result.reawakened.minDormancyMultiple).toBe(3);
+    expect(result.reawakened.minDormancyDays).toBe(270);
+    expect(result.reawakened.entries).toHaveLength(1);
+    const entry = result.reawakened.entries[0];
+    expect(entry.file).toBe("src/a.ts");
+    expect(entry.dormancyDays).toBeGreaterThanOrEqual(389);
+    expect(entry.complexity).toBe(30);
+    expect(entry.churn).toBe(2);
+  });
+
+  it("defaults reawakened entry churn to 0 when the churn map lacks the file (GH#19)", () => {
+    // Defensive: if the reawakened-files git log and the churn git log
+    // disagree (e.g. a file appeared in the corpus-wide history but the
+    // churn pass returned an empty map), the entry still renders with a
+    // safe zero rather than NaN.
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+    ];
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const daysAgo = (n: number): number => nowSeconds - n * 86400;
+    mockExecSync
+      .mockReturnValueOnce(Buffer.from("")) // empty churn
+      .mockReturnValueOnce(Buffer.from(""))
+      .mockReturnValueOnce(Buffer.from("COMMIT_SEP\nalice\nsrc/a.ts\n"))
+      .mockReturnValueOnce(
+        Buffer.from(
+          `${daysAgo(10)}\n\nsrc/a.ts\n\n${daysAgo(400)}\n\nsrc/a.ts\n`,
+        ),
+      );
+    mockReadFileSync.mockImplementation(() => "if (x) {\n  do();\n}\n");
+
+    const result = computeHotspotsCore(files, 3, 0);
+
+    expect(result.reawakened.entries).toHaveLength(1);
+    expect(result.reawakened.entries[0].file).toBe("src/a.ts");
+    expect(result.reawakened.entries[0].churn).toBe(0);
+  });
+
+  it("filters reawakened entries to corpus files (GH#19)", () => {
+    // git log can report files that aren't in the scc corpus — e.g. an
+    // .obsignore'd file or a file outside the scc-recognized languages.
+    // Those are excluded from the reawakened section.
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+    ];
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const daysAgo = (n: number): number => nowSeconds - n * 86400;
+    mockExecSync
+      .mockReturnValueOnce(Buffer.from("src/a.ts\n"))
+      .mockReturnValueOnce(Buffer.from(""))
+      .mockReturnValueOnce(Buffer.from("COMMIT_SEP\nalice\nsrc/a.ts\n"))
+      .mockReturnValueOnce(
+        Buffer.from(
+          `${daysAgo(10)}\n\nignored.lock\n\n${daysAgo(400)}\n\nignored.lock\n`,
+        ),
+      );
+    mockReadFileSync.mockImplementation(() => "if (x) {\n  do();\n}\n");
+
+    const result = computeHotspotsCore(files, 3, 0);
+
+    expect(result.reawakened.entries).toHaveLength(0);
   });
 });
 
@@ -3344,6 +3640,12 @@ describe("sliceCoreForDisplay", () => {
       composite,
       corpus: { fileCount, totalComplexity: 100 },
       churn: new Map([["src/a.ts", 5]]),
+      reawakened: {
+        windowDays: 90,
+        minDormancyMultiple: 3,
+        minDormancyDays: 270,
+        entries: [],
+      },
     };
   }
 
@@ -3408,10 +3710,11 @@ describe("computeSnapshot", () => {
           ]),
         ),
       )
-      // Then computeHotspotsCore makes 3 git log calls.
+      // Then computeHotspotsCore makes 4 git log calls.
       .mockReturnValueOnce(Buffer.from("src/a.ts\nsrc/a.ts\n"))
       .mockReturnValueOnce(Buffer.from(""))
-      .mockReturnValueOnce(Buffer.from("COMMIT_SEP\nalice\nsrc/a.ts\n"));
+      .mockReturnValueOnce(Buffer.from("COMMIT_SEP\nalice\nsrc/a.ts\n"))
+      .mockReturnValueOnce(Buffer.from(""));
     mockReadFileSync.mockImplementation(() => "if (x) {\n  do();\n}\n");
     const snap = computeSnapshot({ months: 3, excludes: [] });
     expect(snap.files.length).toBe(1);

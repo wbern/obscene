@@ -17,6 +17,7 @@ import type {
   HotspotDelta,
   HotspotsOutput,
   RankingOutput,
+  ReawakenedSection,
   ReportOutput,
 } from "./types.js";
 
@@ -336,6 +337,30 @@ function formatFullDeltaSection(fd: HotspotDelta): string[] {
   return lines;
 }
 
+function formatReawakenedSection(section: ReawakenedSection): string[] {
+  const lines: string[] = [];
+  const { windowDays, minDormancyMultiple, minDormancyDays, entries } = section;
+  lines.push(
+    pc.magenta(
+      `Reawakened — dormant ≥ ${minDormancyMultiple}× window (${minDormancyDays}d) then touched again`,
+    ),
+  );
+  lines.push(
+    pc.dim(
+      `  Window: ${windowDays}d · Rule: gap between last pre-window commit and first in-window commit ≥ ${minDormancyDays}d`,
+    ),
+  );
+  lines.push("");
+  const header = `  ${padRight("File", 40)}  ${padLeft("Dormancy", 12)}  ${padLeft("×Window", 10)}  ${padLeft("Cx", 6)}  ${padLeft("Churn", 6)}`;
+  lines.push(pc.dim(header));
+  for (const e of entries) {
+    lines.push(
+      `  ${padRight(truncate(e.file, 40), 40)}  ${padLeft(`${e.dormancyDays}d`, 12)}  ${padLeft(`${e.dormancyMultiple}×`, 10)}  ${padLeft(String(e.complexity), 6)}  ${padLeft(String(e.churn), 6)}`,
+    );
+  }
+  return lines;
+}
+
 export function formatHotspotsTable(output: HotspotsOutput): string {
   const lines: string[] = [];
   const { churnWindow, churnMode, rankings, corpus, delta, fullDelta } = output;
@@ -416,6 +441,13 @@ export function formatHotspotsTable(output: HotspotsOutput): string {
         lines.push(`  ${info.suggestion}`);
       }
     }
+  }
+
+  if (output.reawakened) {
+    lines.push("");
+    lines.push("\u00B7 \u00B7 \u00B7");
+    lines.push("");
+    lines.push(...formatReawakenedSection(output.reawakened));
   }
 
   lines.push("");

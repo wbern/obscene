@@ -97,6 +97,8 @@ const HOTSPOTS_GUIDE: Record<string, string> = {
     "Aggregate stats for the analyzed file set (post-exclude — files filtered by .obsignore or --exclude are not counted). When totalComplexity is 0, the rankings reflect size and churn only; HOT/WARM/COOL become relative groupings rather than risk labels.",
   confidence:
     "Epistemic stamp on each ranking — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. These are engineering-judgment sample-size tiers, with the weak floor for defects matching code-maat's --min-revs default of 5. ACCEPTABLE is the ceiling — the tool never claims certainty about code quality, only that the sample supports the ranking. INCONCLUSIVE rankings are surfaced under skipped rather than ranked.",
+  reawakened:
+    "Files that were dormant for ≥ 3× the churn window and just got touched again inside it. The objective rule: gap between the latest pre-window commit and the earliest in-window commit must be ≥ minDormancyDays. Reawakened code often carries forgotten context — the original author may be gone, mental models stale.\nMetric concept: forensic 'reawakened files' signal from Tornhill, *Your Code as a Crime Scene* (2nd ed., Ch. 2) · Strength: highlights risk that pure churn × complexity misses · Limit: pre-window history must exist (omits truly new files), and `git log --follow` isn't used so file renames break the dormancy chain.",
 };
 
 const COUPLING_GUIDE: Record<string, string> = {
@@ -389,6 +391,14 @@ function applyPathScope(
     );
     output.composite.showing = output.composite.entries.length;
   }
+  if (output.reawakened) {
+    output.reawakened.entries = output.reawakened.entries.filter((e) =>
+      scope.paths.has(e.file),
+    );
+    if (output.reawakened.entries.length === 0) {
+      output.reawakened = undefined;
+    }
+  }
 
   let filteredHot = 0;
   let filteredWarm = 0;
@@ -510,6 +520,7 @@ function runHotspots(opts: HotspotsOpts): void {
           rankings: modeCHeadCore.rankings,
           skipped: modeCHeadCore.skipped,
           composite: modeCHeadCore.composite,
+          reawakened: modeCHeadCore.reawakened,
           corpus: modeCHeadCore.corpus,
         };
         fullDelta = computeDelta(baseRef, "HEAD", baseSnapshot, headSnapshot);
@@ -530,7 +541,7 @@ function runHotspots(opts: HotspotsOpts): void {
     }
   }
 
-  const { rankings, skipped, composite, corpus } = modeCHeadCore
+  const { rankings, skipped, composite, corpus, reawakened } = modeCHeadCore
     ? sliceCoreForDisplay(modeCHeadCore, top)
     : computeHotspotsCore(files, months, top, undefined, churnMode);
 
@@ -564,6 +575,7 @@ function runHotspots(opts: HotspotsOpts): void {
     rankings,
     skipped: Object.keys(skipped).length > 0 ? skipped : undefined,
     composite,
+    reawakened: reawakened.entries.length > 0 ? reawakened : undefined,
     corpus: { ...corpus, filtered },
   };
 

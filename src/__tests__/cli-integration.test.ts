@@ -152,6 +152,7 @@ describe("CLI Integration", () => {
       "defects",
       "nesting",
       "rankings",
+      "reawakened",
       "tier",
     ]);
     expect(parsed).toHaveProperty("churnWindow", "3 months");
@@ -1216,5 +1217,125 @@ describe("CLI Integration", () => {
     // No silent fallback to a filtered view — the worktree-based BASE
     // snapshot succeeded and the head-side analysis also used lines.
     expect(parsed.delta.fallback).toBeUndefined();
+  });
+
+  function setupReawakeningRepo(): void {
+    spawnSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "pipe" });
+    spawnSync("git", ["config", "user.email", "test@test.com"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    spawnSync("git", ["config", "user.name", "Test"], {
+      cwd: tempDir,
+      stdio: "pipe",
+    });
+    const writeFile = (name: string, body: string) =>
+      fs.writeFileSync(path.join(tempDir, name), body);
+
+    // Backdated git commit helper. We can't rely on `git commit --date`
+    // alone — it only sets the author date, the committer date defaults to
+    // wall clock. The reawakening detector reads `--format=%ct` (committer
+    // time), so we set both via env.
+    const commitWithDate = (message: string, iso: string) => {
+      const env = {
+        ...process.env,
+        GIT_AUTHOR_DATE: iso,
+        GIT_COMMITTER_DATE: iso,
+      };
+      spawnSync("git", ["add", "."], { cwd: tempDir, stdio: "pipe", env });
+      spawnSync("git", ["commit", "-m", message], {
+        cwd: tempDir,
+        stdio: "pipe",
+        env,
+      });
+    };
+
+    const now = Date.now();
+    const daysAgoIso = (n: number): string =>
+      new Date(now - n * 86400_000).toISOString();
+
+    // legacy.ts: complex, committed 400d ago, then again today → dormant
+    // for ~400d which is ≥ 270d (3× the default 90d window) → reawakened.
+    writeFile(
+      "legacy.ts",
+      "export function legacy(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) return 1;\n    }\n  }\n  return 0;\n}\n",
+    );
+    commitWithDate("ancient legacy", daysAgoIso(400));
+    writeFile(
+      "legacy.ts",
+      "export function legacy(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) {\n        if (x > 1000) return 2;\n      }\n    }\n  }\n  return 0;\n}\n",
+    );
+    commitWithDate("revive legacy", daysAgoIso(1));
+
+    // active.ts: complex, touched continuously — not reawakened.
+    writeFile(
+      "active.ts",
+      "export function active(x: number) {\n  if (x > 0) {\n    if (x > 10) return 1;\n  }\n  return 0;\n}\n",
+    );
+    commitWithDate("active v1", daysAgoIso(100));
+    writeFile(
+      "active.ts",
+      "export function active(x: number) {\n  if (x > 0) {\n    if (x > 10) return 2;\n  }\n  return 0;\n}\n",
+    );
+    commitWithDate("active v2", daysAgoIso(2));
+  }
+
+  it("flags reawakened files in JSON output (GH#19)", {
+    timeout: 30000,
+  }, () => {
+    setupReawakeningRepo();
+
+    const result = spawnSync("node", [BIN_PATH, "--top", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.reawakened).toBeDefined();
+    expect(parsed.reawakened.windowDays).toBe(90);
+    expect(parsed.reawakened.minDormancyMultiple).toBe(3);
+    expect(parsed.reawakened.minDormancyDays).toBe(270);
+    const files = parsed.reawakened.entries.map(
+      (e: { file: string }) => e.file,
+    );
+    expect(files).toContain("legacy.ts");
+    expect(files).not.toContain("active.ts");
+    const legacy = parsed.reawakened.entries.find(
+      (e: { file: string }) => e.file === "legacy.ts",
+    );
+    expect(legacy.dormancyDays).toBeGreaterThanOrEqual(390);
+    expect(legacy.dormancyMultiple).toBeGreaterThanOrEqual(4.3);
+  });
+
+  it("renders a Reawakened section in table format (GH#19)", {
+    timeout: 30000,
+  }, () => {
+    setupReawakeningRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--format", "table", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Reawakened");
+    expect(result.stdout).toContain("legacy.ts");
+  });
+
+  it("omits reawakened section when no files qualify (GH#19)", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync("node", [BIN_PATH, "--top", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.reawakened).toBeUndefined();
   });
 });

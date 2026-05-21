@@ -139,6 +139,39 @@ export interface PathFilterInfo {
   corpusHotRate: number | null;
 }
 
+/**
+ * "Reawakened" file: dormant for a clear margin before the churn window
+ * (≥ MIN_DORMANCY_MULTIPLE × the window length), then touched again inside
+ * the window. The forensic pattern Tornhill flags in *Your Code as a Crime
+ * Scene* — code that was finished, then suddenly wasn't.
+ *
+ * `lastTouchedBeforeWindow` is the latest commit on the file BEFORE the
+ * window opened; `firstTouchedInWindow` is the earliest commit on the file
+ * INSIDE the window. The gap between them is the dormancy.
+ */
+export interface ReawakenedEntry {
+  file: string;
+  dormancyDays: number;
+  dormancyMultiple: number;
+  lastTouchedBeforeWindow: number;
+  firstTouchedInWindow: number;
+  complexity: number;
+  churn: number;
+}
+
+export interface ReawakenedSection {
+  windowDays: number;
+  /**
+   * The objective rule: a file is "reawakened" only when its dormancy gap is
+   * at least this many times the churn window. Set to 3 so the gap can't be
+   * confused with normal review/rework cadence. Surfaced in the JSON so
+   * downstream consumers can verify the rule without re-deriving it.
+   */
+  minDormancyMultiple: number;
+  minDormancyDays: number;
+  entries: ReawakenedEntry[];
+}
+
 export interface HotspotsOutput {
   generated: string;
   guide: Record<string, string>;
@@ -156,6 +189,7 @@ export interface HotspotsOutput {
   rankings: Record<string, RankingOutput>;
   skipped?: Record<string, SkippedRanking>;
   composite?: CompositeOutput;
+  reawakened?: ReawakenedSection;
   corpus?: {
     fileCount: number;
     totalComplexity: number;
@@ -233,6 +267,7 @@ export interface HotspotSnapshot {
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
   composite: CompositeOutput;
+  reawakened: ReawakenedSection;
   corpus: {
     fileCount: number;
     totalComplexity: number;

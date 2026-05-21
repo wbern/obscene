@@ -270,6 +270,37 @@ The coupling table annotates entries that need framing:
 | `†` next to a path | `file1Deleted` / `file2Deleted` | File is no longer present at HEAD (deleted or renamed away). The coupling signal is historical; the pair is not actionable in the current tree. |
 | `⇄` next to the Degree value | `lockstep` | `shared / max(churn) ≥ 0.9` — both files almost always change together over the window. Note the contrast with `Degree`: lockstep uses `max(churn)` (symmetric — entanglement holds in both directions), while `Degree` uses `min(churn)` (asymmetric — `Degree` can be 100% even when one file moves freely without the other). Typical lockstep pairs: generator/mirror (`README.md` ↔ `src/README.md`, `*.pb.go` ↔ `*.proto`). Treat the pair as a single unit from git's perspective. |
 
+### Reawakened files
+
+A file is **reawakened** when the gap between its latest commit *before* the churn window and its earliest commit *inside* the window is at least 3× the window length. With the default 90-day window, that means at least 270 days of silence before the file became active again.
+
+The signal comes from Tornhill, *Your Code as a Crime Scene* (2nd ed., Ch. 2) — code that was effectively finished, then suddenly wasn't, often carries forgotten context. The original author may be gone, mental models stale, the surrounding system has shifted underneath. Pure `churn × complexity` doesn't surface this because the file's *current* churn looks ordinary; the dormancy is the signal.
+
+The 3× multiplier is deliberately conservative so the gap can't be confused with normal review cycles or seasonal cadence. The exact rule is surfaced in the JSON so consumers can verify it without re-deriving:
+
+```json
+{
+  "reawakened": {
+    "windowDays": 90,
+    "minDormancyMultiple": 3,
+    "minDormancyDays": 270,
+    "entries": [
+      {
+        "file": "src/legacy.ts",
+        "dormancyDays": 412,
+        "dormancyMultiple": 4.6,
+        "lastTouchedBeforeWindow": 1681948800,
+        "firstTouchedInWindow": 1717545600,
+        "complexity": 47,
+        "churn": 3
+      }
+    ]
+  }
+}
+```
+
+The section is omitted from the output when no files qualify. Limitations: pre-window history must exist (truly new files never qualify), and `git log --follow` isn't used, so file renames break the dormancy chain.
+
 ### Corpus framing
 
 When the analyzed file set has no measurable cyclomatic complexity (every scanned file is non-code or trivial), the `hotspots` table prepends a banner noting that rankings reflect size and churn only. The `corpus` field in JSON output exposes the same signal:

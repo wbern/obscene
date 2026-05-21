@@ -15,6 +15,8 @@ import type {
   HotspotSnapshot,
   RankingEntry,
   RankingOutput,
+  ReawakenedEntry,
+  ReawakenedSection,
   SccLanguage,
   ScoreChange,
   SkippedRanking,
@@ -301,6 +303,91 @@ export function getChurnLines(
     counts.set(path, (counts.get(path) ?? 0) + delta);
   }
   return counts;
+}
+
+/**
+ * Reawakening threshold — a file is considered "reawakened" when the gap
+ * between its last pre-window commit and its first in-window commit is
+ * ≥ this multiple of the churn window in days. The multiplier creates a
+ * clear margin: at 3×, a 3-month window requires ≥9 months of dormancy,
+ * which is unambiguously dormant by any team's definition. Surfaced in
+ * JSON output so consumers can verify the rule mechanically.
+ */
+export const REAWAKENING_MIN_DORMANCY_MULTIPLE = 3;
+
+type ReawakeningRecord = {
+  dormancyDays: number;
+  dormancyMultiple: number;
+  lastTouchedBeforeWindow: number;
+  firstTouchedInWindow: number;
+};
+
+/**
+ * Find files that have been dormant for a clear margin and just became
+ * active again inside the churn window — the "reawakened" hotspot pattern
+ * Tornhill flags in *Your Code as a Crime Scene* as one of the highest-
+ * actionable forensic signals. See REAWAKENING_MIN_DORMANCY_MULTIPLE for
+ * the objective rule.
+ */
+export function getReawakenedFiles(
+  months: number,
+  cwd?: string,
+): Map<string, ReawakeningRecord> {
+  let raw: Buffer;
+  try {
+    raw = execSync("git log --format=%ct --name-only --no-merges", {
+      maxBuffer: 50 * 1024 * 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+      cwd,
+    });
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+
+  const windowDays = months * DAYS_PER_MONTH;
+  const windowStartSeconds = Math.floor(Date.now() / 1000) - windowDays * 86400;
+  const minDormancyDays = windowDays * REAWAKENING_MIN_DORMANCY_MULTIPLE;
+
+  // Parse: each commit is `<unix_ts>\n\n<file>\n<file>\n\n<unix_ts>\n...`
+  const latestBefore = new Map<string, number>();
+  const earliestInside = new Map<string, number>();
+  let currentTs: number | null = null;
+  for (const line of raw.toString().split("\n")) {
+    if (!line) continue;
+    if (/^\d+$/.test(line)) {
+      currentTs = parseInt(line, 10);
+      continue;
+    }
+    if (currentTs === null) continue;
+    const file = normalizePath(line.trim());
+    if (!file) continue;
+    if (currentTs >= windowStartSeconds) {
+      const prev = earliestInside.get(file);
+      if (prev === undefined || currentTs < prev) {
+        earliestInside.set(file, currentTs);
+      }
+    } else {
+      const prev = latestBefore.get(file);
+      if (prev === undefined || currentTs > prev) {
+        latestBefore.set(file, currentTs);
+      }
+    }
+  }
+
+  const reawakened = new Map<string, ReawakeningRecord>();
+  for (const [file, inWindow] of earliestInside) {
+    const before = latestBefore.get(file);
+    if (before === undefined) continue;
+    const dormancyDays = Math.floor((inWindow - before) / 86400);
+    if (dormancyDays < minDormancyDays) continue;
+    reawakened.set(file, {
+      dormancyDays,
+      dormancyMultiple: Math.round((dormancyDays / windowDays) * 10) / 10,
+      lastTouchedBeforeWindow: before,
+      firstTouchedInWindow: inWindow,
+    });
+  }
+  return reawakened;
 }
 
 /**
@@ -1397,11 +1484,13 @@ export function computeHotspotsCore(
   composite: CompositeOutput;
   corpus: { fileCount: number; totalComplexity: number };
   churn: Map<string, number>;
+  reawakened: ReawakenedSection;
 } {
   const churn =
     churnMode === "lines" ? getChurnLines(months, cwd) : getChurn(months, cwd);
   const defects = getDefects(months, cwd);
   const authorCommitCounts = getAuthorCommitCounts(months, cwd);
+  const reawakenedRaw = getReawakenedFiles(months, cwd);
   const authors = new Map<string, number>();
   for (const [file, perAuthor] of authorCommitCounts) {
     authors.set(file, perAuthor.size);
@@ -1422,12 +1511,36 @@ export function computeHotspotsCore(
   const composite = computeComposite(rankings, churn, top);
   let totalComplexity = 0;
   for (const f of files) totalComplexity += f.complexity;
+  const windowDays = months * DAYS_PER_MONTH;
+  const corpusByFile = new Map(files.map((f) => [f.file, f]));
+  const reawakenedEntries: ReawakenedEntry[] = [];
+  for (const [file, rec] of reawakenedRaw) {
+    const fm = corpusByFile.get(file);
+    if (!fm) continue;
+    reawakenedEntries.push({
+      file,
+      dormancyDays: rec.dormancyDays,
+      dormancyMultiple: rec.dormancyMultiple,
+      lastTouchedBeforeWindow: rec.lastTouchedBeforeWindow,
+      firstTouchedInWindow: rec.firstTouchedInWindow,
+      complexity: fm.complexity,
+      churn: churn.get(file) ?? 0,
+    });
+  }
+  reawakenedEntries.sort((a, b) => b.dormancyMultiple - a.dormancyMultiple);
+  const reawakened: ReawakenedSection = {
+    windowDays,
+    minDormancyMultiple: REAWAKENING_MIN_DORMANCY_MULTIPLE,
+    minDormancyDays: windowDays * REAWAKENING_MIN_DORMANCY_MULTIPLE,
+    entries: reawakenedEntries,
+  };
   return {
     rankings,
     skipped,
     composite,
     corpus: { fileCount: files.length, totalComplexity },
     churn,
+    reawakened,
   };
 }
 
@@ -1462,6 +1575,7 @@ export function sliceCoreForDisplay(
     },
     corpus: core.corpus,
     churn: core.churn,
+    reawakened: core.reawakened,
   };
 }
 
@@ -1493,6 +1607,7 @@ export function computeSnapshot(opts: {
     rankings: core.rankings,
     skipped: core.skipped,
     composite: core.composite,
+    reawakened: core.reawakened,
     corpus: core.corpus,
   };
 }

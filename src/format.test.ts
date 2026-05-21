@@ -773,6 +773,42 @@ describe("formatHotspotsTable", () => {
     expect(result).not.toContain("no measurable code complexity");
   });
 
+  it("renders the reawakened section with the threshold rule (GH#19)", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      churnMode: "commits",
+      rankings: {},
+      reawakened: {
+        windowDays: 90,
+        minDormancyMultiple: 3,
+        minDormancyDays: 270,
+        entries: [
+          {
+            file: "src/legacy.ts",
+            dormancyDays: 412,
+            dormancyMultiple: 4.6,
+            lastTouchedBeforeWindow: 1681948800,
+            firstTouchedInWindow: 1717545600,
+            complexity: 47,
+            churn: 3,
+          },
+        ],
+      },
+      corpus: { fileCount: 1, totalComplexity: 47 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("Reawakened");
+    expect(result).toContain("3× window");
+    expect(result).toContain("270d");
+    expect(result).toContain("src/legacy.ts");
+    expect(result).toContain("412d");
+    expect(result).toContain("4.6×");
+  });
+
   it("rewrites the footer line when corpus has zero complexity", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
