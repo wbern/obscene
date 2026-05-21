@@ -224,6 +224,65 @@ describe("formatHotspotDeltaForAgent", () => {
     const out = formatHotspotDeltaForAgent(delta) ?? "";
     expect(out.startsWith("obscene drift (vs main):")).toBe(true);
   });
+
+  it("omits the tier-count rollup when only stable-significant changes exist", () => {
+    const delta = makeDelta({
+      scoreChanges: [makeScoreChange({ file: "src/a.ts", percentChange: 40 })],
+    });
+    const out = formatHotspotDeltaForAgent(delta) ?? "";
+    expect(out).not.toContain("tiers:");
+  });
+
+  it("emits a tier-count rollup line when tier transitions exist", () => {
+    const delta = makeDelta({
+      tierTransitions: {
+        enteredHot: ["src/a.ts", "src/b.ts"],
+        enteredWarm: ["src/c.ts"],
+        exitedHot: ["src/d.ts"],
+        exitedWarm: ["src/e.ts", "src/f.ts"],
+      },
+      scoreChanges: [
+        makeScoreChange({
+          file: "src/a.ts",
+          oldTier: "warm",
+          newTier: "hot",
+          percentChange: 40,
+        }),
+        makeScoreChange({
+          file: "src/b.ts",
+          oldTier: "warm",
+          newTier: "hot",
+          percentChange: 50,
+        }),
+        makeScoreChange({
+          file: "src/c.ts",
+          oldTier: "cool",
+          newTier: "warm",
+          percentChange: 30,
+        }),
+        makeScoreChange({
+          file: "src/d.ts",
+          oldTier: "hot",
+          newTier: "warm",
+          percentChange: -25,
+        }),
+        makeScoreChange({
+          file: "src/e.ts",
+          oldTier: "warm",
+          newTier: "cool",
+          percentChange: -30,
+        }),
+        makeScoreChange({
+          file: "src/f.ts",
+          oldTier: "warm",
+          newTier: "cool",
+          percentChange: -35,
+        }),
+      ],
+    });
+    const out = formatHotspotDeltaForAgent(delta) ?? "";
+    expect(out).toContain("tiers: HOT +2/-1 · WARM +1/-2");
+  });
 });
 
 describe("buildClaudeHookOutput", () => {

@@ -71,7 +71,19 @@ export function formatHotspotDeltaForAgent(
 
   if (lines.length === 0) return null;
 
-  return `obscene drift (vs ${delta.base}):\n${lines.join("\n")}`;
+  const hotIn = delta.tierTransitions.enteredHot.length;
+  const hotOut = delta.tierTransitions.exitedHot.length;
+  const warmIn = delta.tierTransitions.enteredWarm.length;
+  const warmOut = delta.tierTransitions.exitedWarm.length;
+  const hasTierMovement = hotIn + hotOut + warmIn + warmOut > 0;
+
+  const header = `obscene drift (vs ${delta.base}):`;
+  const summaryLine = hasTierMovement
+    ? `tiers: HOT +${hotIn}/-${hotOut} · WARM +${warmIn}/-${warmOut}`
+    : null;
+
+  const body = summaryLine ? [summaryLine, ...lines] : lines;
+  return `${header}\n${body.join("\n")}`;
 }
 
 export function buildClaudeHookOutput(
