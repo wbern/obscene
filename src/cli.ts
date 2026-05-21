@@ -32,6 +32,7 @@ import {
   formatHotspotsTable,
   formatReportTable,
 } from "./format.js";
+import { buildClaudeHookOutput, formatHotspotDeltaForAgent } from "./hook.js";
 import type {
   ComplexityDelta,
   CouplingOutput,
@@ -190,6 +191,32 @@ addSharedOptions(
     } catch (err: unknown) {
       exitWithError(err);
     }
+  });
+
+// hook command — emits a Claude Code hook JSON payload summarizing
+// hotspot drift since a base ref. Designed for use in a PostToolUse/Stop
+// hook so the agent sees soft signal about whether its edits are pushing
+// files into hotter tiers. Silent (exit 0, no stdout) when nothing crosses
+// the significance threshold — noise on every edit is the dominant failure
+// mode for quality-feedback hooks.
+program
+  .command("hook")
+  .description(
+    "emit Claude Code hook JSON summarizing hotspot drift since a base ref (use in PostToolUse/Stop hooks)",
+  )
+  .option(
+    "--base <ref>",
+    "base ref to compare against (default: HEAD — i.e. working tree vs last commit)",
+    "HEAD",
+  )
+  .option(
+    "--event <name>",
+    "hook event name to emit in hookSpecificOutput",
+    "Stop",
+  )
+  .option("--months <n>", "churn window in months", "3")
+  .action((opts: { base: string; event: string; months: string }) => {
+    runHook(opts);
   });
 
 // init command
@@ -647,6 +674,44 @@ function runCoupling(opts: CouplingOpts): void {
     process.stdout.write(`${formatCouplingTable(output)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
+  }
+}
+
+function runHook(opts: { base: string; event: string; months: string }): void {
+  // Soft signal: any failure path exits 0 with no stdout so Claude's hook
+  // pipeline never blocks or shows an error. We do NOT use the
+  // getChangedFiles fast-path because it's a commit-to-commit (base...HEAD)
+  // diff — empty whenever the base resolves to HEAD itself, which is the
+  // common case for the hook (working tree vs last commit). Letting
+  // computeDelta run unconditionally and trusting the formatter to suppress
+  // empty deltas is slower but correct for both committed and uncommitted
+  // edits.
+  try {
+    const months = parseInt(opts.months, 10);
+    const allExcludes = resolveExcludes();
+    const files = runScc(allExcludes);
+
+    const baseSnapshot = withWorktreeAt(opts.base, (path) =>
+      computeSnapshot({ months, excludes: allExcludes, cwd: path }),
+    );
+    const headCore = computeHotspotsCore(files, months, 0);
+    const headSnapshot: HotspotSnapshot = {
+      files,
+      rankings: headCore.rankings,
+      skipped: headCore.skipped,
+      composite: headCore.composite,
+      corpus: headCore.corpus,
+    };
+    const delta = computeDelta(opts.base, "HEAD", baseSnapshot, headSnapshot);
+
+    const context = formatHotspotDeltaForAgent(delta);
+    if (context === null) return;
+
+    process.stdout.write(
+      JSON.stringify(buildClaudeHookOutput(context, opts.event)),
+    );
+  } catch {
+    // Hooks must not block or surface errors — eat all failures silently.
   }
 }
 

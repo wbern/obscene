@@ -844,6 +844,51 @@ describe("CLI Integration", () => {
     expect(result.stderr).toContain("--full-delta requires --base");
   });
 
+  it("should describe the hook command in --help", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "hook", "--help"], {
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Claude Code hook");
+    expect(result.stdout).toContain("--base");
+    expect(result.stdout).toContain("--event");
+  });
+
+  it("should exit 0 silently when hook runs outside a git repo", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "hook"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+  });
+
+  it("should emit valid hook JSON or stay silent in a delta repo", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "hook", "--base", "main", "--event", "Stop"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+
+    if (result.stdout.length > 0) {
+      const parsed = JSON.parse(result.stdout);
+      expect(parsed.hookSpecificOutput.hookEventName).toBe("Stop");
+      expect(typeof parsed.hookSpecificOutput.additionalContext).toBe("string");
+      expect(parsed.hookSpecificOutput.additionalContext).toContain(
+        "obscene drift",
+      );
+    }
+  });
+
   it("should fail bare --base when no default branch exists", {
     timeout: 30000,
   }, () => {
