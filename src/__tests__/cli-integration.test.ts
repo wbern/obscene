@@ -1156,4 +1156,65 @@ describe("CLI Integration", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Unknown --churn-mode 'bogus'");
   });
+
+  it("threads --churn-mode lines through --base delta mode (GH#17)", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--base", "main", "--churn-mode", "lines", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.churnMode).toBe("lines");
+    expect(parsed.delta.changedFiles.sort()).toEqual([
+      "a.ts",
+      "b.ts",
+      "new.ts",
+    ]);
+    // Line-based churn must be non-zero for the changed files —
+    // proves getChurnLines ran (not getChurn) in delta mode.
+    const churns = new Map<string, number>();
+    for (const e of parsed.rankings.complexity.entries as Array<{
+      file: string;
+      churn: number;
+    }>) {
+      churns.set(e.file, e.churn);
+    }
+    expect(churns.get("a.ts") ?? 0).toBeGreaterThan(0);
+    expect(churns.get("new.ts") ?? 0).toBeGreaterThan(0);
+  });
+
+  it("threads --churn-mode lines through --full-delta mode (GH#17)", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [
+        BIN_PATH,
+        "--base",
+        "main",
+        "--full-delta",
+        "--churn-mode",
+        "lines",
+        "--top",
+        "0",
+      ],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.churnMode).toBe("lines");
+    expect(parsed).toHaveProperty("fullDelta");
+    // No silent fallback to a filtered view — the worktree-based BASE
+    // snapshot succeeded and the head-side analysis also used lines.
+    expect(parsed.delta.fallback).toBeUndefined();
+  });
 });
