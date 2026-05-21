@@ -21,7 +21,7 @@
   <a href="https://github.com/wbern/obscene/releases/latest"><img src="https://img.shields.io/badge/transparency-hotspots%20in%20release%20notes-blue" alt="Transparency: hotspots snapshot in release notes"></a>
 </p>
 
-Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Based on Adam Tornhill's *Your Code as a Crime Scene*.
+Combines [scc](https://github.com/boyter/scc) cyclomatic complexity with git churn to surface files that are both complex AND actively modified. Inspired by [code-maat](https://github.com/adamtornhill/code-maat) and the broader churn-times-complexity literature (see [Why churn × complexity?](#why-churn-x-complexity)).
 
 Works on any language scc supports. No configuration needed.
 
@@ -297,7 +297,7 @@ Maximum indentation level (tab stops) in the file. Deep nesting correlates with 
 
 #### Unique authors (`Auth`)
 
-Number of distinct git authors who committed to the file within the churn window. Bot authors (names ending in `[bot]`, e.g. `dependabot[bot]`) are excluded automatically. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) found developer count to be a significant predictor of defect-introducing changes. `Co-authored-by:` trailers are folded into the author set so squash-merge workflows aren't undercounted.
+Number of distinct git authors who committed to the file within the churn window. Bot authors (names ending in `[bot]`, e.g. `dependabot[bot]`) are excluded automatically. Files touched by many authors may lack clear ownership and accumulate inconsistent patterns. Kamei et al. (2013) included number of developers (NDEV) as a predictor in their JIT defect model; the effect direction varies by project — increasing risk in some commercial systems and decreasing it in some open-source ones — so read this column as directional rather than monotonic. `Co-authored-by:` trailers are folded into the author set so squash-merge workflows aren't undercounted.
 
 #### Minor authors (`MinAuth`)
 
@@ -315,7 +315,7 @@ Number of commits where both files in a pair were modified together. The core ra
 
 #### Coupling degree (`Degree`)
 
-`shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file. This normalization follows D'Ambros, Lanza & Lungu (2009), who showed that relative coupling measures provide more stable results than raw co-change counts across projects of different sizes.
+`shared commits / min(churn of file1, churn of file2) × 100`. What percentage of the less-active file's changes also involved the other file. A degree of 100% means every change to the less-active file also touched the other file. Normalizing by churn (rather than reporting raw co-change counts) is what makes the metric comparable across files with very different commit volumes.
 
 `Degree` is intentionally asymmetric: a 100% degree means "every time the *less-active* file changes, the other one changes too" — it doesn't claim the reverse. For cases where both files are entangled in both directions, see the `⇄` lockstep marker below, which uses `max(churn)` (symmetric) instead of `min`.
 
@@ -566,12 +566,12 @@ src/api/generated/**
 
 Files that are both complex and frequently modified are disproportionately likely to contain defects. This is backed by decades of empirical software engineering research:
 
-- **Nagappan & Ball (2005)** studied Windows Server 2003 and found that relative code churn measures predict system defect density with 89% accuracy. — [ICSE 2005](https://doi.org/10.1109/ICSE.2005.1553571)
+- **Nagappan & Ball (2005)** studied Windows Server 2003 and found that relative code churn measures classified fault-prone binaries with roughly 89% accuracy. — [ICSE 2005](https://doi.org/10.1109/ICSE.2005.1553571)
 - **Moser, Pedrycz & Succi (2008)** compared change metrics against static code attributes on Eclipse and found that process metrics (churn, change frequency) outperform static code metrics for defect prediction. — [ICSE 2008](https://doi.org/10.1145/1368088.1368114)
 - **Hassan (2009)** introduced an entropy-based measure of code-change complexity and showed it predicts faults better than prior change and prior fault counts on six large open-source systems. — [ICSE 2009](https://doi.org/10.1109/ICSE.2009.5070510)
 - **D'Ambros, Lanza & Robbes (2010)** systematically compared bug-prediction approaches (process, churn, source-code, entropy, and combined metrics) on five open-source systems and found that change-history metrics consistently rank among the strongest predictors. — [MSR 2010](https://doi.org/10.1109/MSR.2010.5463279)
-- **Shin, Meneely, Williams & Osborne (2011)** combined complexity, churn, and developer activity metrics to predict vulnerabilities in Mozilla Firefox and the Linux kernel. By flagging only 10.9% of files, the model identified 70.8% of known vulnerabilities. — [IEEE TSE](https://doi.org/10.1109/TSE.2010.55)
-- **Tornhill & Borg (2022)** analyzed 39 proprietary codebases and found that low-quality code (by their Code Health metric) contains 15x more defects and takes 124% longer to resolve. In their case studies, 4% of the codebase was responsible for 72% of all defects. — [ACM/IEEE TechDebt 2022](https://arxiv.org/abs/2203.04374)
+- **Shin, Meneely, Williams & Osborne (2011)** combined complexity, churn, and developer activity metrics to predict vulnerabilities in Mozilla Firefox and the Linux (RHEL4) kernel. Per the paper's abstract, the model "predicted over 80 percent of the known vulnerable files with less than 25 percent false positives for both projects." — [IEEE TSE](https://doi.org/10.1109/TSE.2010.55)
+- **Tornhill & Borg (2022)** analyzed 39 proprietary codebases and found that low-quality code (by their Code Health metric) contains 15x more defects and takes on average 124% longer to resolve. — [ACM/IEEE TechDebt 2022](https://arxiv.org/abs/2203.04374)
 
 The general approach was popularized by Adam Tornhill's *Your Code as a Crime Scene* (2015), which applies forensic analysis techniques to version control history.
 
@@ -580,7 +580,7 @@ The general approach was popularized by Adam Tornhill's *Your Code as a Crime Sc
 Files that change together but live in different directories reveal implicit dependencies that the module graph doesn't capture. These hidden couplings are a maintenance hazard: a developer modifying one file doesn't know they also need to update the other, leading to bugs that only surface later.
 
 - **Ball, Kim, Porter & Siy (1997)** pioneered co-change analysis and showed that version control history surfaces design relationships invisible to static analysis. — [ICSE 1997 Workshop](https://www.researchgate.net/publication/2791666_If_Your_Version_Control_System_Could_Talk)
-- **D'Ambros, Lanza & Lungu (2009)** developed the Evolution Radar for visualizing logical coupling at both file and module level, showing how evolutionary coupling reveals architectural decay. The normalized approach (coupling relative to total changes) provides more stable measures across projects of different sizes. — [IEEE TSE](https://doi.org/10.1109/TSE.2009.17)
+- **D'Ambros, Lanza & Lungu (2009)** developed the Evolution Radar, a visualization that surfaces logical coupling at both file and module level from version control history. — [IEEE TSE](https://doi.org/10.1109/TSE.2009.17)
 - **Tornhill (2015)** popularized temporal coupling analysis in *Your Code as a Crime Scene*, demonstrating how co-change patterns reveal "surprise dependencies" — files that should logically be independent but can't be changed separately in practice. His tooling (Code Maat) uses the same commit co-occurrence approach.
 - **Cataldo, Mockus, Roberts & Herbsleb (2009)** analyzed both syntactic and logical dependencies across two large systems and found that logical (co-change) dependencies have a significant independent effect on failure proneness. When developers are unaware of these hidden couplings, defects increase. — [IEEE TSE](https://doi.org/10.1109/TSE.2009.42)
 
