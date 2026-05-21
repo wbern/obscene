@@ -1154,6 +1154,8 @@ export function computeCoupling(
 export function computeSumOfCoupling(
   cochanges: Map<string, number>,
   minCochanges: number,
+  churn?: Map<string, number>,
+  trackedFiles?: Set<string>,
 ): SumOfCouplingEntry[] {
   const partners = new Map<string, Set<string>>();
   const strength = new Map<string, number>();
@@ -1161,6 +1163,18 @@ export function computeSumOfCoupling(
   for (const [key, count] of cochanges) {
     if (count < minCochanges) continue;
     const [file1, file2] = key.split("\0");
+
+    // Near-lockstep: shared / max(churn) ≥ 0.9 means the pair almost always
+    // changes together — typical of generator/mirror artifacts (README ↔
+    // src/README, *.pb.go ↔ *.proto). Drop from SoC so they don't inflate
+    // perceived architectural centrality.
+    if (churn) {
+      // Any file appearing in `cochanges` necessarily appeared in a commit
+      // within the window — so it's present in the churn map. `?? 0` is just
+      // a TypeScript-narrowing convenience.
+      const maxChurn = Math.max(churn.get(file1) ?? 0, churn.get(file2) ?? 0);
+      if (maxChurn > 0 && count / maxChurn >= 0.9) continue;
+    }
 
     if (!partners.has(file1)) partners.set(file1, new Set());
     if (!partners.has(file2)) partners.set(file2, new Set());
@@ -1173,13 +1187,17 @@ export function computeSumOfCoupling(
 
   const entries: SumOfCouplingEntry[] = [];
   for (const [file, partnerSet] of partners) {
-    // strength is populated in lockstep with partners, so the lookup
-    // is guaranteed to hit.
-    entries.push({
+    const entry: SumOfCouplingEntry = {
       file,
       partners: partnerSet.size,
       strength: strength.get(file) as number,
-    });
+      percentOfTotal: 0,
+      tier: "cool",
+    };
+    if (trackedFiles && !trackedFiles.has(file)) {
+      entry.fileDeleted = true;
+    }
+    entries.push(entry);
   }
 
   entries.sort((a, b) => {
@@ -1187,6 +1205,16 @@ export function computeSumOfCoupling(
     if (b.partners !== a.partners) return b.partners - a.partners;
     return a.file.localeCompare(b.file);
   });
+
+  const totalStrength = entries.reduce((sum, e) => sum + e.strength, 0);
+  if (totalStrength === 0) return [];
+
+  const adapted = entries.map((e) => ({ ...e, score: e.strength }));
+  assignTiers(adapted, totalStrength);
+  for (let i = 0; i < entries.length; i++) {
+    entries[i].percentOfTotal = adapted[i].percentOfTotal;
+    entries[i].tier = adapted[i].tier;
+  }
 
   return entries;
 }

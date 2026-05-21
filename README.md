@@ -176,16 +176,21 @@ obscene coupling --format table --top 10  # human-readable, top 10
 
 #### Sum of Coupling (experimental)
 
-The same `coupling` invocation also emits a per-file aggregate at the bottom of the table (and as a `sumOfCoupling` field in JSON): for each file appearing in cross-directory cochange pairs, two columns —
+The same `coupling` invocation also emits a per-file aggregate at the bottom of the table (and as a `sumOfCoupling` field in JSON). For each file appearing in cross-directory cochange pairs:
 
 - `Partners` — distinct cross-directory partner files (graph-theoretic node degree)
-- `Strength` — sum of pair cochange counts (weighted degree)
+- `Strength` — sum of pair cochange counts; **mathematically equivalent to code-maat's Sum of Coupling** (`Σ(changeset_size − 1)` per Tornhill, [code-maat](https://github.com/adamtornhill/code-maat)) since each commit contributes a clique whose edge weights sum to the same value. Two filters tighten the signal over bare code-maat:
+  - Same-directory pairs excluded (cross-subsystem focus)
+  - Commits touching >20 files skipped (CodeScene-style noise filter — sweeping mass-edits dominate raw SoC otherwise)
+  - Near-lockstep pairs suppressed (`count / max(churn) ≥ 0.9`), so mirror/generator artifacts like `*.proto ↔ *.pb.go` don't masquerade as architectural hubs.
 
-Pair coupling answers *"which two files are entangled?"*. Sum of Coupling answers *"which files sit at the center of cross-subsystem gravity?"* — a documentation hub or a service router will appear here even when no single pair dominates. The aggregate runs off the same cochanges Map as the pair view, so it inherits the same filters (`--min-cochanges`, same-directory exclusion, `>20-file commit` skip) for free.
+Framing matters: Tornhill positions SoC as a **prioritization signal** — *"which file to investigate first when there are many couples"* (see *Your Code as a Crime Scene*) — not a defect predictor. The pair table tells you *which two files are entangled*; SoC tells you *which file's couples are worth your time*.
+
+Tier and confidence stamps mirror the pair table: tier is a cumulative-distribution rank within this report (top 50% = hot, next 30% = warm), and the confidence ladder is gated on the same `commitsInWindow` floor that pair coupling uses. Deleted files (no longer at HEAD) are marked with `†`; the signal is historical, not actionable in the current tree.
 
 Naming note: graph-theoretically `Partners` is the node degree and `Strength` is the weighted degree. We chose these names to avoid colliding with `Degree` in the pair table (a *percentage*, `shared / min(churn) × 100`).
 
-The metric is inspired by code-maat's `summary` analysis but uses pair-derived aggregates (`partners`, `strength`) rather than code-maat's `Σ(changeset_size − 1)` formula — different math, similar question. **The surface is experimental and may change or be removed**; field-report feedback welcome.
+**The surface is experimental and may change or be removed**; field-report feedback welcome.
 
 ### `obscene report`
 

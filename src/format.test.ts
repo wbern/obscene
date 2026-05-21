@@ -1481,11 +1481,19 @@ describe("formatCouplingTable", () => {
         },
       ],
       sumOfCoupling: [
-        { file: "src/hub.ts", partners: 4, strength: 17 },
+        {
+          file: "src/hub.ts",
+          partners: 4,
+          strength: 17,
+          percentOfTotal: 73.9,
+          tier: "hot",
+        },
         {
           file: "src/very/deeply/nested/long-named/component-implementation.ts",
           partners: 2,
           strength: 6,
+          percentOfTotal: 26.1,
+          tier: "warm",
         },
       ],
     };
@@ -1500,6 +1508,77 @@ describe("formatCouplingTable", () => {
     expect(result).toContain("EXPERIMENTAL");
     // long file path is truncated via the existing truncate() helper
     expect(result).toContain("…");
+  });
+
+  it("marks deleted files with † in the Sum of Coupling section", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      confidence: STUB_CONFIDENCE,
+      couplings: [],
+      sumOfCoupling: [
+        {
+          file: "src/gone.ts",
+          partners: 3,
+          strength: 12,
+          percentOfTotal: 100,
+          tier: "hot",
+          fileDeleted: true,
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+    expect(result).toContain("† src/gone.ts");
+    expect(result).toContain("†");
+  });
+
+  it("renders confidence stamp inside the Sum of Coupling section", () => {
+    const output: CouplingOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      minCochanges: 1,
+      totalScore: 5,
+      tierCounts: { hot: 1, warm: 0, cool: 0 },
+      totalCouplings: 1,
+      showing: 1,
+      confidence: {
+        level: "weak",
+        reason: "12 commits in window (WEAK sample size).",
+        inputs: {
+          metric: "commitsInWindow",
+          value: 12,
+          thresholds: { weak: 5, plausible: 50, acceptable: 200 },
+        },
+        source: "code-maat --min-revs default (Adam Tornhill).",
+      },
+      couplings: [],
+      sumOfCoupling: [
+        {
+          file: "src/hub.ts",
+          partners: 3,
+          strength: 9,
+          percentOfTotal: 100,
+          tier: "hot",
+        },
+      ],
+    };
+
+    const result = formatCouplingTable(output);
+
+    // The SoC section appears after the (empty) pair table — the confidence
+    // line should appear within its block, not only at the report header.
+    const socIdx = result.indexOf("Sum of Coupling");
+    expect(socIdx).toBeGreaterThan(-1);
+    const socSection = result.slice(socIdx);
+    expect(socSection).toContain("Confidence: WEAK");
   });
 
   it("omits the Sum of Coupling section when no entries are present", () => {

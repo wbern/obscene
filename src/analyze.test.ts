@@ -3871,4 +3871,74 @@ describe("computeSumOfCoupling", () => {
 
     expect(result.find((e) => e.file === "hub.ts")?.partners).toBe(2);
   });
+
+  it("marks files missing from trackedFiles as fileDeleted", () => {
+    const cochanges = new Map([
+      ["src/live.ts\0lib/gone.ts", 4],
+      ["src/live.ts\0lib/alive.ts", 3],
+    ]);
+    const trackedFiles = new Set(["src/live.ts", "lib/alive.ts"]);
+
+    const result = computeSumOfCoupling(cochanges, 1, undefined, trackedFiles);
+
+    const gone = result.find((e) => e.file === "lib/gone.ts");
+    const live = result.find((e) => e.file === "src/live.ts");
+    expect(gone?.fileDeleted).toBe(true);
+    expect(live?.fileDeleted).toBeUndefined();
+  });
+
+  it("tolerates a partial churn map (defensive ?? 0 fallback)", () => {
+    // Realistically every file in cochanges is in churn, but guard against
+    // upstream callers handing in a trimmed map.
+    const cochanges = new Map([["a.ts\0lib/b.ts", 3]]);
+    const churn = new Map<string, number>(); // empty — both lookups miss
+    const result = computeSumOfCoupling(cochanges, 1, churn);
+    // maxChurn = 0 → suppression condition `maxChurn > 0` fails, pair kept.
+    expect(result.find((e) => e.file === "a.ts")?.strength).toBe(3);
+  });
+
+  it("suppresses near-lockstep pairs (count / max(churn) ≥ 0.9) from SoC contributions", () => {
+    // hub.ts has a normal partner and a lockstep partner.
+    // The lockstep partner is a mirror/generator artifact and should not
+    // inflate hub.ts's strength or partner count.
+    const cochanges = new Map([
+      ["hub.ts\0lib/normal.ts", 5],
+      ["hub.ts\0docs/mirror.md", 9],
+    ]);
+    const churn = new Map([
+      ["hub.ts", 10],
+      ["lib/normal.ts", 12], // 5 / max(10,12) = 0.42 → not lockstep
+      ["docs/mirror.md", 9], // 9 / max(10,9) = 0.9 → lockstep
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1, churn);
+
+    const hub = result.find((e) => e.file === "hub.ts");
+    expect(hub?.partners).toBe(1);
+    expect(hub?.strength).toBe(5);
+    // The mirror file is dropped entirely (its only edge was lockstep).
+    expect(result.find((e) => e.file === "docs/mirror.md")).toBeUndefined();
+  });
+
+  it("assigns cumulative-distribution tiers and percentOfTotal by strength", () => {
+    // Hub dominates total strength → hot. Smaller satellites → warm/cool.
+    const cochanges = new Map([
+      ["hub.ts\0lib/a.ts", 10],
+      ["hub.ts\0lib/b.ts", 10],
+      ["mid.ts\0lib/c.ts", 4],
+      ["tail.ts\0lib/d.ts", 1],
+    ]);
+
+    const result = computeSumOfCoupling(cochanges, 1);
+
+    const hub = result.find((e) => e.file === "hub.ts");
+    expect(hub?.tier).toBe("hot");
+    expect(hub?.percentOfTotal).toBeGreaterThan(0);
+
+    const total = result.reduce((sum, e) => sum + e.strength, 0);
+    const sumPct = result.reduce((sum, e) => sum + e.percentOfTotal, 0);
+    // percentOfTotal values are rounded; allow a small slack.
+    expect(Math.abs(sumPct - 100)).toBeLessThan(1);
+    expect(total).toBeGreaterThan(0);
+  });
 });

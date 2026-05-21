@@ -19,6 +19,7 @@ import type {
   RankingOutput,
   ReawakenedSection,
   ReportOutput,
+  SumOfCouplingEntry,
 } from "./types.js";
 
 const CONFIDENCE_PALETTE: Record<ConfidenceLevel, (s: string) => string> = {
@@ -561,41 +562,64 @@ export function formatCouplingTable(output: CouplingOutput): string {
 
   if (output.sumOfCoupling && output.sumOfCoupling.length > 0) {
     lines.push("");
-    lines.push(...formatSumOfCouplingSection(output.sumOfCoupling));
+    lines.push(
+      ...formatSumOfCouplingSection(output.sumOfCoupling, output.confidence),
+    );
   }
 
   return lines.join("\n");
 }
 
 function formatSumOfCouplingSection(
-  entries: { file: string; partners: number; strength: number }[],
+  entries: SumOfCouplingEntry[],
+  confidence: ConfidenceInfo,
 ): string[] {
   const lines: string[] = [];
   lines.push("─".repeat(58));
   lines.push(
-    `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental)")} — files at the center of cross-subsystem gravity`,
+    `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental)")} — which file to investigate first when there are many couples`,
   );
+  lines.push(...formatConfidenceStamp(confidence));
   lines.push("");
   lines.push(
-    padRight("File", 40) + padLeft("Partners", 10) + padLeft("Strength", 10),
+    padRight("File", 40) +
+      padLeft("Partners", 10) +
+      padLeft("Strength", 10) +
+      padLeft("Tier", 8),
   );
-  lines.push("─".repeat(60));
+  lines.push("─".repeat(68));
+  let anyDeleted = false;
   for (const e of entries) {
-    lines.push(
-      padRight(truncate(e.file, 38), 40) +
-        padLeft(String(e.partners), 10) +
-        padLeft(String(e.strength), 10),
-    );
+    const label = e.fileDeleted ? `† ${e.file}` : e.file;
+    if (e.fileDeleted) anyDeleted = true;
+    const row =
+      padRight(truncate(label, 38), 40) +
+      padLeft(String(e.partners), 10) +
+      padLeft(String(e.strength), 10) +
+      padLeft(tierLabel(e.tier), 8);
+    lines.push(colorRow(e.tier, row));
   }
   lines.push("");
+  if (anyDeleted) {
+    lines.push(
+      pc.dim(
+        "† = file no longer present at HEAD (deleted or renamed away); coupling signal is historical.",
+      ),
+    );
+  }
   lines.push(
     pc.dim(
-      "Partners=distinct cross-dir co-change partners | Strength=sum of pair cochange counts",
+      "Partners=distinct cross-dir co-change partners | Strength=Σ pair cochange counts (= code-maat Sum of Coupling, filtered to cross-dir pairs and ≤20-file commits).",
     ),
   );
   lines.push(
     pc.dim(
-      "EXPERIMENTAL: aggregated over the same cochange pairs as above. May change or be removed.",
+      "Prioritization signal (Tornhill, Your Code as a Crime Scene) — surfaces architecturally central files, not defect likelihood.",
+    ),
+  );
+  lines.push(
+    pc.dim(
+      "EXPERIMENTAL: this surface is being validated; framing or fields may change.",
     ),
   );
   return lines;

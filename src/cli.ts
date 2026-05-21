@@ -120,7 +120,7 @@ const COUPLING_GUIDE: Record<string, string> = {
   confidence:
     "Epistemic stamp on the coupling table — INCONCLUSIVE / WEAK / PLAUSIBLE / ACCEPTABLE. Tied to the number of commits in the analysis window. The weak floor of 5 matches code-maat's --min-revs default (Adam Tornhill); higher tiers are engineering judgment. ACCEPTABLE means the sample supports the ranking; it never asserts the couplings themselves are bad.",
   sumOfCoupling:
-    "Per-file aggregate over the cross-directory cochange pairs in this report. `partners` = distinct cross-dir partners. `strength` = sum of pair cochange counts (weighted degree). Identifies files at the center of cross-subsystem gravity — distinct from pairwise coupling (which two files are entangled). EXPERIMENTAL: this surface is being validated for usefulness and may change or be removed.",
+    "Per-file Sum of Coupling. `strength` = Σ pair cochange counts a file participates in — mathematically equivalent to code-maat's SoC (Σ(changeset_size − 1)) (Tornhill, code-maat), restricted to cross-directory pairs and commits touching ≤20 files; near-lockstep pairs (count/max(churn) ≥ 0.9) are suppressed so mirror/generator artifacts don't dominate. `partners` = distinct co-change partners (graph degree). Prioritization signal — \"which file to investigate first when there are many couples\" (Tornhill, Your Code as a Crime Scene), not defect likelihood. EXPERIMENTAL: this surface is being validated for usefulness and may change or be removed.",
 };
 
 function addSharedOptions(cmd: Command): Command {
@@ -672,9 +672,16 @@ function runCoupling(opts: CouplingOpts): void {
   const totalScore = couplings.reduce((sum, c) => sum + c.couplingScore, 0);
 
   // EXPERIMENTAL: Sum of Coupling — per-file aggregate over the same cochanges
-  // input as the pair view. Surfaces files at the center of cross-subsystem
-  // gravity. Trimmed to the same `top` window as the coupling table.
-  const sumOfCoupling = computeSumOfCoupling(cochanges, minCochanges);
+  // input as the pair view. Mathematically equivalent to code-maat's SoC
+  // (Σ(changeset_size − 1)) restricted to cross-directory pairs from commits
+  // touching ≤20 files; near-lockstep pairs are suppressed so mirror/generator
+  // artifacts don't dominate. Trimmed to the same `top` window as the pair table.
+  const sumOfCoupling = computeSumOfCoupling(
+    cochanges,
+    minCochanges,
+    churn,
+    trackedFiles,
+  );
   const sumLimited = top > 0 ? sumOfCoupling.slice(0, top) : sumOfCoupling;
 
   const output: CouplingOutput = {

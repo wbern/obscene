@@ -316,6 +316,9 @@ export interface SumOfCouplingEntry {
   file: string;
   partners: number;
   strength: number;
+  percentOfTotal: number;
+  tier: Tier;
+  fileDeleted?: boolean;
 }
 
 export interface CouplingOutput {
