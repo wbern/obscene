@@ -575,7 +575,7 @@ function formatSumOfCouplingSection(
   confidence: ConfidenceInfo,
 ): string[] {
   const lines: string[] = [];
-  lines.push("─".repeat(58));
+  lines.push("─".repeat(68));
   lines.push(
     `${pc.bold("Sum of Coupling")} ${pc.dim("(experimental — not independently validated)")} — files whose couplings concentrate the most cross-dir change traffic`,
   );

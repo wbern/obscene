@@ -238,7 +238,7 @@ describe("buildClaudeHookOutput", () => {
 });
 
 describe("SIGNIFICANT_PERCENT_CHANGE", () => {
-  it("defaults to a non-trivial threshold", () => {
-    expect(SIGNIFICANT_PERCENT_CHANGE).toBeGreaterThan(10);
+  it("is 25", () => {
+    expect(SIGNIFICANT_PERCENT_CHANGE).toBe(25);
   });
 });

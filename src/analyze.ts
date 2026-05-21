@@ -1207,7 +1207,6 @@ export function computeSumOfCoupling(
   });
 
   const totalStrength = entries.reduce((sum, e) => sum + e.strength, 0);
-  if (totalStrength === 0) return [];
 
   const adapted = entries.map((e) => ({ ...e, score: e.strength }));
   assignTiers(adapted, totalStrength);

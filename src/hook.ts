@@ -22,9 +22,6 @@ function formatPercent(value: number): string {
  * Render a HotspotDelta as Claude-facing context, or null if nothing in the
  * delta crosses the significance threshold. Tier transitions are always
  * surfaced; score-only changes are only surfaced when |percent| ≥ threshold.
- *
- * Format is terse + line-anchored — the shape practitioner literature
- * converges on for agent-consumed context (Memori, arXiv 2402.18439).
  */
 export function formatHotspotDeltaForAgent(
   delta: HotspotDelta,
