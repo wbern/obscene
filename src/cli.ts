@@ -1,9 +1,11 @@
 declare const __VERSION__: string;
 
+import { execSync, spawnSync } from "node:child_process";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { relative } from "node:path";
 import { Command } from "commander";
 import {
+  computeCoChangeReminders,
   computeCoupling,
   computeDelta,
   computeHotspotsCore,
@@ -215,9 +217,20 @@ program
     "Stop",
   )
   .option("--months <n>", "churn window in months", "3")
-  .action((opts: { base: string; event: string; months: string }) => {
-    runHook(opts);
-  });
+  .option(
+    "--significant-percent <n>",
+    "minimum |percent change| for a stable-tier score change to be surfaced (tier transitions are always surfaced)",
+  )
+  .action(
+    (opts: {
+      base: string;
+      event: string;
+      months: string;
+      significantPercent?: string;
+    }) => {
+      runHook(opts);
+    },
+  );
 
 // init command
 program
@@ -677,7 +690,35 @@ function runCoupling(opts: CouplingOpts): void {
   }
 }
 
-function runHook(opts: { base: string; event: string; months: string }): void {
+// Cheap probe used to short-circuit the hook command when comparing against
+// HEAD: if the working tree has no tracked changes AND no untracked-not-
+// ignored files, there's nothing to diff against HEAD and we can skip the
+// 1-2s worktree+scc pipeline. Only safe when base === HEAD; with other refs
+// the working tree can be clean yet still ahead of the base commit.
+function isWorkingTreeClean(): boolean {
+  try {
+    const diff = spawnSync("git", ["diff", "--quiet", "HEAD"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    if (diff.status !== 0) return false;
+    const untracked = spawnSync(
+      "git",
+      ["ls-files", "--others", "--exclude-standard"],
+      { encoding: "utf-8" },
+    );
+    if (untracked.status !== 0) return false;
+    return untracked.stdout.trim().length === 0;
+  } catch {
+    return false;
+  }
+}
+
+function runHook(opts: {
+  base: string;
+  event: string;
+  months: string;
+  significantPercent?: string;
+}): void {
   // Soft signal: any failure path exits 0 with no stdout so Claude's hook
   // pipeline never blocks or shows an error. We do NOT use the
   // getChangedFiles fast-path because it's a commit-to-commit (base...HEAD)
@@ -687,6 +728,10 @@ function runHook(opts: { base: string; event: string; months: string }): void {
   // empty deltas is slower but correct for both committed and uncommitted
   // edits.
   try {
+    // Fail-fast on the common case: clean working tree against HEAD has
+    // nothing to report. Saves ~1-2s per turn end during quiet sessions.
+    if (opts.base === "HEAD" && isWorkingTreeClean()) return;
+
     const months = parseInt(opts.months, 10);
     const allExcludes = resolveExcludes();
     const files = runScc(allExcludes);
@@ -704,7 +749,14 @@ function runHook(opts: { base: string; event: string; months: string }): void {
     };
     const delta = computeDelta(opts.base, "HEAD", baseSnapshot, headSnapshot);
 
-    const context = formatHotspotDeltaForAgent(delta);
+    const parsed =
+      opts.significantPercent !== undefined
+        ? parseFloat(opts.significantPercent)
+        : undefined;
+    const context = formatHotspotDeltaForAgent(delta, {
+      significantPercentChange:
+        parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined,
+    });
     if (context === null) return;
 
     process.stdout.write(

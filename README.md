@@ -178,6 +178,54 @@ obscene coupling --format table --top 10  # human-readable, top 10
 
 Per-file complexity without churn. Useful for raw complexity distribution.
 
+### `obscene hook`
+
+Emits a [Claude Code hook](https://docs.claude.com/en/docs/claude-code/hooks) JSON payload summarizing hotspot drift since a base ref. Designed to feed a soft signal back into the agent — when an edit pushes a file into a hotter tier (or moves an existing hot file's score by ≥25%), the next turn includes a one-line note in `hookSpecificOutput.additionalContext`. When nothing crosses the threshold, the command exits silently — quiet sessions get no noise.
+
+```bash
+obscene hook --base HEAD --event Stop    # working tree vs last commit
+obscene hook --base origin/main          # session-cumulative drift
+obscene hook --significant-percent 50    # only surface large score moves
+```
+
+Wire it into Claude Code via `.claude/settings.json` (project-local) or `~/.claude/settings.json` (global):
+
+```json
+{
+  "hooks": {
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "obscene hook --base HEAD --event Stop 2>/dev/null",
+        "timeout": 30,
+        "statusMessage": "obscene: scanning for hotspot drift…"
+      }]
+    }]
+  }
+}
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--base <ref>` | `HEAD` | Compare against this ref. `HEAD` compares working tree vs last commit; a branch ref compares session-cumulative drift. |
+| `--event <name>` | `Stop` | Hook event name echoed back in `hookSpecificOutput.hookEventName`. |
+| `--months <n>` | `3` | Churn window for the underlying delta pipeline. |
+| `--significant-percent <n>` | `25` | Minimum `|percentChange|` for a stable-tier score change to surface. Tier transitions (warm→hot, etc.) are always surfaced. |
+
+**Event choice — Stop vs PostToolUse.** `Stop` fires once per turn end and is the recommended default — the full pipeline runs ~1-2 seconds, which is too slow to wedge between every Edit/Write. `PostToolUse` fires after every tool invocation and only makes sense with `--significant-percent` set high (e.g. 50+) and a tight `matcher`, to keep the agent from drowning in per-edit noise.
+
+**Fast-path on clean trees.** When `--base HEAD` is used and the working tree is clean (no tracked changes, no untracked-and-not-ignored files), the command exits in ~50ms without running scc. The full pipeline only runs when there's actual drift to measure.
+
+**Output format.** Terse and line-anchored — the shape that agent-consumed context literature converges on:
+
+```
+obscene drift (vs HEAD):
+- src/cli.ts: warm → hot (score +47%)
+- src/analyze.ts: score +31% (stayed hot)
+```
+
+Tier transitions are listed first (alphabetical); stable-tier score changes follow, sorted by magnitude. Files that don't cross either threshold are omitted entirely.
+
 ## Options
 
 | Flag | Default | Description |

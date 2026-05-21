@@ -854,6 +854,21 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Claude Code hook");
     expect(result.stdout).toContain("--base");
     expect(result.stdout).toContain("--event");
+    expect(result.stdout).toContain("--significant-percent");
+  });
+
+  it("should accept --significant-percent without error", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "hook", "--base", "HEAD", "--significant-percent", "10"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    // Outside a git repo the fast-path probe falls through and the full
+    // pipeline errors out — but the hook swallows it and exits 0 silently.
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
   });
 
   it("should exit 0 silently when hook runs outside a git repo", {
