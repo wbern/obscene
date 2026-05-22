@@ -905,6 +905,60 @@ describe("CLI Integration", () => {
     }
   });
 
+  // Cross-directory pair with five shared commits and one solo commit on
+  // src/a.ts — degree = 5/min(6,5)*100 = 100, lockstep ratio = 5/6 ≈ 0.83 so
+  // the lockstep suppressor is *not* tripped. The feature branch edits
+  // src/a.ts only so lib/b.ts qualifies as an unedited co-change partner.
+  function setupCochangeRepo(): void {
+    const run = (...args: string[]) =>
+      spawnSync("git", args, { cwd: tempDir, stdio: "pipe" });
+    run("init", "-b", "main");
+    run("config", "user.email", "test@test.com");
+    run("config", "user.name", "Test");
+
+    const write = (name: string, body: string) => {
+      const full = path.join(tempDir, name);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, body);
+    };
+
+    for (let i = 1; i <= 5; i++) {
+      write("src/a.ts", `export const a = ${i};\n`);
+      write("lib/b.ts", `export const b = ${i};\n`);
+      run("add", ".");
+      run("commit", "-m", `joint ${i}`);
+    }
+    // Sixth solo commit on a.ts so cochanges/max(churn) = 5/6 < 0.9.
+    write("src/a.ts", "export const a = 6;\n");
+    run("add", ".");
+    run("commit", "-m", "solo a");
+
+    run("checkout", "-b", "feature");
+    write("src/a.ts", "export const a = 7;\n");
+    run("add", ".");
+    run("commit", "-m", "feature edit");
+  }
+
+  it("should surface unedited co-change partners in hook JSON", {
+    timeout: 30000,
+  }, () => {
+    setupCochangeRepo();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "hook", "--base", "main", "--event", "Stop", "--months", "6"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(result.stdout);
+    const context = parsed.hookSpecificOutput.additionalContext as string;
+    expect(context).toContain("co-change reminders");
+    expect(context).toContain("src/a.ts ↔ lib/b.ts");
+    expect(context).toContain("ignore if unrelated to this change.");
+  });
+
   it("should fail bare --base when no default branch exists", {
     timeout: 30000,
   }, () => {
