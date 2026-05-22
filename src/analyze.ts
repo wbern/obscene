@@ -9,6 +9,7 @@ import type {
   ConfidenceInfo,
   ConfidenceLevel,
   CouplingEntry,
+  CouplingReminder,
   FileMetrics,
   HistoryCoverageInfo,
   HotspotDelta,
@@ -545,6 +546,72 @@ export function getCoChanges(
   }
 
   return cochanges;
+}
+
+/**
+ * Surface, for each just-edited file, its single strongest unedited co-change
+ * partner — a Stop-hook nudge for files that historically move together but
+ * weren't touched this turn. Filters mirror the pairwise-coupling defaults
+ * (code-maat `--min-shared-revs=5`) plus a precision-tuned `minDegree=70`
+ * (above the Oliva &amp; Gerosa 2011 "high" coupling bin edge of 0.66) and the
+ * existing lockstep suppression from `computeCoupling`.
+ */
+// Defaults: minCochanges matches code-maat's `--min-shared-revs=5`; minDegree
+// is set above the Oliva & Gerosa (2011) "high" coupling bin edge of 0.66 as a
+// precision-tuned alert floor — no single published default for the cutoff.
+export const REMINDER_MIN_COCHANGES = 5;
+export const REMINDER_MIN_DEGREE = 70;
+const REMINDER_MAX_RESULTS = 5;
+
+export function computeCoChangeReminders(
+  cochanges: Map<string, number>,
+  churn: Map<string, number>,
+  editedFiles: Set<string>,
+  opts: {
+    minCochanges?: number;
+    minDegree?: number;
+    maxResults?: number;
+  } = {},
+): CouplingReminder[] {
+  const minCochanges = opts.minCochanges ?? REMINDER_MIN_COCHANGES;
+  const minDegree = opts.minDegree ?? REMINDER_MIN_DEGREE;
+  const maxResults = opts.maxResults ?? REMINDER_MAX_RESULTS;
+
+  const bestByFile = new Map<string, CouplingReminder>();
+
+  for (const [key, count] of cochanges) {
+    if (count < minCochanges) continue;
+    const [a, b] = key.split("\0");
+    const aEdited = editedFiles.has(a);
+    const bEdited = editedFiles.has(b);
+    if (aEdited === bEdited) continue;
+
+    const churnA = churn.get(a) ?? 0;
+    const churnB = churn.get(b) ?? 0;
+    const minChurn = Math.min(churnA, churnB);
+    if (minChurn === 0) continue;
+    const maxChurn = Math.max(churnA, churnB);
+    if (count / maxChurn >= 0.9) continue;
+
+    const degree = Math.round((count / minChurn) * 1000) / 10;
+    if (degree < minDegree) continue;
+
+    const file = aEdited ? a : b;
+    const partner = aEdited ? b : a;
+    const existing = bestByFile.get(file);
+    if (!existing || degree > existing.degree) {
+      bestByFile.set(file, { file, partner, cochanges: count, degree });
+    }
+  }
+
+  return [...bestByFile.values()]
+    .sort(
+      (x, y) =>
+        y.degree - x.degree ||
+        y.cochanges - x.cochanges ||
+        x.file.localeCompare(y.file),
+    )
+    .slice(0, maxResults);
 }
 
 /**

@@ -1,9 +1,11 @@
-import type { HotspotDelta } from "./types.js";
+import { REMINDER_MIN_COCHANGES, REMINDER_MIN_DEGREE } from "./analyze.js";
+import type { CouplingReminder, HotspotDelta } from "./types.js";
 
 export const SIGNIFICANT_PERCENT_CHANGE = 25;
 
 interface HookContextOptions {
   significantPercentChange?: number;
+  reminders?: CouplingReminder[];
 }
 
 interface ClaudeHookOutput {
@@ -69,7 +71,9 @@ export function formatHotspotDeltaForAgent(
     );
   }
 
-  if (lines.length === 0) return null;
+  const reminderLines = formatReminderLines(opts.reminders);
+
+  if (lines.length === 0 && reminderLines.length === 0) return null;
 
   const hotIn = delta.tierTransitions.enteredHot.length;
   const hotOut = delta.tierTransitions.exitedHot.length;
@@ -82,8 +86,28 @@ export function formatHotspotDeltaForAgent(
     ? `tiers: HOT +${hotIn}/-${hotOut} · WARM +${warmIn}/-${warmOut}`
     : null;
 
-  const body = summaryLine ? [summaryLine, ...lines] : lines;
+  const body: string[] = [];
+  if (summaryLine) body.push(summaryLine);
+  body.push(...lines);
+  if (reminderLines.length > 0) {
+    if (body.length > 0) body.push("");
+    body.push(...reminderLines);
+  }
   return `${header}\n${body.join("\n")}`;
+}
+
+function formatReminderLines(reminders?: CouplingReminder[]): string[] {
+  if (!reminders || reminders.length === 0) return [];
+  const out: string[] = [
+    `co-change reminders (≥${REMINDER_MIN_COCHANGES} commits, ≥${REMINDER_MIN_DEGREE}% degree):`,
+  ];
+  for (const r of reminders) {
+    out.push(
+      `- ${r.file} ↔ ${r.partner}: ${r.cochanges} shared commits (degree ${r.degree.toFixed(0)}%)`,
+    );
+  }
+  out.push("ignore if unrelated to this change.");
+  return out;
 }
 
 export function buildClaudeHookOutput(

@@ -321,6 +321,19 @@ export interface SumOfCouplingEntry {
   fileDeleted?: boolean;
 }
 
+/**
+ * Per-edited-file pointer to its strongest unedited co-change partner. Used
+ * by the Stop-hook to nudge the agent toward files that historically move
+ * with the ones it just edited. Thresholds are applied by the producer
+ * (`computeCoChangeReminders`); consumers see only entries worth surfacing.
+ */
+export interface CouplingReminder {
+  file: string;
+  partner: string;
+  cochanges: number;
+  degree: number;
+}
+
 export interface CouplingOutput {
   generated: string;
   guide: Record<string, string>;

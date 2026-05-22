@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assignTiers,
   computeAllRankings,
+  computeCoChangeReminders,
   computeComposite,
   computeCoupling,
   computeDelta,
@@ -2079,6 +2080,193 @@ describe("computeCoupling", () => {
     const result = computeCoupling(cochanges, churn, new Map(), 1);
 
     expect(result[0].lockstep).toBeUndefined();
+  });
+});
+
+describe("computeCoChangeReminders", () => {
+  it("returns empty when no edited file appears in cochanges", () => {
+    const cochanges = new Map([["a.ts\0lib/b.ts", 8]]);
+    const churn = new Map([
+      ["a.ts", 10],
+      ["lib/b.ts", 10],
+    ]);
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["other.ts"])),
+    ).toEqual([]);
+  });
+
+  it("surfaces top unedited partner for an edited file", () => {
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 8]]);
+    const churn = new Map([
+      ["src/cli.ts", 10],
+      ["src/format.ts", 10],
+    ]);
+    const result = computeCoChangeReminders(
+      cochanges,
+      churn,
+      new Set(["src/cli.ts"]),
+    );
+    expect(result).toEqual([
+      {
+        file: "src/cli.ts",
+        partner: "src/format.ts",
+        cochanges: 8,
+        degree: 80,
+      },
+    ]);
+  });
+
+  it("suppresses pairs where the partner was also edited this turn", () => {
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 8]]);
+    const churn = new Map([
+      ["src/cli.ts", 10],
+      ["src/format.ts", 10],
+    ]);
+    expect(
+      computeCoChangeReminders(
+        cochanges,
+        churn,
+        new Set(["src/cli.ts", "src/format.ts"]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("suppresses pairs below the cochanges floor", () => {
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 4]]);
+    const churn = new Map([
+      ["src/cli.ts", 5],
+      ["src/format.ts", 5],
+    ]);
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["src/cli.ts"])),
+    ).toEqual([]);
+  });
+
+  it("suppresses pairs below the degree threshold", () => {
+    // 5 / 10 = 50% → below default 70
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 5]]);
+    const churn = new Map([
+      ["src/cli.ts", 10],
+      ["src/format.ts", 10],
+    ]);
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["src/cli.ts"])),
+    ).toEqual([]);
+  });
+
+  it("suppresses lockstep pairs (generator/mirror noise)", () => {
+    // 9 / max(10, 10) = 0.9 → lockstep, but degree is 90 ≥ 70
+    const cochanges = new Map([["README.md\0src/README.md", 9]]);
+    const churn = new Map([
+      ["README.md", 10],
+      ["src/README.md", 10],
+    ]);
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["README.md"])),
+    ).toEqual([]);
+  });
+
+  it("picks the highest-degree partner when an edited file has several", () => {
+    // partner churn raised so neither pair trips lockstep (count/maxChurn < 0.9)
+    const cochanges = new Map([
+      ["src/cli.ts\0src/format.ts", 7], // 7/10 = 70
+      ["src/analyze.ts\0src/cli.ts", 9], // 9/10 = 90
+    ]);
+    const churn = new Map([
+      ["src/cli.ts", 10],
+      ["src/format.ts", 20],
+      ["src/analyze.ts", 20],
+    ]);
+    const result = computeCoChangeReminders(
+      cochanges,
+      churn,
+      new Set(["src/cli.ts"]),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].partner).toBe("src/analyze.ts");
+    expect(result[0].degree).toBe(90);
+  });
+
+  it("sorts results by degree desc, then cochanges desc, then file", () => {
+    const cochanges = new Map([
+      ["src/a.ts\0src/x.ts", 8], // edited=a, degree 80
+      ["src/b.ts\0src/y.ts", 9], // edited=b, degree 90
+      ["src/c.ts\0src/z.ts", 8], // edited=c, degree 80
+    ]);
+    const churn = new Map([
+      ["src/a.ts", 10],
+      ["src/b.ts", 10],
+      ["src/c.ts", 10],
+      ["src/x.ts", 20],
+      ["src/y.ts", 20],
+      ["src/z.ts", 20],
+    ]);
+    const result = computeCoChangeReminders(
+      cochanges,
+      churn,
+      new Set(["src/a.ts", "src/b.ts", "src/c.ts"]),
+    );
+    expect(result.map((r) => r.file)).toEqual([
+      "src/b.ts",
+      "src/a.ts",
+      "src/c.ts",
+    ]);
+  });
+
+  it("caps results at maxResults", () => {
+    const cochanges = new Map<string, number>();
+    const churn = new Map<string, number>();
+    const edited = new Set<string>();
+    for (let i = 0; i < 8; i++) {
+      const f = `src/f${i}.ts`;
+      const p = `lib/p${i}.ts`;
+      const key = f < p ? `${f}\0${p}` : `${p}\0${f}`;
+      cochanges.set(key, 9);
+      churn.set(f, 10);
+      churn.set(p, 20); // partner churn higher so we stay below lockstep
+      edited.add(f);
+    }
+    const result = computeCoChangeReminders(cochanges, churn, edited);
+    expect(result).toHaveLength(5);
+  });
+
+  it("honours custom thresholds via opts", () => {
+    // 4/10 = 40% — passes only with both floors lowered
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 4]]);
+    const churn = new Map([
+      ["src/cli.ts", 10],
+      ["src/format.ts", 10],
+    ]);
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["src/cli.ts"])),
+    ).toEqual([]);
+    const result = computeCoChangeReminders(
+      cochanges,
+      churn,
+      new Set(["src/cli.ts"]),
+      { minCochanges: 3, minDegree: 30 },
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].degree).toBe(40);
+  });
+
+  it("ignores pairs with zero min-churn (defensive)", () => {
+    const cochanges = new Map([["src/cli.ts\0src/format.ts", 5]]);
+    const churn = new Map([["src/cli.ts", 10]]); // format.ts missing
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["src/cli.ts"])),
+    ).toEqual([]);
+  });
+
+  it("ignores pairs when the alphabetically-first side is missing from churn", () => {
+    // Mirror of the prior test: exercises the other side of the churn-lookup
+    // fallback. Key is sorted, so "a.ts" sits in slot `a` and is the missing
+    // partner.
+    const cochanges = new Map([["a.ts\0src/z.ts", 5]]);
+    const churn = new Map([["src/z.ts", 10]]); // a.ts missing
+    expect(
+      computeCoChangeReminders(cochanges, churn, new Set(["src/z.ts"])),
+    ).toEqual([]);
   });
 });
 

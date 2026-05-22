@@ -4,7 +4,7 @@ import {
   formatHotspotDeltaForAgent,
   SIGNIFICANT_PERCENT_CHANGE,
 } from "./hook.js";
-import type { HotspotDelta, ScoreChange } from "./types.js";
+import type { CouplingReminder, HotspotDelta, ScoreChange } from "./types.js";
 
 function makeDelta(overrides: Partial<HotspotDelta> = {}): HotspotDelta {
   return {
@@ -282,6 +282,84 @@ describe("formatHotspotDeltaForAgent", () => {
     });
     const out = formatHotspotDeltaForAgent(delta) ?? "";
     expect(out).toContain("tiers: HOT +2/-1 · WARM +1/-2");
+  });
+});
+
+describe("formatHotspotDeltaForAgent — coupling reminders", () => {
+  function reminder(
+    overrides: Partial<CouplingReminder> = {},
+  ): CouplingReminder {
+    return {
+      file: "src/cli.ts",
+      partner: "src/format.ts",
+      cochanges: 8,
+      degree: 80,
+      ...overrides,
+    };
+  }
+
+  it("emits a reminders section even when nothing else changed", () => {
+    const out = formatHotspotDeltaForAgent(makeDelta(), {
+      reminders: [reminder()],
+    });
+    expect(out).not.toBeNull();
+    expect(out).toContain("co-change reminders (≥5 commits, ≥70% degree):");
+    expect(out).toContain(
+      "- src/cli.ts ↔ src/format.ts: 8 shared commits (degree 80%)",
+    );
+    expect(out).toContain("ignore if unrelated to this change.");
+  });
+
+  it("returns null when reminders is empty and nothing else notable", () => {
+    expect(
+      formatHotspotDeltaForAgent(makeDelta(), { reminders: [] }),
+    ).toBeNull();
+  });
+
+  it("renders multiple reminders one per line", () => {
+    const out =
+      formatHotspotDeltaForAgent(makeDelta(), {
+        reminders: [
+          reminder({
+            file: "src/a.ts",
+            partner: "src/x.ts",
+            cochanges: 9,
+            degree: 90,
+          }),
+          reminder({
+            file: "src/b.ts",
+            partner: "src/y.ts",
+            cochanges: 7,
+            degree: 70,
+          }),
+        ],
+      }) ?? "";
+    expect(out).toContain(
+      "- src/a.ts ↔ src/x.ts: 9 shared commits (degree 90%)",
+    );
+    expect(out).toContain(
+      "- src/b.ts ↔ src/y.ts: 7 shared commits (degree 70%)",
+    );
+  });
+
+  it("appends reminders below tier/score lines when both exist", () => {
+    const delta = makeDelta({
+      scoreChanges: [makeScoreChange({ file: "src/a.ts", percentChange: 40 })],
+    });
+    const out =
+      formatHotspotDeltaForAgent(delta, { reminders: [reminder()] }) ?? "";
+    const reminderIdx = out.indexOf("co-change reminders");
+    const scoreIdx = out.indexOf("src/a.ts: score +40%");
+    expect(scoreIdx).toBeGreaterThan(-1);
+    expect(reminderIdx).toBeGreaterThan(scoreIdx);
+  });
+
+  it("uses the configured base ref in the same header", () => {
+    const out =
+      formatHotspotDeltaForAgent(makeDelta({ base: "main" }), {
+        reminders: [reminder()],
+      }) ?? "";
+    expect(out.startsWith("obscene drift (vs main):")).toBe(true);
   });
 });
 

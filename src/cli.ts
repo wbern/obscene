@@ -770,9 +770,37 @@ function runHook(opts: {
       opts.significantPercent !== undefined
         ? parseFloat(opts.significantPercent)
         : undefined;
+
+    // Edited files = working tree vs base. Two-dot `git diff <base>` covers
+    // both committed-on-branch changes and uncommitted working-tree edits,
+    // unlike the three-dot `getChangedFiles` helper which is empty whenever
+    // base resolves to HEAD itself.
+    const editedFiles = new Set<string>();
+    try {
+      const raw = execSync(`git diff --name-only ${opts.base}`, {
+        maxBuffer: 50 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+        .toString()
+        .split("\n");
+      for (const line of raw) {
+        const trimmed = line.trim();
+        if (trimmed) editedFiles.add(trimmed);
+      }
+    } catch {
+      // No diff signal available; reminders simply won't fire.
+    }
+    let reminders: ReturnType<typeof computeCoChangeReminders> = [];
+    if (editedFiles.size > 0) {
+      const churn = getChurn(months);
+      const cochanges = getCoChanges(months, allExcludes);
+      reminders = computeCoChangeReminders(cochanges, churn, editedFiles);
+    }
+
     const context = formatHotspotDeltaForAgent(delta, {
       significantPercentChange:
         parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined,
+      reminders,
     });
     if (context === null) return;
 
