@@ -8,12 +8,26 @@ interface HookContextOptions {
   reminders?: CouplingReminder[];
 }
 
-interface ClaudeHookOutput {
+interface ClaudeAdditionalContextOutput {
   hookSpecificOutput: {
     hookEventName: string;
     additionalContext: string;
   };
 }
+
+interface ClaudeSystemMessageOutput {
+  systemMessage: string;
+}
+
+type ClaudeHookOutput =
+  | ClaudeAdditionalContextOutput
+  | ClaudeSystemMessageOutput;
+
+const ADDITIONAL_CONTEXT_EVENTS = new Set([
+  "UserPromptSubmit",
+  "PostToolUse",
+  "PostToolBatch",
+]);
 
 function formatPercent(value: number): string {
   const sign = value > 0 ? "+" : "";
@@ -114,10 +128,13 @@ export function buildClaudeHookOutput(
   context: string,
   eventName: string,
 ): ClaudeHookOutput {
-  return {
-    hookSpecificOutput: {
-      hookEventName: eventName,
-      additionalContext: context,
-    },
-  };
+  if (ADDITIONAL_CONTEXT_EVENTS.has(eventName)) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: eventName,
+        additionalContext: context,
+      },
+    };
+  }
+  return { systemMessage: context };
 }

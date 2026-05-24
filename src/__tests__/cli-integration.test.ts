@@ -897,11 +897,8 @@ describe("CLI Integration", () => {
 
     if (result.stdout.length > 0) {
       const parsed = JSON.parse(result.stdout);
-      expect(parsed.hookSpecificOutput.hookEventName).toBe("Stop");
-      expect(typeof parsed.hookSpecificOutput.additionalContext).toBe("string");
-      expect(parsed.hookSpecificOutput.additionalContext).toContain(
-        "obscene drift",
-      );
+      expect(typeof parsed.systemMessage).toBe("string");
+      expect(parsed.systemMessage).toContain("obscene drift");
     }
   });
 
@@ -953,7 +950,7 @@ describe("CLI Integration", () => {
     expect(result.status).toBe(0);
     expect(result.stdout.length).toBeGreaterThan(0);
     const parsed = JSON.parse(result.stdout);
-    const context = parsed.hookSpecificOutput.additionalContext as string;
+    const context = parsed.systemMessage as string;
     expect(context).toContain("co-change reminders");
     expect(context).toContain("src/a.ts ↔ lib/b.ts");
     expect(context).toContain("ignore if unrelated to this change.");

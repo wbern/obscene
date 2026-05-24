@@ -364,10 +364,16 @@ describe("formatHotspotDeltaForAgent — coupling reminders", () => {
 });
 
 describe("buildClaudeHookOutput", () => {
-  it("wraps context under hookSpecificOutput", () => {
+  it("emits top-level systemMessage for Stop (Claude Code's Stop schema rejects hookSpecificOutput.additionalContext)", () => {
     expect(buildClaudeHookOutput("hello", "Stop")).toEqual({
+      systemMessage: "hello",
+    });
+  });
+
+  it("emits hookSpecificOutput.additionalContext for PostToolUse", () => {
+    expect(buildClaudeHookOutput("hello", "PostToolUse")).toEqual({
       hookSpecificOutput: {
-        hookEventName: "Stop",
+        hookEventName: "PostToolUse",
         additionalContext: "hello",
       },
     });

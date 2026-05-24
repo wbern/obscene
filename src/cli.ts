@@ -204,6 +204,12 @@ addSharedOptions(
 // files into hotter tiers. Silent (exit 0, no stdout) when nothing crosses
 // the significance threshold — noise on every edit is the dominant failure
 // mode for quality-feedback hooks.
+//
+// Output shape is chosen per event: PostToolUse/UserPromptSubmit/PostToolBatch
+// support `hookSpecificOutput.additionalContext` (feeds into the agent's
+// context); every other event (Stop, SessionStart, etc.) uses top-level
+// `systemMessage`, which is the only schema-valid context-bearing field
+// Claude Code accepts for those events.
 program
   .command("hook")
   .description(
@@ -762,6 +768,7 @@ function runHook(opts: {
       rankings: headCore.rankings,
       skipped: headCore.skipped,
       composite: headCore.composite,
+      reawakened: headCore.reawakened,
       corpus: headCore.corpus,
     };
     const delta = computeDelta(opts.base, "HEAD", baseSnapshot, headSnapshot);
