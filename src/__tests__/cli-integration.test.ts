@@ -107,11 +107,12 @@ describe("CLI Integration", () => {
       // field reports and expanded docs is welcome; binary bloat is not.
       // Threshold tracks feature growth — the original 40 KB ceiling was set
       // when the bundle was already 40.2 KB, so it never reflected reality.
-      // 55 KB gives ~2 KB headroom over the current footprint (52.9 KB) so
-      // the canary fires on the next meaningful payload addition.
+      // 58 KB gives ~2 KB headroom over the current footprint (55.2 KB after
+      // adding --format=compact in 2.10) so the canary fires on the next
+      // meaningful payload addition.
       const cliStats = fs.statSync(path.join(packageDir, "dist", "cli.js"));
       const cliSizeKB = cliStats.size / 1024;
-      expect(cliSizeKB).toBeLessThan(55);
+      expect(cliSizeKB).toBeLessThan(58);
 
       // Install dependencies in isolated dir
       const installResult = spawnSync(

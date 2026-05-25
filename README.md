@@ -250,7 +250,7 @@ Tier transitions are listed first (alphabetical); stable-tier score changes foll
 |------|---------|-------------|
 | `--top <n>` | `20` | Limit results (0 = all) |
 | `--months <n>` | `3` | Churn window in months |
-| `--format <type>` | `json` | `json` or `table` |
+| `--format <type>` | `json` | `json`, `table`, or `compact` (terse plain-text — no colors/emojis/box-drawing, sized for hook contexts and quick reads) |
 | `--base [ref]` | — | Delta mode (hotspots only): filter rankings to files changed since this ref. Bare flag auto-detects `main`/`master` |
 | `--full-delta` | — | With `--base`: emit a structured before/after diff with tier transitions and corpus deltas (slower; runs the full pipeline against both refs) |
 | `--paths <files...>` | — | Hotspots only: filter displayed entries to these paths while keeping tier labels anchored to the full corpus (the "are MY changes in hot territory?" view). Mutually exclusive with `--base` and `--since`. |
