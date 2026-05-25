@@ -23,9 +23,19 @@ type ClaudeHookOutput =
   | ClaudeAdditionalContextOutput
   | ClaudeSystemMessageOutput;
 
+// Events that accept hookSpecificOutput.additionalContext per
+// https://code.claude.com/docs/en/hooks. Everything else (Stop, SubagentStop,
+// ConfigChange, PreCompact) emits top-level systemMessage, which is the only
+// schema-valid context channel for those events.
 const ADDITIONAL_CONTEXT_EVENTS = new Set([
+  "SessionStart",
+  "Setup",
+  "SubagentStart",
   "UserPromptSubmit",
+  "UserPromptExpansion",
+  "PreToolUse",
   "PostToolUse",
+  "PostToolUseFailure",
   "PostToolBatch",
 ]);
 

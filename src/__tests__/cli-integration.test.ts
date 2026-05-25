@@ -272,6 +272,76 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("https://github.com/wbern/obscene#metrics");
   });
 
+  it("should produce compact output with hotspots --format compact", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--format", "compact", "--top", "5"],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Hotspot landscape");
+    expect(result.stdout).toContain("Confidence:");
+    expect(result.stdout).toMatch(/HOT |WARM|COOL/);
+    expect(result.stdout).toMatch(/\d+\.\d+%/);
+    expect(result.stdout).toMatch(/\d+ commits/);
+    expect(result.stdout).toMatch(/\d+\/\d+ dims/);
+    expect(result.stdout).not.toMatch(/🔥|☀️|🧊/u);
+    expect(result.stdout).not.toContain("github.com/wbern/obscene#metrics");
+    expect(result.stdout).not.toContain("═");
+    // compact output is materially smaller than table output
+    const tableResult = spawnSync(
+      "node",
+      [BIN_PATH, "--format", "table", "--top", "5"],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    expect(result.stdout.length).toBeLessThan(tableResult.stdout.length / 2);
+  });
+
+  it("should produce compact output with coupling --format compact", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [
+        BIN_PATH,
+        "coupling",
+        "--format",
+        "compact",
+        "--top",
+        "5",
+        "--min-cochanges",
+        "1",
+      ],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Coupling");
+    expect(result.stdout).toContain("min shared:");
+    expect(result.stdout).toContain("↔");
+    expect(result.stdout).toMatch(/\d+ shared/);
+    expect(result.stdout).not.toContain("github.com/wbern/obscene#metrics");
+    expect(result.stdout).not.toContain("─");
+  });
+
+  it("should produce compact output with report --format compact", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "report", "--format", "compact", "--top", "5"],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Complexity report");
+    expect(result.stdout).toMatch(/complexity=\s*\d+/);
+    expect(result.stdout).toMatch(/density=\d+\.\d+/);
+    expect(result.stdout).toMatch(/code=\d+/);
+    expect(result.stdout).not.toContain("github.com/wbern/obscene#metrics");
+    expect(result.stdout).not.toContain("─");
+  });
+
   it("should produce valid JSON output with report command", {
     timeout: 30000,
   }, () => {

@@ -14,6 +14,7 @@ import type {
   ConfidenceInfo,
   ConfidenceLevel,
   CouplingOutput,
+  HistoryCoverageInfo,
   HotspotDelta,
   HotspotsOutput,
   RankingOutput,
@@ -623,6 +624,101 @@ function formatSumOfCouplingSection(
     ),
   );
   return lines;
+}
+
+function tierTag(tier: "hot" | "warm" | "cool"): string {
+  if (tier === "hot") return "HOT ";
+  if (tier === "warm") return "WARM";
+  return "COOL";
+}
+
+function historySuffix(output: {
+  historyCoverage?: HistoryCoverageInfo;
+}): string {
+  const hc = output.historyCoverage;
+  if (!hc?.underCovered) return "";
+  return ` [history covers ~${hc.spanDays}d, window ${hc.windowDays}d]`;
+}
+
+export function formatHotspotsCompact(output: HotspotsOutput): string {
+  const lines: string[] = [];
+  const composite = output.composite;
+  const corpus = output.corpus;
+  const corpusStr = corpus
+    ? `${corpus.fileCount} files, ${corpus.totalComplexity} total complexity`
+    : "";
+  const header =
+    `Hotspot landscape (composite RRF, ${output.churnWindow} window` +
+    (corpusStr ? `, ${corpusStr}` : "") +
+    historySuffix(output) +
+    "):";
+  lines.push(header);
+
+  if (!composite || composite.entries.length === 0) {
+    lines.push("(no composite ranking — insufficient signal)");
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `Confidence: ${composite.confidence.level.toUpperCase()} — ${composite.confidence.reason}`,
+  );
+  for (const entry of composite.entries) {
+    lines.push(
+      `${tierTag(entry.tier)}  ${padRight(entry.file, 50)}  ${padLeft(
+        `${entry.percentOfTotal.toFixed(1)}%`,
+        6,
+      )}  ${padLeft(`${entry.churn} commits`, 12)}  ${entry.dimensionCount}/${
+        composite.totalDimensions
+      } dims`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function formatReportCompact(output: ReportOutput): string {
+  const lines: string[] = [];
+  const { summary, files } = output;
+  lines.push(
+    `Complexity report — ${summary.fileCount} files, ${summary.totalComplexity} total complexity, ${summary.avgComplexityPerFile} avg/file (showing ${summary.showing}):`,
+  );
+  for (const f of files) {
+    lines.push(
+      `${padRight(f.file, 50)}  complexity=${padLeft(
+        String(f.complexity),
+        5,
+      )}  density=${f.complexityDensity.toFixed(2)}  code=${f.code}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+export function formatCouplingCompact(output: CouplingOutput): string {
+  const lines: string[] = [];
+  const header =
+    `Coupling — ${output.churnWindow} window, min shared: ${output.minCochanges}` +
+    historySuffix(output) +
+    `:`;
+  lines.push(header);
+
+  if (output.couplings.length === 0) {
+    lines.push("(no pairs above thresholds)");
+    return lines.join("\n");
+  }
+
+  lines.push(
+    `Confidence: ${output.confidence.level.toUpperCase()} — ${output.confidence.reason}`,
+  );
+  for (const c of output.couplings) {
+    const pair = `${c.file1} ↔ ${c.file2}`;
+    const degreeTag = c.lockstep ? "⇄" : "%";
+    lines.push(
+      `${tierTag(c.tier)}  ${padRight(pair, 70)}  ${padLeft(
+        `${c.cochanges} shared`,
+        10,
+      )}  ${padLeft(`${c.degree.toFixed(1)}${degreeTag}`, 8)}`,
+    );
+  }
+  return lines.join("\n");
 }
 
 export function formatCompositeTable(output: CompositeOutput): string {

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   formatCompositeTable,
+  formatCouplingCompact,
   formatCouplingTable,
+  formatHotspotsCompact,
   formatHotspotsTable,
+  formatReportCompact,
   formatReportTable,
 } from "./format.js";
 import type {
@@ -1901,5 +1904,227 @@ describe("formatHotspotsTable fullDelta section", () => {
     expect(out).toContain("deleted files (1)");
     expect(out).toContain("y.ts");
     expect(out).not.toContain("more");
+  });
+});
+
+describe("formatHotspotsCompact", () => {
+  const baseOutput: HotspotsOutput = {
+    generated: "2026-01-01T00:00:00.000Z",
+    guide: {},
+    churnWindow: "3 months",
+    churnMode: "commits",
+    rankings: {},
+    corpus: { fileCount: 4, totalComplexity: 120 },
+    composite: {
+      label: "Combined",
+      scoreFormula: "rrf",
+      totalScore: 1,
+      tierCounts: { hot: 1, warm: 1, cool: 1 },
+      tiers: { hot: 1, warm: 1, cool: 1 },
+      totalDimensions: 4,
+      totalEntries: 3,
+      showing: 3,
+      confidence: STUB_CONFIDENCE,
+      entries: [
+        {
+          file: "src/foo.ts",
+          score: 0.5,
+          percentOfTotal: 50,
+          tier: "hot",
+          churn: 20,
+          dimensionCount: 4,
+        },
+        {
+          file: "src/bar.ts",
+          score: 0.3,
+          percentOfTotal: 30,
+          tier: "warm",
+          churn: 10,
+          dimensionCount: 3,
+        },
+        {
+          file: "src/baz.ts",
+          score: 0.2,
+          percentOfTotal: 20,
+          tier: "cool",
+          churn: 3,
+          dimensionCount: 1,
+        },
+      ],
+    },
+  };
+
+  it("emits header, confidence stamp, and tier-tagged composite lines", () => {
+    const out = formatHotspotsCompact(baseOutput);
+    expect(out).toContain("Hotspot landscape");
+    expect(out).toContain("3 months window");
+    expect(out).toContain("4 files, 120 total complexity");
+    expect(out).toContain("Confidence: PLAUSIBLE");
+    expect(out).toContain("HOT ");
+    expect(out).toContain("WARM");
+    expect(out).toContain("COOL");
+    expect(out).toContain("src/foo.ts");
+    expect(out).toContain("50.0%");
+    expect(out).toContain("20 commits");
+    expect(out).toContain("4/4 dims");
+    // No emojis or box-drawing
+    expect(out).not.toContain("🔥");
+    expect(out).not.toContain("☀️");
+    expect(out).not.toContain("🌱");
+    expect(out).not.toContain("─");
+  });
+
+  it("appends history-coverage suffix when under-covered", () => {
+    const out = formatHotspotsCompact({
+      ...baseOutput,
+      historyCoverage: {
+        spanDays: 14,
+        windowDays: 90,
+        underCovered: true,
+      },
+    });
+    expect(out).toContain("history covers ~14d, window 90d");
+  });
+
+  it("falls back to a placeholder line when composite is missing or empty", () => {
+    const noComposite = formatHotspotsCompact({
+      ...baseOutput,
+      composite: undefined,
+    });
+    expect(noComposite).toContain(
+      "(no composite ranking — insufficient signal)",
+    );
+
+    const emptyComposite = formatHotspotsCompact({
+      ...baseOutput,
+      composite: { ...baseOutput.composite!, entries: [], showing: 0 },
+    });
+    expect(emptyComposite).toContain(
+      "(no composite ranking — insufficient signal)",
+    );
+  });
+
+  it("renders without a corpus suffix when corpus is absent", () => {
+    const out = formatHotspotsCompact({ ...baseOutput, corpus: undefined });
+    expect(out).toContain(
+      "Hotspot landscape (composite RRF, 3 months window):",
+    );
+  });
+});
+
+describe("formatReportCompact", () => {
+  it("emits header and one line per file with complexity/density/code", () => {
+    const out = formatReportCompact({
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      summary: {
+        totalComplexity: 50,
+        totalCode: 300,
+        totalLines: 400,
+        fileCount: 2,
+        avgComplexityPerFile: 25,
+        showing: 2,
+      },
+      files: [
+        {
+          file: "src/foo.ts",
+          code: 200,
+          lines: 250,
+          complexity: 30,
+          comments: 10,
+          complexityDensity: 0.15,
+        },
+        {
+          file: "src/bar.ts",
+          code: 100,
+          lines: 150,
+          complexity: 20,
+          comments: 5,
+          complexityDensity: 0.2,
+        },
+      ],
+    });
+    expect(out).toContain("Complexity report — 2 files");
+    expect(out).toContain("50 total complexity");
+    expect(out).toContain("showing 2");
+    expect(out).toContain("src/foo.ts");
+    expect(out).toContain("complexity=   30");
+    expect(out).toContain("density=0.15");
+    expect(out).toContain("code=200");
+    expect(out).toContain("src/bar.ts");
+  });
+});
+
+describe("formatCouplingCompact", () => {
+  const baseOutput: CouplingOutput = {
+    generated: "2026-01-01T00:00:00.000Z",
+    guide: {},
+    churnWindow: "3 months",
+    minCochanges: 2,
+    totalScore: 15,
+    tierCounts: { hot: 1, warm: 0, cool: 1 },
+    tiers: { hot: 1, warm: 0, cool: 1 },
+    totalCouplings: 2,
+    showing: 2,
+    confidence: STUB_CONFIDENCE,
+    couplings: [
+      {
+        file1: "src/auth.ts",
+        file2: "lib/session.ts",
+        cochanges: 10,
+        degree: 83.3,
+        totalComplexity: 45,
+        couplingScore: 10,
+        percentOfTotal: 66.7,
+        tier: "hot",
+        lockstep: true,
+      },
+      {
+        file1: "src/api.ts",
+        file2: "lib/http.ts",
+        cochanges: 3,
+        degree: 30.0,
+        totalComplexity: 20,
+        couplingScore: 3,
+        percentOfTotal: 33.3,
+        tier: "cool",
+      },
+    ],
+  };
+
+  it("emits header, confidence stamp, and tier-tagged pair lines", () => {
+    const out = formatCouplingCompact(baseOutput);
+    expect(out).toContain("Coupling — 3 months window, min shared: 2");
+    expect(out).toContain("Confidence: PLAUSIBLE");
+    expect(out).toContain("HOT ");
+    expect(out).toContain("COOL");
+    expect(out).toContain("src/auth.ts ↔ lib/session.ts");
+    expect(out).toContain("10 shared");
+    // Lockstep marker for top pair
+    expect(out).toContain("83.3⇄");
+    // Non-lockstep uses %
+    expect(out).toContain("30.0%");
+  });
+
+  it("appends history-coverage suffix when under-covered", () => {
+    const out = formatCouplingCompact({
+      ...baseOutput,
+      historyCoverage: {
+        spanDays: 14,
+        windowDays: 90,
+        underCovered: true,
+      },
+    });
+    expect(out).toContain("history covers ~14d, window 90d");
+  });
+
+  it("emits placeholder line when no pairs cleared thresholds", () => {
+    const out = formatCouplingCompact({
+      ...baseOutput,
+      couplings: [],
+      showing: 0,
+      totalCouplings: 0,
+    });
+    expect(out).toContain("(no pairs above thresholds)");
   });
 });

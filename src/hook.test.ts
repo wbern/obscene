@@ -370,12 +370,32 @@ describe("buildClaudeHookOutput", () => {
     });
   });
 
-  it("emits hookSpecificOutput.additionalContext for PostToolUse", () => {
-    expect(buildClaudeHookOutput("hello", "PostToolUse")).toEqual({
+  it.each([
+    "SessionStart",
+    "Setup",
+    "SubagentStart",
+    "UserPromptSubmit",
+    "UserPromptExpansion",
+    "PreToolUse",
+    "PostToolUse",
+    "PostToolUseFailure",
+    "PostToolBatch",
+  ])("emits hookSpecificOutput.additionalContext for %s", (eventName) => {
+    expect(buildClaudeHookOutput("hello", eventName)).toEqual({
       hookSpecificOutput: {
-        hookEventName: "PostToolUse",
+        hookEventName: eventName,
         additionalContext: "hello",
       },
+    });
+  });
+
+  it.each([
+    "SubagentStop",
+    "ConfigChange",
+    "PreCompact",
+  ])("emits top-level systemMessage for %s", (eventName) => {
+    expect(buildClaudeHookOutput("hello", eventName)).toEqual({
+      systemMessage: "hello",
     });
   });
 });

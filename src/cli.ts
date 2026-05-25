@@ -31,8 +31,11 @@ import {
 } from "./analyze.js";
 import {
   formatCompositeTable,
+  formatCouplingCompact,
   formatCouplingTable,
+  formatHotspotsCompact,
   formatHotspotsTable,
+  formatReportCompact,
   formatReportTable,
 } from "./format.js";
 import { buildClaudeHookOutput, formatHotspotDeltaForAgent } from "./hook.js";
@@ -126,7 +129,11 @@ const COUPLING_GUIDE: Record<string, string> = {
 function addSharedOptions(cmd: Command): Command {
   return cmd
     .option("--top <n>", "limit to top N entries (0 = all)", "20")
-    .option("--format <type>", "output format: json | table", "json")
+    .option(
+      "--format <type>",
+      "output format: json | table | compact (compact = terse plain-text lines for hooks and quick reads)",
+      "json",
+    )
     .option(
       "--exclude <patterns...>",
       "additional file patterns to exclude (also reads .obsignore / .obsceneignore)",
@@ -205,11 +212,14 @@ addSharedOptions(
 // the significance threshold — noise on every edit is the dominant failure
 // mode for quality-feedback hooks.
 //
-// Output shape is chosen per event: PostToolUse/UserPromptSubmit/PostToolBatch
-// support `hookSpecificOutput.additionalContext` (feeds into the agent's
-// context); every other event (Stop, SessionStart, etc.) uses top-level
-// `systemMessage`, which is the only schema-valid context-bearing field
-// Claude Code accepts for those events.
+// Output shape is chosen per event, matching Claude Code's hooks docs
+// (https://code.claude.com/docs/en/hooks). Events that feed Claude's context
+// — SessionStart, Setup, SubagentStart, UserPromptSubmit, UserPromptExpansion,
+// PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch — emit
+// `hookSpecificOutput.additionalContext`. The remaining events (Stop,
+// SubagentStop, ConfigChange, PreCompact) emit top-level `systemMessage`,
+// which is the only schema-valid context-bearing field Claude Code accepts
+// for those events.
 program
   .command("hook")
   .description(
@@ -222,7 +232,7 @@ program
   )
   .option(
     "--event <name>",
-    "hook event name to emit in hookSpecificOutput",
+    "hook event name (selects the right output envelope: hookSpecificOutput.additionalContext for SessionStart / UserPromptSubmit / Pre|PostToolUse / etc., or top-level systemMessage for Stop / SubagentStop / ConfigChange / PreCompact)",
     "Stop",
   )
   .option("--months <n>", "churn window in months", "3")
@@ -344,6 +354,8 @@ function runReport(opts: SharedOpts): void {
 
   if (opts.format === "table") {
     process.stdout.write(`${formatReportTable(output)}\n`);
+  } else if (opts.format === "compact") {
+    process.stdout.write(`${formatReportCompact(output)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }
@@ -534,6 +546,8 @@ function runHotspots(opts: HotspotsOpts): void {
       };
       if (opts.format === "table") {
         process.stdout.write(`${formatHotspotsTable(empty)}\n`);
+      } else if (opts.format === "compact") {
+        process.stdout.write(`${formatHotspotsCompact(empty)}\n`);
       } else {
         process.stdout.write(`${JSON.stringify(empty, null, 2)}\n`);
       }
@@ -632,7 +646,9 @@ function runHotspots(opts: HotspotsOpts): void {
     applyPathScope(output, pathScope);
   }
 
-  if (opts.format === "table") {
+  if (opts.format === "compact") {
+    process.stdout.write(`${formatHotspotsCompact(output)}\n`);
+  } else if (opts.format === "table") {
     process.stdout.write(`${formatHotspotsTable(output)}\n`);
     if (composite.entries.length > 0) {
       process.stdout.write(`\n${formatCompositeTable(composite)}\n`);
@@ -708,6 +724,8 @@ function runCoupling(opts: CouplingOpts): void {
 
   if (opts.format === "table") {
     process.stdout.write(`${formatCouplingTable(output)}\n`);
+  } else if (opts.format === "compact") {
+    process.stdout.write(`${formatCouplingCompact(output)}\n`);
   } else {
     process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   }
