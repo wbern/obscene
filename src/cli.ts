@@ -3,7 +3,7 @@ declare const __VERSION__: string;
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync, realpathSync, writeFileSync } from "node:fs";
 import { relative } from "node:path";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import {
   computeCoChangeReminders,
   computeCoupling,
@@ -126,12 +126,23 @@ const COUPLING_GUIDE: Record<string, string> = {
     'Per-file Sum of Coupling. `strength` = Σ pair cochange counts a file participates in — equivalent to the SoC analysis in code-maat (Σ(changeset_size − 1); see github.com/adamtornhill/code-maat), restricted here to cross-directory pairs and commits touching ≤20 files; near-lockstep pairs (count/max(churn) ≥ 0.9) are suppressed so mirror/generator artifacts don\'t dominate. `partners` = distinct co-change partners (graph degree). Treat as a navigation aid — high `strength` says "this file\'s couplings deserve a closer look", not "this file is buggy". EXPERIMENTAL: this surface has NOT been independently validated against defect data; it may change, be reframed, or be removed.',
 };
 
+const VALID_FORMATS = ["json", "table", "compact"] as const;
+function parseFormat(value: string): string {
+  if (!(VALID_FORMATS as readonly string[]).includes(value)) {
+    throw new InvalidArgumentError(
+      `must be one of: ${VALID_FORMATS.join(", ")}`,
+    );
+  }
+  return value;
+}
+
 function addSharedOptions(cmd: Command): Command {
   return cmd
     .option("--top <n>", "limit to top N entries (0 = all)", "20")
     .option(
       "--format <type>",
       "output format: json | table | compact (compact = terse plain-text lines for hooks and quick reads)",
+      parseFormat,
       "json",
     )
     .option(

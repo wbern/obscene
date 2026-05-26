@@ -286,8 +286,12 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("Confidence:");
     expect(result.stdout).toMatch(/HOT |WARM|COOL/);
     expect(result.stdout).toMatch(/\d+\.\d+%/);
-    expect(result.stdout).toMatch(/\d+ commits/);
+    expect(result.stdout).toMatch(/\d+ commits?\b/);
     expect(result.stdout).toMatch(/\d+\/\d+ dims/);
+    expect(result.stdout).toContain(
+      "For volume-weighted churn: --churn-mode lines",
+    );
+    expect(result.stdout).toContain("obscene coupling");
     expect(result.stdout).not.toMatch(/🔥|☀️|🧊/u);
     expect(result.stdout).not.toContain("github.com/wbern/obscene#metrics");
     expect(result.stdout).not.toContain("═");
@@ -298,6 +302,19 @@ describe("CLI Integration", () => {
       { cwd: PROJECT_ROOT, encoding: "utf-8" },
     );
     expect(result.stdout.length).toBeLessThan(tableResult.stdout.length / 2);
+  });
+
+  it("should reject unknown --format values with a clear error", {
+    timeout: 30000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "--format", "foo"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("--format");
+    expect(result.stderr.toLowerCase()).toMatch(/json.*table.*compact/);
+    expect(result.stdout).not.toContain('"generated":');
   });
 
   it("should produce compact output with coupling --format compact", {

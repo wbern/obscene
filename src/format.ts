@@ -642,6 +642,10 @@ function historySuffix(output: {
   return ` [history covers ~${hc.spanDays}d, window ${hc.windowDays}d]`;
 }
 
+function pluralizeCommits(n: number): string {
+  return `${n} commit${n === 1 ? "" : "s"}`;
+}
+
 export function formatHotspotsCompact(output: HotspotsOutput): string {
   const lines: string[] = [];
   const composite = output.composite;
@@ -669,11 +673,15 @@ export function formatHotspotsCompact(output: HotspotsOutput): string {
       `${tierTag(entry.tier)}  ${padRight(entry.file, 50)}  ${padLeft(
         `${entry.percentOfTotal.toFixed(1)}%`,
         6,
-      )}  ${padLeft(`${entry.churn} commits`, 12)}  ${entry.dimensionCount}/${
-        composite.totalDimensions
-      } dims`,
+      )}  ${padLeft(pluralizeCommits(entry.churn), 12)}  ${
+        entry.dimensionCount
+      }/${composite.totalDimensions} dims`,
     );
   }
+  lines.push("");
+  lines.push(
+    "For volume-weighted churn: --churn-mode lines. For co-change pairs: obscene coupling.",
+  );
   return lines.join("\n");
 }
 

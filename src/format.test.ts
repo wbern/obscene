@@ -1974,6 +1974,56 @@ describe("formatHotspotsCompact", () => {
     expect(out).not.toContain("─");
   });
 
+  it("pluralizes the churn-commit count correctly (1 commit, 2+ commits)", () => {
+    const out = formatHotspotsCompact({
+      ...baseOutput,
+      composite: {
+        ...baseOutput.composite!,
+        entries: [
+          {
+            file: "src/once.ts",
+            score: 0.1,
+            percentOfTotal: 10,
+            tier: "cool",
+            churn: 1,
+            dimensionCount: 1,
+          },
+          {
+            file: "src/twice.ts",
+            score: 0.2,
+            percentOfTotal: 20,
+            tier: "cool",
+            churn: 2,
+            dimensionCount: 1,
+          },
+        ],
+      },
+    });
+    expect(out).toContain("1 commit ");
+    expect(out).not.toContain("1 commits");
+    expect(out).toContain("2 commits");
+  });
+
+  it("appends footer pointers to alternate views after the entries", () => {
+    const out = formatHotspotsCompact(baseOutput);
+    expect(out).toContain(
+      "For volume-weighted churn: --churn-mode lines. For co-change pairs: obscene coupling.",
+    );
+    // Footer comes after the last entry, not before any
+    const lastEntryIdx = out.lastIndexOf("src/baz.ts");
+    const footerIdx = out.indexOf("For volume-weighted churn");
+    expect(footerIdx).toBeGreaterThan(lastEntryIdx);
+  });
+
+  it("omits footer pointers when composite is missing or empty", () => {
+    const noComposite = formatHotspotsCompact({
+      ...baseOutput,
+      composite: undefined,
+    });
+    expect(noComposite).not.toContain("For volume-weighted churn");
+    expect(noComposite).not.toContain("obscene coupling");
+  });
+
   it("appends history-coverage suffix when under-covered", () => {
     const out = formatHotspotsCompact({
       ...baseOutput,
