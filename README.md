@@ -33,7 +33,7 @@ Works on any language scc supports. No configuration needed.
 
 ## Prerequisites
 
-[scc](https://github.com/boyter/scc#install) must be installed and on your PATH.
+[scc](https://github.com/boyter/scc#install) must be installed and on your PATH. The Homebrew install pulls it automatically; for npm/pnpm install paths, install it yourself:
 
 ```bash
 brew install scc          # macOS
@@ -43,21 +43,24 @@ scoop install scc         # Windows (alt)
 
 See [scc install docs](https://github.com/boyter/scc#install) for Linux and other options.
 
-## Quick run (no install)
+## Installation
+
+**One-off run (no install):**
 
 ```bash
-pnpm dlx @wbern/obscene init           # one-time: generate .obsignore
-pnpm dlx @wbern/obscene --format table # the actual run
+npx @wbern/obscene       # npm
+pnpm dlx @wbern/obscene  # pnpm
 ```
 
-## Install
+**Install globally:**
 
 ```bash
-pnpm add -g @wbern/obscene
-```
+# Homebrew (tap once, then install — pulls scc automatically)
+brew tap wbern/tap
+brew install wbern/tap/obscene
 
-```bash
-npm install -g @wbern/obscene   # also works
+# npm
+npm install -g @wbern/obscene
 ```
 
 ## Usage
