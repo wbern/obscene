@@ -626,6 +626,8 @@ function formatSumOfCouplingSection(
   return lines;
 }
 
+// Trailing space on HOT pads to the 4-char width of WARM/COOL so compact
+// rows align without a separate padLeft call.
 function tierTag(tier: "hot" | "warm" | "cool"): string {
   if (tier === "hot") return "HOT ";
   if (tier === "warm") return "WARM";
