@@ -552,15 +552,19 @@ export function getCoChanges(
  * Surface, for each just-edited file, its single strongest unedited co-change
  * partner — a Stop-hook nudge for files that historically move together but
  * weren't touched this turn. Filters mirror the pairwise-coupling defaults
- * (code-maat `--min-shared-revs=5`) plus a precision-tuned `minDegree=70`
- * (above the Oliva &amp; Gerosa 2011 "high" coupling bin edge of 0.66) and the
- * existing lockstep suppression from `computeCoupling`.
+ * (code-maat `--min-shared-revs=5`) and the existing lockstep suppression
+ * from `computeCoupling`.
  */
-// Defaults: minCochanges matches code-maat's `--min-shared-revs=5`; minDegree
-// is set above the Oliva & Gerosa (2011) "high" coupling bin edge of 0.66 as a
-// precision-tuned alert floor — no single published default for the cutoff.
+// Defaults: minCochanges matches code-maat's `--min-shared-revs=5`. minDegree
+// is 50 — recall-tuned for diff-scoped queries. The global `obscene coupling`
+// command uses a higher precision floor (above Oliva & Gerosa 2011's "high"
+// coupling bin edge of 0.66) because it ranks across the whole corpus, but
+// reminders fire against the small set of files just edited, so the right
+// trade-off is recall over precision: a 62% historical pair on a file you
+// just touched is worth surfacing even if it would be noise in a global
+// report. Override with `--min-degree` on `obscene hook`.
 export const REMINDER_MIN_COCHANGES = 5;
-export const REMINDER_MIN_DEGREE = 70;
+export const REMINDER_MIN_DEGREE = 50;
 const REMINDER_MAX_RESULTS = 5;
 
 export function computeCoChangeReminders(

@@ -2143,11 +2143,12 @@ describe("computeCoChangeReminders", () => {
   });
 
   it("suppresses pairs below the degree threshold", () => {
-    // 5 / 10 = 50% → below default 70
+    // 5 / 12 ≈ 41.7% → above the minCochanges floor (5) and below lockstep
+    // (5/12 < 0.9), but below the default degree floor of 50.
     const cochanges = new Map([["src/cli.ts\0src/format.ts", 5]]);
     const churn = new Map([
-      ["src/cli.ts", 10],
-      ["src/format.ts", 10],
+      ["src/cli.ts", 12],
+      ["src/format.ts", 12],
     ]);
     expect(
       computeCoChangeReminders(cochanges, churn, new Set(["src/cli.ts"])),
@@ -2155,7 +2156,7 @@ describe("computeCoChangeReminders", () => {
   });
 
   it("suppresses lockstep pairs (generator/mirror noise)", () => {
-    // 9 / max(10, 10) = 0.9 → lockstep, but degree is 90 ≥ 70
+    // 9 / max(10, 10) = 0.9 → lockstep, but degree is 90 ≥ 50
     const cochanges = new Map([["README.md\0src/README.md", 9]]);
     const churn = new Map([
       ["README.md", 10],

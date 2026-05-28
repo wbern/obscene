@@ -136,6 +136,14 @@ function parseFormat(value: string): string {
   return value;
 }
 
+function parseMinDegree(value: string): number {
+  const n = Number.parseFloat(value);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    throw new InvalidArgumentError("must be a number between 0 and 100");
+  }
+  return n;
+}
+
 function addSharedOptions(cmd: Command): Command {
   return cmd
     .option("--top <n>", "limit to top N entries (0 = all)", "20")
@@ -251,12 +259,18 @@ program
     "--significant-percent <n>",
     "minimum |percent change| for a stable-tier score change to be surfaced (tier transitions are always surfaced)",
   )
+  .option(
+    "--min-degree <n>",
+    "minimum coupling degree (%) for co-change reminders. Default 50 — recall-tuned for diff-scoped queries; raise to 70+ for stricter signal",
+    parseMinDegree,
+  )
   .action(
     (opts: {
       base: string;
       event: string;
       months: string;
       significantPercent?: string;
+      minDegree?: number;
     }) => {
       runHook(opts);
     },
@@ -770,6 +784,7 @@ function runHook(opts: {
   event: string;
   months: string;
   significantPercent?: string;
+  minDegree?: number;
 }): void {
   // Soft signal: any failure path exits 0 with no stdout so Claude's hook
   // pipeline never blocks or shows an error. We do NOT use the
@@ -830,13 +845,16 @@ function runHook(opts: {
     if (editedFiles.size > 0) {
       const churn = getChurn(months);
       const cochanges = getCoChanges(months, allExcludes);
-      reminders = computeCoChangeReminders(cochanges, churn, editedFiles);
+      reminders = computeCoChangeReminders(cochanges, churn, editedFiles, {
+        minDegree: opts.minDegree,
+      });
     }
 
     const context = formatHotspotDeltaForAgent(delta, {
       significantPercentChange:
         parsed !== undefined && !Number.isNaN(parsed) ? parsed : undefined,
       reminders,
+      reminderMinDegree: opts.minDegree,
     });
     if (context === null) return;
 

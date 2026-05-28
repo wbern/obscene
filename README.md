@@ -232,6 +232,7 @@ Wire it into Claude Code via `.claude/settings.json` (project-local) or `~/.clau
 | `--event <name>` | `Stop` | Hook event name echoed back in `hookSpecificOutput.hookEventName`. |
 | `--months <n>` | `3` | Churn window for the underlying delta pipeline. |
 | `--significant-percent <n>` | `25` | Minimum `|percentChange|` for a stable-tier score change to surface. Tier transitions (warm→hot, etc.) are always surfaced. |
+| `--min-degree <n>` | `50` | Minimum coupling degree (%) for co-change reminders. The default is recall-tuned for diff-scoped queries — the reminder set is already narrowed to the files just edited, so weaker historical pairs (50–70%) are useful "maybe glance at this" signal. Raise to 70+ for stricter precision. |
 
 **Event choice — Stop vs PostToolUse.** `Stop` fires once per turn end and is the recommended default — the full pipeline runs ~1-2 seconds, which is too slow to wedge between every Edit/Write. `PostToolUse` fires after every tool invocation and only makes sense with `--significant-percent` set high (e.g. 50+) and a tight `matcher`, to keep the agent from drowning in per-edit noise.
 

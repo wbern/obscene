@@ -6,6 +6,7 @@ export const SIGNIFICANT_PERCENT_CHANGE = 25;
 interface HookContextOptions {
   significantPercentChange?: number;
   reminders?: CouplingReminder[];
+  reminderMinDegree?: number;
 }
 
 interface ClaudeAdditionalContextOutput {
@@ -95,7 +96,10 @@ export function formatHotspotDeltaForAgent(
     );
   }
 
-  const reminderLines = formatReminderLines(opts.reminders);
+  const reminderLines = formatReminderLines(
+    opts.reminders,
+    opts.reminderMinDegree,
+  );
 
   if (lines.length === 0 && reminderLines.length === 0) return null;
 
@@ -120,10 +124,14 @@ export function formatHotspotDeltaForAgent(
   return `${header}\n${body.join("\n")}`;
 }
 
-function formatReminderLines(reminders?: CouplingReminder[]): string[] {
+function formatReminderLines(
+  reminders?: CouplingReminder[],
+  minDegree?: number,
+): string[] {
   if (!reminders || reminders.length === 0) return [];
+  const degreeFloor = minDegree ?? REMINDER_MIN_DEGREE;
   const out: string[] = [
-    `co-change reminders (≥${REMINDER_MIN_COCHANGES} commits, ≥${REMINDER_MIN_DEGREE}% degree):`,
+    `co-change reminders (≥${REMINDER_MIN_COCHANGES} commits, ≥${degreeFloor}% degree):`,
   ];
   for (const r of reminders) {
     out.push(

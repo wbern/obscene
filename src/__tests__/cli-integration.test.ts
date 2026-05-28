@@ -948,6 +948,19 @@ describe("CLI Integration", () => {
     expect(result.stdout).toContain("--base");
     expect(result.stdout).toContain("--event");
     expect(result.stdout).toContain("--significant-percent");
+    expect(result.stdout).toContain("--min-degree");
+  });
+
+  it("should reject --min-degree values outside 0-100 with a clear error", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "hook", "--base", "HEAD", "--min-degree", "150"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/between 0 and 100/);
   });
 
   it("should accept --significant-percent without error", {
@@ -1046,6 +1059,35 @@ describe("CLI Integration", () => {
     expect(context).toContain("co-change reminders");
     expect(context).toContain("src/a.ts ↔ lib/b.ts");
     expect(context).toContain("ignore if unrelated to this change.");
+  });
+
+  it("threads --min-degree into both the filter and the reminders header", {
+    timeout: 30000,
+  }, () => {
+    setupCochangeRepo();
+
+    const result = spawnSync(
+      "node",
+      [
+        BIN_PATH,
+        "hook",
+        "--base",
+        "main",
+        "--event",
+        "Stop",
+        "--months",
+        "6",
+        "--min-degree",
+        "99",
+      ],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.length).toBeGreaterThan(0);
+    const context = JSON.parse(result.stdout).systemMessage as string;
+    expect(context).toContain("co-change reminders (≥5 commits, ≥99% degree):");
+    expect(context).toContain("src/a.ts ↔ lib/b.ts");
   });
 
   it("should fail bare --base when no default branch exists", {

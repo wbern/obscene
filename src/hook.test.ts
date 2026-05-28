@@ -303,7 +303,7 @@ describe("formatHotspotDeltaForAgent — coupling reminders", () => {
       reminders: [reminder()],
     });
     expect(out).not.toBeNull();
-    expect(out).toContain("co-change reminders (≥5 commits, ≥70% degree):");
+    expect(out).toContain("co-change reminders (≥5 commits, ≥50% degree):");
     expect(out).toContain(
       "- src/cli.ts ↔ src/format.ts: 8 shared commits (degree 80%)",
     );
@@ -360,6 +360,15 @@ describe("formatHotspotDeltaForAgent — coupling reminders", () => {
         reminders: [reminder()],
       }) ?? "";
     expect(out.startsWith("obscene drift (vs main):")).toBe(true);
+  });
+
+  it("reflects reminderMinDegree override in the reminders header", () => {
+    const out =
+      formatHotspotDeltaForAgent(makeDelta(), {
+        reminders: [reminder({ degree: 62 })],
+        reminderMinDegree: 40,
+      }) ?? "";
+    expect(out).toContain("co-change reminders (≥5 commits, ≥40% degree):");
   });
 });
 
