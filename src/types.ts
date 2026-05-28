@@ -118,7 +118,7 @@ export interface DeltaInfo {
    * stderr warning so programmatic consumers can detect the downgrade
    * without scraping stderr.
    */
-  fallback?: { from: "full-delta"; reason: string };
+  fallback?: { from: "full-delta" | "working"; reason: string };
 }
 
 /**

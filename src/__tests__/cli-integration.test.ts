@@ -937,6 +937,83 @@ describe("CLI Integration", () => {
     expect(result.stderr).toContain("--full-delta requires --base");
   });
 
+  // ob-2o0: --working compares working tree vs HEAD so 'did my refactor move
+  // the needle?' can be answered mid-work, before commit. Two-dot diff so
+  // uncommitted edits show up where three-dot would be empty.
+  it("rejects --working combined with --base", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--working", "--base", "main"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "--working and --base are mutually exclusive",
+    );
+  });
+
+  it("rejects --working combined with --paths", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--working", "--paths", "a.ts"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "--paths/--since and --working are mutually exclusive",
+    );
+  });
+
+  it("reports a clean working tree without producing a delta", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+    // After setupDeltaRepoB the working tree is clean — base + feature commits
+    // both materialised, no leftover uncommitted edits.
+    const result = spawnSync("node", [BIN_PATH, "--working"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("No working-tree changes vs HEAD");
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.delta.base).toBe("HEAD");
+    expect(parsed.delta.head).toBe("WORKING");
+    expect(parsed.delta.changedFiles).toEqual([]);
+  });
+
+  it("produces a fullDelta against HEAD with uncommitted edits", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+    // Introduce an uncommitted edit on a previously-committed file. The
+    // working-tree snapshot should differ from HEAD; --base HEAD would
+    // give an empty diff (three-dot), --working should not.
+    fs.writeFileSync(
+      path.join(tempDir, "a.ts"),
+      "// uncommitted edit\nexport function a(x: number) {\n  if (x > 0) {\n    if (x > 10) {\n      if (x > 100) {\n        if (x > 1000) {\n          if (x > 10000) return 1;\n        }\n      }\n    }\n  }\n  return 0;\n}\n",
+    );
+
+    const result = spawnSync("node", [BIN_PATH, "--working", "--top", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.delta.base).toBe("HEAD");
+    expect(parsed.delta.head).toBe("WORKING");
+    expect(parsed.delta.changedFiles).toContain("a.ts");
+    expect(parsed.fullDelta).toBeDefined();
+    expect(parsed.fullDelta.base).toBe("HEAD");
+    expect(parsed.fullDelta.head).toBe("WORKING");
+  });
+
   it("should describe the hook command in --help", {
     timeout: 10000,
   }, () => {

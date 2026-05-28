@@ -70,6 +70,7 @@ interface HotspotsOpts extends SharedOpts {
   paths?: string[];
   since?: string;
   churnMode: string;
+  working?: boolean;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -197,6 +198,10 @@ addSharedOptions(
     "--churn-mode <mode>",
     "how to count churn: 'commits' counts commits touching each file; 'lines' sums added+deleted lines via git log --numstat",
     "commits",
+  )
+  .option(
+    "--working",
+    "compare working tree (incl. uncommitted edits) against HEAD — answers 'did my refactor move the needle?' mid-work, before commit. Snapshots HEAD via a detached worktree and runs the full pipeline against both sides; produces a structured before/after diff (composite + tier transitions). Mutually exclusive with --base, --paths, --since.",
   )
   .action((opts: HotspotsOpts) => {
     try {
@@ -542,6 +547,12 @@ function runHotspots(opts: HotspotsOpts): void {
     );
   }
 
+  if (opts.working && opts.base !== undefined) {
+    throw new Error(
+      "--working and --base are mutually exclusive. --working compares working tree vs HEAD; --base compares against a committed ref.",
+    );
+  }
+
   const pathScope = resolvePathScope(opts);
   if (pathScope && opts.base !== undefined) {
     throw new Error(
@@ -551,10 +562,87 @@ function runHotspots(opts: HotspotsOpts): void {
     );
   }
 
+  if (pathScope && opts.working) {
+    throw new Error(
+      "--paths/--since and --working are mutually exclusive — --working already scopes to files in the working tree diff.",
+    );
+  }
+
   let delta: DeltaInfo | undefined;
   let fullDelta: HotspotDelta | undefined;
   let modeCHeadCore: ReturnType<typeof computeHotspotsCore> | undefined;
-  if (opts.base !== undefined) {
+
+  if (opts.working) {
+    // Working-tree mode: compare HEAD snapshot against working-tree snapshot.
+    // Uses two-dot `git diff --name-only HEAD` so uncommitted edits land in the
+    // changed set (three-dot would be empty here). Always runs full-pipeline
+    // on both sides — there's no narrow-filter fallback because the whole
+    // point is "did my refactor move the corpus tiers?".
+    const changed = getWorkingTreeChangedFiles();
+    if (changed.size === 0) {
+      process.stderr.write(
+        "No working-tree changes vs HEAD — nothing to delta.\n",
+      );
+      const empty: HotspotsOutput = {
+        generated: new Date().toISOString(),
+        guide: HOTSPOTS_GUIDE,
+        churnWindow: `${months} months`,
+        churnMode,
+        historyCoverage,
+        delta: { base: "HEAD", head: "WORKING", changedFiles: [] },
+        rankings: {},
+        corpus: { fileCount: 0, totalComplexity: 0, filtered },
+      };
+      if (opts.format === "table") {
+        process.stdout.write(`${formatHotspotsTable(empty)}\n`);
+      } else if (opts.format === "compact") {
+        process.stdout.write(`${formatHotspotsCompact(empty)}\n`);
+      } else {
+        process.stdout.write(`${JSON.stringify(empty, null, 2)}\n`);
+      }
+      return;
+    }
+    delta = {
+      base: "HEAD",
+      head: "WORKING",
+      changedFiles: [...changed].sort(),
+    };
+    try {
+      const baseSnapshot = withWorktreeAt("HEAD", (path) =>
+        computeSnapshot({
+          months,
+          excludes: allExcludes,
+          cwd: path,
+          churnMode,
+        }),
+      );
+      modeCHeadCore = computeHotspotsCore(
+        files,
+        months,
+        0,
+        undefined,
+        churnMode,
+      );
+      const headSnapshot: HotspotSnapshot = {
+        files,
+        rankings: modeCHeadCore.rankings,
+        skipped: modeCHeadCore.skipped,
+        composite: modeCHeadCore.composite,
+        reawakened: modeCHeadCore.reawakened,
+        corpus: modeCHeadCore.corpus,
+      };
+      fullDelta = computeDelta("HEAD", "WORKING", baseSnapshot, headSnapshot);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `warning: --working snapshot unavailable (${message}). ` +
+          "Falling back to filtered rankings against the working tree only.\n",
+      );
+      files = files.filter((f) => changed.has(f.file));
+      modeCHeadCore = undefined;
+      delta.fallback = { from: "working", reason: message };
+    }
+  } else if (opts.base !== undefined) {
     const baseRef = resolveBaseRef(opts.base);
     const changed = getChangedFiles(baseRef);
     if (changed.size === 0) {
@@ -777,6 +865,24 @@ function isWorkingTreeClean(): boolean {
   } catch {
     return false;
   }
+}
+
+// Files modified in the working tree vs HEAD — uses two-dot diff so both
+// staged and unstaged edits show up. Caller wraps in try/catch; this helper
+// only throws if `git` itself fails.
+function getWorkingTreeChangedFiles(): Set<string> {
+  const result = new Set<string>();
+  const raw = execSync("git diff --name-only HEAD", {
+    maxBuffer: 50 * 1024 * 1024,
+    stdio: ["pipe", "pipe", "pipe"],
+  })
+    .toString()
+    .split("\n");
+  for (const line of raw) {
+    const trimmed = line.trim();
+    if (trimmed) result.add(trimmed);
+  }
+  return result;
 }
 
 function runHook(opts: {
