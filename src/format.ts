@@ -100,9 +100,17 @@ function formatDeltaValue(d: ComplexityDelta | undefined): string {
   return d.change > 0 ? `+${d.change}` : String(d.change);
 }
 
+function formatRecentAuthors(authors: string[], authorCount: number): string {
+  const visible = authors.join(", ");
+  return authorCount > authors.length
+    ? `${visible} +${authorCount - authors.length}`
+    : visible;
+}
+
 function getRankingColumns(
   key: string,
   includeDelta: boolean,
+  recentWindowDays?: number,
 ): RankingColumnDef[] {
   const base: RankingColumnDef[] = [
     {
@@ -204,10 +212,35 @@ function getRankingColumns(
     value: (e) => formatDeltaValue(e.complexityDelta),
   };
 
+  const recentCols: RankingColumnDef[] =
+    recentWindowDays !== undefined
+      ? [
+          {
+            header: ` ${recentWindowDays}d-cmts`,
+            width: 12,
+            align: "left",
+            value: (e) => ` ${e.recent ? String(e.recent.commits) : "·"}`,
+          },
+          {
+            header: `${recentWindowDays}d-auths`,
+            width: 24,
+            align: "left",
+            value: (e) =>
+              e.recent
+                ? truncate(
+                    formatRecentAuthors(e.recent.authors, e.recent.authorCount),
+                    22,
+                  )
+                : "—",
+          },
+        ]
+      : [];
+
   return [
     ...base,
     ...(metricCols[key] ?? []),
     ...(includeDelta ? [deltaCol] : []),
+    ...recentCols,
     tierCol,
   ];
 }
@@ -226,7 +259,9 @@ function formatRankingTable(
   includeDelta: boolean,
 ): string[] {
   const lines: string[] = [];
-  const cols = getRankingColumns(key, includeDelta);
+  const recentWindowDays = ranking.entries.find((e) => e.recent)?.recent
+    ?.windowDays;
+  const cols = getRankingColumns(key, includeDelta, recentWindowDays);
   const emoji = METRIC_EMOJI[key];
   const prefix = emoji ? `${emoji} ` : "";
 
@@ -668,15 +703,23 @@ export function formatHotspotsCompact(output: HotspotsOutput): string {
   lines.push(
     `Confidence: ${composite.confidence.level.toUpperCase()} — ${composite.confidence.reason}`,
   );
+  const recentWindowDays = composite.entries.find((e) => e.recent)?.recent
+    ?.windowDays;
   for (const entry of composite.entries) {
-    lines.push(
-      `${tierTag(entry.tier)}  ${padRight(entry.file, 50)}  ${padLeft(
-        `${entry.percentOfTotal.toFixed(1)}%`,
-        6,
-      )}  ${padLeft(pluralizeCommits(entry.churn), 12)}  ${
-        entry.dimensionCount
-      }/${composite.totalDimensions} dims`,
-    );
+    let row = `${tierTag(entry.tier)}  ${padRight(entry.file, 50)}  ${padLeft(
+      `${entry.percentOfTotal.toFixed(1)}%`,
+      6,
+    )}  ${padLeft(pluralizeCommits(entry.churn), 12)}  ${
+      entry.dimensionCount
+    }/${composite.totalDimensions} dims`;
+    if (recentWindowDays !== undefined) {
+      const cmts = entry.recent ? String(entry.recent.commits) : "·";
+      const auths = entry.recent
+        ? formatRecentAuthors(entry.recent.authors, entry.recent.authorCount)
+        : "—";
+      row += `  ${recentWindowDays}d: ${padLeft(cmts, 3)} cmts, ${auths}`;
+    }
+    lines.push(row);
   }
   lines.push("");
   lines.push(
@@ -737,7 +780,10 @@ export function formatCompositeTable(output: CompositeOutput): string {
   const includeDelta = output.entries.some(
     (e) => e.complexityDelta !== undefined,
   );
-  const width = includeDelta ? 91 : 84;
+  const recentWindowDays = output.entries.find((e) => e.recent)?.recent
+    ?.windowDays;
+  const recentExtra = recentWindowDays !== undefined ? 12 + 24 : 0;
+  const width = (includeDelta ? 91 : 84) + recentExtra;
 
   lines.push("═".repeat(width));
   lines.push(
@@ -755,6 +801,10 @@ export function formatCompositeTable(output: CompositeOutput): string {
     padLeft("Churn", 7) +
     padLeft("Dims", 6);
   if (includeDelta) header += padLeft("Δ", 7);
+  if (recentWindowDays !== undefined) {
+    header += padRight(` ${recentWindowDays}d-cmts`, 12);
+    header += padRight(`${recentWindowDays}d-auths`, 24);
+  }
   header += padLeft("Tier", 12);
   lines.push(header);
   lines.push("─".repeat(width));
@@ -767,6 +817,24 @@ export function formatCompositeTable(output: CompositeOutput): string {
       padLeft(`${entry.dimensionCount}/${output.totalDimensions}`, 6);
     if (includeDelta)
       rawRow += padLeft(formatDeltaValue(entry.complexityDelta), 7);
+    if (recentWindowDays !== undefined) {
+      rawRow += padRight(
+        ` ${entry.recent ? String(entry.recent.commits) : "·"}`,
+        12,
+      );
+      rawRow += padRight(
+        entry.recent
+          ? truncate(
+              formatRecentAuthors(
+                entry.recent.authors,
+                entry.recent.authorCount,
+              ),
+              22,
+            )
+          : "—",
+        24,
+      );
+    }
     rawRow += padLeft(tierLabel(entry.tier), 12);
     lines.push(colorRow(entry.tier, rawRow));
   }

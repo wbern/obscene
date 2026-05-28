@@ -40,6 +40,26 @@ export interface ConfidenceInfo {
 }
 
 /**
+ * Activity inside a short recency window (e.g. last 14 days). Sits beside the
+ * 90d composite to answer "what changed here lately, and who touched it?" —
+ * recency is *in* the composite as a decay factor, but fused into a single
+ * score; this surfaces it as its own dimension. Attached only when the user
+ * passes `--recent-window`; default behavior is unchanged.
+ */
+export interface RecentActivity {
+  windowDays: number;
+  commits: number;
+  /**
+   * Distinct authors who touched this file in the window, sorted by commit
+   * count desc then name asc. Capped at 3 by the producer so JSON consumers
+   * see a stable, bounded set; the raw count is in `authorCount`.
+   */
+  authors: string[];
+  authorCount: number;
+  linesChanged: number;
+}
+
+/**
  * Per-file complexity change from a base ref to HEAD. Only attached when
  * `--base` is set on the hotspots command. `oldComplexity` is null for files
  * that didn't exist at the base ref; `change` is null in the same case.
@@ -67,6 +87,7 @@ export interface RankingEntry {
    */
   minorAuthors?: number | null;
   complexityDelta?: ComplexityDelta;
+  recent?: RecentActivity;
 }
 
 export interface RankingOutput {
@@ -282,6 +303,7 @@ export interface CompositeEntry {
   churn: number;
   dimensionCount: number;
   complexityDelta?: ComplexityDelta;
+  recent?: RecentActivity;
 }
 
 export interface CompositeOutput {

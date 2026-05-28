@@ -71,6 +71,7 @@ interface HotspotsOpts extends SharedOpts {
   since?: string;
   churnMode: string;
   working?: boolean;
+  recentWindow?: number;
 }
 
 interface CouplingOpts extends SharedOpts {
@@ -145,6 +146,14 @@ function parseMinDegree(value: string): number {
   return n;
 }
 
+function parseRecentWindow(value: string): number {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n) || n < 1 || n > 365 || String(n) !== value.trim()) {
+    throw new InvalidArgumentError("must be an integer between 1 and 365");
+  }
+  return n;
+}
+
 function addSharedOptions(cmd: Command): Command {
   return cmd
     .option("--top <n>", "limit to top N entries (0 = all)", "20")
@@ -202,6 +211,11 @@ addSharedOptions(
   .option(
     "--working",
     "compare working tree (incl. uncommitted edits) against HEAD — answers 'did my refactor move the needle?' mid-work, before commit. Snapshots HEAD via a detached worktree and runs the full pipeline against both sides; produces a structured before/after diff (composite + tier transitions). Mutually exclusive with --base, --paths, --since.",
+  )
+  .option(
+    "--recent-window <n>",
+    "surface per-file recency alongside the 90d composite — adds Nd-cmts / Nd-auths columns and a `recent` block per ranking entry (commits, top authors, lines changed). Answers 'what just happened on the files I'm about to touch?'. Default behavior unchanged when omitted.",
+    parseRecentWindow,
   )
   .action((opts: HotspotsOpts) => {
     try {
@@ -537,6 +551,7 @@ function runHotspots(opts: HotspotsOpts): void {
   const top = parseInt(opts.top, 10);
   const months = parseInt(opts.months, 10);
   const churnMode = parseChurnMode(opts.churnMode);
+  const recentWindow = opts.recentWindow;
   const historyCoverage = warnHistoryCoverage(months);
   const allExcludes = resolveExcludes(opts.exclude);
   let files = runScc(allExcludes);
@@ -614,6 +629,7 @@ function runHotspots(opts: HotspotsOpts): void {
           excludes: allExcludes,
           cwd: path,
           churnMode,
+          recentWindowDays: recentWindow,
         }),
       );
       modeCHeadCore = computeHotspotsCore(
@@ -622,6 +638,7 @@ function runHotspots(opts: HotspotsOpts): void {
         0,
         undefined,
         churnMode,
+        recentWindow,
       );
       const headSnapshot: HotspotSnapshot = {
         files,
@@ -682,6 +699,7 @@ function runHotspots(opts: HotspotsOpts): void {
             excludes: allExcludes,
             cwd: path,
             churnMode,
+            recentWindowDays: recentWindow,
           }),
         );
         modeCHeadCore = computeHotspotsCore(
@@ -690,6 +708,7 @@ function runHotspots(opts: HotspotsOpts): void {
           0,
           undefined,
           churnMode,
+          recentWindow,
         );
         const headSnapshot: HotspotSnapshot = {
           files,
@@ -719,7 +738,14 @@ function runHotspots(opts: HotspotsOpts): void {
 
   const { rankings, skipped, composite, corpus, reawakened } = modeCHeadCore
     ? sliceCoreForDisplay(modeCHeadCore, top)
-    : computeHotspotsCore(files, months, top, undefined, churnMode);
+    : computeHotspotsCore(
+        files,
+        months,
+        top,
+        undefined,
+        churnMode,
+        recentWindow,
+      );
 
   if (delta && fullDelta === undefined) {
     const newComplexity = new Map<string, number>();

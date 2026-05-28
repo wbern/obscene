@@ -1014,6 +1014,88 @@ describe("CLI Integration", () => {
     expect(parsed.fullDelta.head).toBe("WORKING");
   });
 
+  it("attaches a recent block to ranking + composite entries under --recent-window", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--recent-window", "30", "--top", "0"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    const cmplx = parsed.rankings.complexity.entries;
+    const aEntry = cmplx.find((e: { file: string }) => e.file === "a.ts");
+    expect(aEntry?.recent).toBeDefined();
+    expect(aEntry.recent.windowDays).toBe(30);
+    expect(aEntry.recent.commits).toBeGreaterThanOrEqual(1);
+    expect(aEntry.recent.authors.length).toBeGreaterThan(0);
+    expect(typeof aEntry.recent.authorCount).toBe("number");
+    expect(typeof aEntry.recent.linesChanged).toBe("number");
+    const compA = parsed.composite.entries.find(
+      (e: { file: string }) => e.file === "a.ts",
+    );
+    expect(compA?.recent).toBeDefined();
+  });
+
+  it("leaves default JSON shape unchanged when --recent-window is not passed", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync("node", [BIN_PATH, "--top", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    for (const e of parsed.rankings.complexity.entries) {
+      expect(e.recent).toBeUndefined();
+    }
+    for (const e of parsed.composite.entries) {
+      expect(e.recent).toBeUndefined();
+    }
+  });
+
+  it("renders Nd-cmts / Nd-auths columns under --recent-window with --format compact", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "--recent-window", "14", "--top", "0", "--format", "compact"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/14d:/);
+    expect(result.stdout).toMatch(/cmts,/);
+  });
+
+  it("rejects --recent-window values outside 1-365 with a clear error", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "--recent-window", "0"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/between 1 and 365/);
+  });
+
+  it("rejects non-integer --recent-window values", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "--recent-window", "7.5"], {
+      cwd: tempDir,
+      encoding: "utf-8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/between 1 and 365/);
+  });
+
   it("should describe the hook command in --help", {
     timeout: 10000,
   }, () => {

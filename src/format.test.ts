@@ -489,6 +489,63 @@ describe("formatHotspotsTable", () => {
     expect(result).toContain("👥 AUTHORS \u00D7 🔄 CHURN");
   });
 
+  it("adds Nd-cmts / Nd-auths columns on ranking tables when entries carry recent", () => {
+    const output: HotspotsOutput = {
+      generated: "2026-01-01T00:00:00.000Z",
+      guide: {},
+      churnWindow: "3 months",
+      churnMode: "commits",
+      rankings: {
+        complexity: {
+          label: "Complexity × Churn",
+          scoreFormula: "complexity × churn",
+          totalScore: 100,
+          tierCounts: { hot: 1, warm: 1, cool: 0 },
+          tiers: { hot: 1, warm: 1, cool: 0 },
+          totalEntries: 2,
+          showing: 2,
+          confidence: STUB_CONFIDENCE,
+          entries: [
+            {
+              file: "src/active.ts",
+              score: 100,
+              percentOfTotal: 100,
+              tier: "hot",
+              churn: 10,
+              metricValue: 10,
+              metricDensity: 0.25,
+              recent: {
+                windowDays: 7,
+                commits: 3,
+                authors: ["alice", "bob"],
+                authorCount: 2,
+                linesChanged: 42,
+              },
+            },
+            {
+              file: "src/quiet.ts",
+              score: 50,
+              percentOfTotal: 50,
+              tier: "warm",
+              churn: 5,
+              metricValue: 5,
+              metricDensity: 0.1,
+            },
+          ],
+        },
+      },
+      corpus: { fileCount: 2, totalComplexity: 50 },
+    };
+
+    const result = formatHotspotsTable(output);
+
+    expect(result).toContain("7d-cmts");
+    expect(result).toContain("7d-auths");
+    expect(result).toContain("alice, bob");
+    // Quiet entry still renders the placeholder cells, not a blown layout.
+    expect(result).toMatch(/quiet\.ts[^\n]*·[^\n]*—/);
+  });
+
   it("handles complexity entries without metricDensity", () => {
     const output: HotspotsOutput = {
       generated: "2026-01-01T00:00:00.000Z",
@@ -1792,6 +1849,57 @@ describe("formatCompositeTable", () => {
     expect(headerLine).toContain("Δ");
     expect(result).toMatch(/\s+0\s+/);
   });
+
+  it("adds Nd-cmts / Nd-auths columns when entries carry a recent block", () => {
+    const output: CompositeOutput = {
+      label: "Combined",
+      scoreFormula: "rrf",
+      totalScore: 0.5,
+      tierCounts: { hot: 1, warm: 1, cool: 0 },
+      tiers: { hot: 1, warm: 1, cool: 0 },
+      totalDimensions: 4,
+      totalEntries: 2,
+      showing: 2,
+      confidence: STUB_CONFIDENCE,
+      entries: [
+        {
+          file: "src/active.ts",
+          score: 0.3,
+          percentOfTotal: 60,
+          tier: "hot",
+          churn: 15,
+          dimensionCount: 4,
+          // 5 distinct authors → top 3 returned, +2 overflow surfaces in
+          // the rendered cell.
+          recent: {
+            windowDays: 14,
+            commits: 4,
+            authors: ["alice", "bob", "carol"],
+            authorCount: 5,
+            linesChanged: 142,
+          },
+        },
+        {
+          // No recent block → cell renders '·' / '—' to make absence visible.
+          file: "src/quiet.ts",
+          score: 0.2,
+          percentOfTotal: 40,
+          tier: "warm",
+          churn: 8,
+          dimensionCount: 2,
+        },
+      ],
+    };
+
+    const result = formatCompositeTable(output);
+
+    const headerLine = result.split("\n").find((l) => l.includes("Score"));
+    expect(headerLine).toContain("14d-cmts");
+    expect(headerLine).toContain("14d-auths");
+    expect(result).toContain("alice, bob, carol +2");
+    // Missing-recent row shows the placeholder cells.
+    expect(result).toMatch(/quiet\.ts[^\n]*·[^\n]*—/);
+  });
 });
 
 describe("formatHotspotsTable fullDelta section", () => {
@@ -1972,6 +2080,43 @@ describe("formatHotspotsCompact", () => {
     expect(out).not.toContain("☀️");
     expect(out).not.toContain("🌱");
     expect(out).not.toContain("─");
+  });
+
+  it("appends an Nd: column when at least one composite entry carries recent", () => {
+    const out = formatHotspotsCompact({
+      ...baseOutput,
+      composite: {
+        ...baseOutput.composite!,
+        entries: [
+          {
+            file: "src/active.ts",
+            score: 0.4,
+            percentOfTotal: 40,
+            tier: "hot",
+            churn: 12,
+            dimensionCount: 4,
+            recent: {
+              windowDays: 7,
+              commits: 3,
+              authors: ["alice"],
+              authorCount: 1,
+              linesChanged: 25,
+            },
+          },
+          {
+            // Missing recent → placeholder cell, not a layout shift.
+            file: "src/quiet.ts",
+            score: 0.1,
+            percentOfTotal: 10,
+            tier: "cool",
+            churn: 2,
+            dimensionCount: 1,
+          },
+        ],
+      },
+    });
+    expect(out).toMatch(/active\.ts[^\n]*7d:[^\n]*3 cmts, alice/);
+    expect(out).toMatch(/quiet\.ts[^\n]*7d:[^\n]*· cmts, —/);
   });
 
   it("pluralizes the churn-commit count correctly (1 commit, 2+ commits)", () => {

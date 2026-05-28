@@ -25,6 +25,7 @@ import {
   getHistoryCoverage,
   getNestingDepths,
   getReawakenedFiles,
+  getRecentActivity,
   getTrackedFiles,
   REAWAKENING_MIN_DORMANCY_MULTIPLE,
   readIgnoreFile,
@@ -606,6 +607,129 @@ describe("getChurnLines (GH#17)", () => {
     });
 
     expect(() => getChurnLines(3)).toThrow(
+      "Not a git repository or git is not installed",
+    );
+  });
+});
+
+describe("getRecentActivity", () => {
+  it("counts commits, authors, and lines-changed per file in the window", () => {
+    // Commit 1: Alice touches foo.ts (10/2) and bar.ts (3/1).
+    // Commit 2: Bob touches foo.ts (5/5).
+    // Commit 3: Alice touches foo.ts (1/0).
+    const gitOutput =
+      "COMMIT_SEP\nAlice\n10\t2\tsrc/foo.ts\n3\t1\tsrc/bar.ts\nCOMMIT_SEP\nBob\n5\t5\tsrc/foo.ts\nCOMMIT_SEP\nAlice\n1\t0\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(14);
+
+    const foo = result.get("src/foo.ts");
+    expect(foo).toBeDefined();
+    expect(foo?.windowDays).toBe(14);
+    expect(foo?.commits).toBe(3);
+    expect(foo?.linesChanged).toBe(23);
+    // Alice has 2 commits, Bob has 1 → Alice first.
+    expect(foo?.authors).toEqual(["Alice", "Bob"]);
+    expect(foo?.authorCount).toBe(2);
+
+    const bar = result.get("src/bar.ts");
+    expect(bar?.commits).toBe(1);
+    expect(bar?.linesChanged).toBe(4);
+    expect(bar?.authors).toEqual(["Alice"]);
+  });
+
+  it("counts a commit toward linesChanged but not over-counts binary touches", () => {
+    // Binary file: numstat reports `- - <path>`. Commit still counts, lines do not.
+    const gitOutput =
+      "COMMIT_SEP\nAlice\n-\t-\tassets/logo.png\n4\t1\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(7);
+
+    const logo = result.get("assets/logo.png");
+    expect(logo?.commits).toBe(1);
+    expect(logo?.linesChanged).toBe(0);
+    expect(result.get("src/foo.ts")?.linesChanged).toBe(5);
+  });
+
+  it("folds Co-authored-by trailers and excludes [bot] authors", () => {
+    const gitOutput =
+      "COMMIT_SEP\nAlice\tBob <bob@example.com>\trenovate[bot]\n2\t1\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(7);
+
+    const foo = result.get("src/foo.ts");
+    expect(foo?.authorCount).toBe(2);
+    expect(foo?.authors).toEqual(["Alice", "Bob"]);
+  });
+
+  it("caps the authors[] array at 3 and exposes raw cardinality in authorCount", () => {
+    // 4 distinct authors all touching foo.ts — authors[] keeps top 3 by commit
+    // count, authorCount keeps the full count so consumers know one is hidden.
+    const gitOutput =
+      "COMMIT_SEP\nAlice\n1\t0\tsrc/foo.ts\nCOMMIT_SEP\nAlice\n1\t0\tsrc/foo.ts\nCOMMIT_SEP\nBob\n1\t0\tsrc/foo.ts\nCOMMIT_SEP\nCarol\n1\t0\tsrc/foo.ts\nCOMMIT_SEP\nDave\n1\t0\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(7);
+
+    const foo = result.get("src/foo.ts");
+    expect(foo?.authorCount).toBe(4);
+    expect(foo?.authors).toHaveLength(3);
+    expect(foo?.authors[0]).toBe("Alice"); // 2 commits, beats the rest
+    // Bob, Carol, Dave are tied at 1; sort by name puts Bob then Carol.
+    expect(foo?.authors.slice(1)).toEqual(["Bob", "Carol"]);
+  });
+
+  it("skips blocks with no resolvable author (bot-only commits)", () => {
+    const gitOutput =
+      "COMMIT_SEP\ndependabot[bot]\n4\t1\tpackage.json\nCOMMIT_SEP\nAlice\n2\t0\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(14);
+
+    expect(result.has("package.json")).toBe(false);
+    expect(result.get("src/foo.ts")?.commits).toBe(1);
+  });
+
+  it("skips malformed numstat lines and lines whose path field is empty", () => {
+    // Line 1: only two fields, no path → ignored.
+    // Line 2: empty path after normalization → ignored.
+    // Line 3: valid record.
+    const gitOutput = "COMMIT_SEP\nAlice\n3\t1\n5\t2\t\n2\t0\tsrc/ok.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(7);
+
+    expect(result.size).toBe(1);
+    expect(result.get("src/ok.ts")?.linesChanged).toBe(2);
+  });
+
+  it("ignores non-numeric numstat values without dropping the commit", () => {
+    const gitOutput = "COMMIT_SEP\nAlice\nabc\txyz\tsrc/foo.ts\n";
+    mockExecSync.mockReturnValue(Buffer.from(gitOutput));
+
+    const result = getRecentActivity(7);
+
+    const foo = result.get("src/foo.ts");
+    expect(foo?.commits).toBe(1);
+    expect(foo?.linesChanged).toBe(0);
+  });
+
+  it("returns an empty map when git log produced no output", () => {
+    mockExecSync.mockReturnValue(Buffer.from(""));
+
+    const result = getRecentActivity(14);
+
+    expect(result.size).toBe(0);
+  });
+
+  it("throws when git is unavailable", () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error("not a git repository");
+    });
+
+    expect(() => getRecentActivity(14)).toThrow(
       "Not a git repository or git is not installed",
     );
   });
@@ -3636,6 +3760,81 @@ describe("computeHotspotsCore", () => {
     expect(result.churn.get("src/a.ts")).toBe(15);
     expect(result.churn.get("src/b.ts")).toBe(3);
     expect(result.churn.get("src/c.ts")).toBe(1);
+  });
+
+  it("attaches a `recent` block to ranking + composite entries when recentWindowDays is set", () => {
+    const files: FileMetrics[] = [
+      {
+        file: "src/a.ts",
+        code: 100,
+        lines: 110,
+        complexity: 30,
+        comments: 0,
+        complexityDensity: 0.3,
+      },
+      {
+        file: "src/b.ts",
+        code: 50,
+        lines: 55,
+        complexity: 10,
+        comments: 0,
+        complexityDensity: 0.2,
+      },
+      {
+        file: "src/c.ts",
+        code: 30,
+        lines: 35,
+        complexity: 5,
+        comments: 0,
+        complexityDensity: 0.16,
+      },
+    ];
+    // Five git-log calls in order: getChurn, getDefects,
+    // getAuthorCommitCounts, getReawakenedFiles, then getRecentActivity
+    // (only fired when recentWindowDays is set).
+    mockExecSync
+      .mockReturnValueOnce(
+        Buffer.from("src/a.ts\nsrc/a.ts\nsrc/b.ts\nsrc/c.ts\n"),
+      )
+      .mockReturnValueOnce(Buffer.from("src/a.ts\n"))
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\nsrc/a.ts\nCOMMIT_SEP\nbob\nsrc/a.ts\nCOMMIT_SEP\nalice\nsrc/b.ts\nCOMMIT_SEP\ncarol\nsrc/c.ts\n",
+        ),
+      )
+      .mockReturnValueOnce(Buffer.from(""))
+      // getRecentActivity: alice touched a.ts twice (+12 lines total), b.ts
+      // once (+3). c.ts has no recent activity → entry should lack `recent`.
+      .mockReturnValueOnce(
+        Buffer.from(
+          "COMMIT_SEP\nalice\n5\t2\tsrc/a.ts\nCOMMIT_SEP\nalice\n3\t2\tsrc/a.ts\nCOMMIT_SEP\nalice\n2\t1\tsrc/b.ts\n",
+        ),
+      );
+    mockReadFileSync.mockImplementation(
+      () =>
+        "function f() {\n  if (x) {\n    if (y) {\n      doit();\n    }\n  }\n}\n",
+    );
+
+    const result = computeHotspotsCore(files, 3, 0, undefined, "commits", 14);
+
+    const aRecent = result.rankings.complexity.entries.find(
+      (e) => e.file === "src/a.ts",
+    )?.recent;
+    expect(aRecent).toEqual({
+      windowDays: 14,
+      commits: 2,
+      authors: ["alice"],
+      authorCount: 1,
+      linesChanged: 12,
+    });
+    const cRecent = result.rankings.complexity.entries.find(
+      (e) => e.file === "src/c.ts",
+    )?.recent;
+    expect(cRecent).toBeUndefined();
+    const aComposite = result.composite.entries.find(
+      (e) => e.file === "src/a.ts",
+    )?.recent;
+    expect(aComposite?.commits).toBe(2);
   });
 
   it("exposes a reawakened section with the threshold rule (GH#19)", () => {

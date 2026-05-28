@@ -18,6 +18,7 @@ import type {
   RankingOutput,
   ReawakenedEntry,
   ReawakenedSection,
+  RecentActivity,
   SccLanguage,
   ScoreChange,
   SkippedRanking,
@@ -305,6 +306,106 @@ export function getChurnLines(
     counts.set(path, (counts.get(path) ?? 0) + delta);
   }
   return counts;
+}
+
+/**
+ * Cap on authors returned per file in `RecentActivity.authors`. The window is
+ * short (default 14d) so most files have ≤3 authors anyway; capping keeps the
+ * compact table from blowing past one row and the JSON shape predictable.
+ * `authorCount` carries the raw cardinality for consumers that need it.
+ */
+const RECENT_AUTHORS_CAP = 3;
+
+/**
+ * Per-file activity inside a recency window — commits, authors (with author
+ * counts for stable sort), and added+deleted lines. Folds Co-authored-by
+ * trailers into the author set so squash-merge workflows don't appear as
+ * solo-author. Bot authors (`[bot]` suffix) are filtered out.
+ *
+ * Combines `--numstat` with the same `COMMIT_SEP`/`%aN`/trailers framing as
+ * {@link getAuthorCommitCounts} so one git-log pass yields all three signals.
+ * Binary files (numstat reports `- - <path>`) contribute commits/authors but
+ * zero to `linesChanged`.
+ */
+export function getRecentActivity(
+  windowDays: number,
+  cwd?: string,
+): Map<string, RecentActivity> {
+  let raw: Buffer;
+  try {
+    raw = execSync(
+      `git log --since="${windowDays} days ago" --numstat --format="COMMIT_SEP%n%aN%x09%(trailers:key=Co-authored-by,valueonly,separator=%x09)"`,
+      {
+        maxBuffer: 50 * 1024 * 1024,
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+      },
+    );
+  } catch {
+    throw new Error("Not a git repository or git is not installed.");
+  }
+
+  type PerFile = {
+    commits: number;
+    linesChanged: number;
+    authorCounts: Map<string, number>;
+  };
+  const perFile = new Map<string, PerFile>();
+  const ensure = (file: string): PerFile => {
+    let rec = perFile.get(file);
+    if (!rec) {
+      rec = { commits: 0, linesChanged: 0, authorCounts: new Map() };
+      perFile.set(file, rec);
+    }
+    return rec;
+  };
+
+  const blocks = raw.toString().split("COMMIT_SEP\n");
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+    const lines = block.split("\n");
+    const authors = parseAuthorsLine(lines[0]);
+    if (authors.length === 0) continue;
+    const filesInCommit = new Set<string>();
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue;
+      const parts = line.split("\t");
+      if (parts.length < 3) continue;
+      const path = normalizePath(parts[2].trim());
+      if (!path) continue;
+      const rec = ensure(path);
+      filesInCommit.add(path);
+      const added = parts[0];
+      const deleted = parts[1];
+      if (added !== "-" && deleted !== "-") {
+        const delta = parseInt(added, 10) + parseInt(deleted, 10);
+        if (Number.isFinite(delta)) rec.linesChanged += delta;
+      }
+    }
+    for (const file of filesInCommit) {
+      const rec = ensure(file);
+      rec.commits += 1;
+      for (const author of authors) {
+        rec.authorCounts.set(author, (rec.authorCounts.get(author) ?? 0) + 1);
+      }
+    }
+  }
+
+  const out = new Map<string, RecentActivity>();
+  for (const [file, rec] of perFile) {
+    const sorted = [...rec.authorCounts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+    out.set(file, {
+      windowDays,
+      commits: rec.commits,
+      authors: sorted.slice(0, RECENT_AUTHORS_CAP).map(([name]) => name),
+      authorCount: sorted.length,
+      linesChanged: rec.linesChanged,
+    });
+  }
+  return out;
 }
 
 /**
@@ -1626,6 +1727,29 @@ export function computeComposite(
 }
 
 /**
+ * Decorate every ranking entry and composite entry with its recency window
+ * record. Mutates in place — the ranking objects are throwaway scoped to one
+ * pipeline run, and an immutable copy here would force a deep clone of every
+ * `RankingOutput`/`CompositeOutput` for no observable benefit.
+ */
+function attachRecentActivity(
+  rankings: Record<string, RankingOutput>,
+  composite: CompositeOutput,
+  recent: Map<string, RecentActivity>,
+): void {
+  for (const ranking of Object.values(rankings)) {
+    for (const entry of ranking.entries) {
+      const rec = recent.get(entry.file);
+      if (rec) entry.recent = rec;
+    }
+  }
+  for (const entry of composite.entries) {
+    const rec = recent.get(entry.file);
+    if (rec) entry.recent = rec;
+  }
+}
+
+/**
  * Build the rankings + composite + corpus for a given file set. Extracted
  * from runHotspots so Mode C can call it twice (HEAD and base worktree)
  * with the same logic.
@@ -1636,6 +1760,7 @@ export function computeHotspotsCore(
   top: number,
   cwd?: string,
   churnMode: "commits" | "lines" = "commits",
+  recentWindowDays?: number,
 ): {
   rankings: Record<string, RankingOutput>;
   skipped: Record<string, SkippedRanking>;
@@ -1667,6 +1792,10 @@ export function computeHotspotsCore(
     authorCommitCounts,
   );
   const composite = computeComposite(rankings, churn, top);
+  if (recentWindowDays !== undefined) {
+    const recent = getRecentActivity(recentWindowDays, cwd);
+    attachRecentActivity(rankings, composite, recent);
+  }
   let totalComplexity = 0;
   for (const f of files) totalComplexity += f.complexity;
   const windowDays = months * DAYS_PER_MONTH;
@@ -1754,6 +1883,7 @@ export function computeSnapshot(opts: {
   excludes: string[];
   cwd?: string;
   churnMode?: "commits" | "lines";
+  recentWindowDays?: number;
 }): HotspotSnapshot {
   const files = runScc(opts.excludes, opts.cwd);
   const core = computeHotspotsCore(
@@ -1762,6 +1892,7 @@ export function computeSnapshot(opts: {
     0,
     opts.cwd,
     opts.churnMode,
+    opts.recentWindowDays,
   );
   return {
     files,
