@@ -280,6 +280,8 @@ Pass `--churn-mode lines` to switch to **line-based churn**: added+deleted lines
 
 Total cyclomatic complexity as reported by [scc](https://github.com/boyter/scc). Counts independent execution paths (branches, loops, conditions). Higher values mean more paths to test and more places for bugs to hide. The measure was introduced by McCabe (1976) in *A Complexity Measure* and has been the standard structural-complexity metric since. — [IEEE TSE](https://doi.org/10.1109/TSE.1976.233837)
 
+**Limitation.** Cyclomatic complexity counts branches, not lines. Refactors that extract repeated markup, duplicated literals, or template blocks into shared helpers — common in JSX, SVG, and HTML-heavy code — won't lower this score unless the extraction also collapses an `if` / `switch` / loop branch. For pure-duplication wins (LOC dropped without branch reduction), use a tool like [jscpd](https://github.com/kucherenko/jscpd) or compare line counts directly. obscene's `Δ` in delta mode reflects branch deltas, not size deltas.
+
 #### Complexity density (`Dens`)
 
 `complexity / lines of code`. Normalizes complexity by file size so a 50-line file with complexity 25 (density 0.50) stands out against a 500-line file with complexity 25 (density 0.05). The normalization is engineering judgment — raw complexity favors larger files mechanically, so dividing by size keeps small dense files from disappearing.
