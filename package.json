@@ -1,6 +1,6 @@
 {
   "name": "@wbern/obscene",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "description": "Identify hotspot files — complex code that changes frequently. Churn × complexity analysis for any git repo.",
   "type": "module",
   "bin": {
