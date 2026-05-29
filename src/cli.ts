@@ -38,7 +38,11 @@ import {
   formatReportCompact,
   formatReportTable,
 } from "./format.js";
-import { buildClaudeHookOutput, formatHotspotDeltaForAgent } from "./hook.js";
+import {
+  type DriftFormat,
+  formatHotspotDeltaForAgent,
+  renderDriftOutput,
+} from "./hook.js";
 import type {
   ComplexityDelta,
   CouplingOutput,
@@ -243,57 +247,105 @@ addSharedOptions(
     }
   });
 
-// hook command — emits a Claude Code hook JSON payload summarizing
-// hotspot drift since a base ref. Designed for use in a PostToolUse/Stop
-// hook so the agent sees soft signal about whether its edits are pushing
-// files into hotter tiers. Silent (exit 0, no stdout) when nothing crosses
-// the significance threshold — noise on every edit is the dominant failure
-// mode for quality-feedback hooks.
+// drift command — emits hotspot drift since a base ref, wrapped for the
+// chosen consumer. Designed primarily for agent-runner hooks (Claude Code,
+// Cursor, Codex CLI) and direct piping (Aider /run, Plandex, humans).
+// Silent (exit 0, no stdout) when nothing crosses the significance
+// threshold — noise on every edit is the dominant failure mode for
+// quality-feedback hooks.
 //
-// Output shape is chosen per event, matching Claude Code's hooks docs
-// (https://code.claude.com/docs/en/hooks). Events that feed Claude's context
-// — SessionStart, Setup, SubagentStart, UserPromptSubmit, UserPromptExpansion,
-// PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch — emit
-// `hookSpecificOutput.additionalContext`. The remaining events (Stop,
-// SubagentStop, ConfigChange, PreCompact) emit top-level `systemMessage`,
-// which is the only schema-valid context-bearing field Claude Code accepts
-// for those events.
-program
-  .command("hook")
-  .description(
-    "emit Claude Code hook JSON summarizing hotspot drift since a base ref (use in PostToolUse/Stop hooks)",
-  )
-  .option(
-    "--base <ref>",
-    "base ref to compare against (default: HEAD — i.e. working tree vs last commit)",
-    "HEAD",
-  )
-  .option(
-    "--event <name>",
-    "hook event name (selects the right output envelope: hookSpecificOutput.additionalContext for SessionStart / UserPromptSubmit / Pre|PostToolUse / etc., or top-level systemMessage for Stop / SubagentStop / ConfigChange / PreCompact)",
-    "Stop",
-  )
-  .option("--months <n>", "churn window in months", "3")
-  .option(
-    "--significant-percent <n>",
-    "minimum |percent change| for a stable-tier score change to be surfaced (tier transitions are always surfaced)",
-  )
-  .option(
-    "--min-degree <n>",
-    "minimum coupling degree (%) for co-change reminders. Default 50 — recall-tuned for diff-scoped queries; raise to 70+ for stricter signal",
-    parseMinDegree,
-  )
-  .action(
-    (opts: {
-      base: string;
-      event: string;
-      months: string;
-      significantPercent?: string;
-      minDegree?: number;
-    }) => {
-      runHook(opts);
-    },
+// `--format claude-code-hook` chooses per-event envelope per Claude Code's
+// docs (https://code.claude.com/docs/en/hooks): context-injecting events
+// (SessionStart, UserPromptSubmit, Pre/PostToolUse, etc.) emit
+// `hookSpecificOutput.additionalContext`; non-context events (Stop,
+// SubagentStop, ConfigChange, PreCompact) emit top-level `systemMessage`.
+// `--format cursor` emits Cursor's flat `additional_context` shape (no
+// wrapper). `--format markdown` emits the raw context for piping.
+//
+// `obscene hook` is preserved as a thin backwards-compat alias.
+function parseDriftFormat(value: string): DriftFormat {
+  if (
+    value === "claude-code-hook" ||
+    value === "cursor" ||
+    value === "markdown"
+  ) {
+    return value;
+  }
+  throw new InvalidArgumentError(
+    "must be one of: claude-code-hook, cursor, markdown",
   );
+}
+
+interface DriftOpts {
+  base: string;
+  event: string;
+  format: DriftFormat;
+  months: string;
+  significantPercent?: string;
+  minDegree?: number;
+}
+
+function addDriftOptions(
+  cmd: Command,
+  formatDefault: DriftFormat | undefined,
+): Command {
+  let chain = cmd
+    .option(
+      "--base <ref>",
+      "base ref to compare against (default: HEAD — i.e. working tree vs last commit)",
+      "HEAD",
+    )
+    .option(
+      "--event <name>",
+      "hook event name (only meaningful for --format claude-code-hook: selects hookSpecificOutput.additionalContext for SessionStart / UserPromptSubmit / Pre|PostToolUse / etc., or systemMessage for Stop / SubagentStop / ConfigChange / PreCompact)",
+      "Stop",
+    );
+  if (formatDefault !== undefined) {
+    chain = chain.option(
+      "--format <fmt>",
+      "output wire format: claude-code-hook (default, Claude Code envelope), cursor (Cursor's flat additional_context), markdown (raw text for piping)",
+      parseDriftFormat,
+      formatDefault,
+    );
+  }
+  return chain
+    .option("--months <n>", "churn window in months", "3")
+    .option(
+      "--significant-percent <n>",
+      "minimum |percent change| for a stable-tier score change to be surfaced (tier transitions are always surfaced)",
+    )
+    .option(
+      "--min-degree <n>",
+      "minimum coupling degree (%) for co-change reminders. Default 50 — recall-tuned for diff-scoped queries; raise to 70+ for stricter signal",
+      parseMinDegree,
+    );
+}
+
+addDriftOptions(
+  program
+    .command("drift")
+    .description(
+      "emit hotspot drift since a base ref in a consumer-specific wire format (agent hooks, plain markdown)",
+    ),
+  "claude-code-hook",
+).action((opts: DriftOpts) => {
+  runDrift(opts);
+});
+
+// Backwards-compat alias — `obscene hook` was the original name and ships
+// in user-authored hook configs. Pinned to --format claude-code-hook; no
+// way to override the format here so existing configs keep their exact
+// previous behavior.
+addDriftOptions(
+  program
+    .command("hook")
+    .description(
+      "alias for `obscene drift --format claude-code-hook` (kept for backwards compatibility)",
+    ),
+  undefined,
+).action((opts: Omit<DriftOpts, "format">) => {
+  runDrift({ ...opts, format: "claude-code-hook" });
+});
 
 // init command
 program
@@ -911,13 +963,7 @@ function getWorkingTreeChangedFiles(): Set<string> {
   return result;
 }
 
-function runHook(opts: {
-  base: string;
-  event: string;
-  months: string;
-  significantPercent?: string;
-  minDegree?: number;
-}): void {
+function runDrift(opts: DriftOpts): void {
   // Soft signal: any failure path exits 0 with no stdout so Claude's hook
   // pipeline never blocks or shows an error. We do NOT use the
   // getChangedFiles fast-path because it's a commit-to-commit (base...HEAD)
@@ -990,8 +1036,12 @@ function runHook(opts: {
     });
     if (context === null) return;
 
+    const rendered = renderDriftOutput(context, opts.format, opts.event);
+    // `markdown` is plain text — terminate with newline so terminals don't
+    // glue the next prompt onto the last line. JSON envelopes intentionally
+    // do not get a trailing newline (hook consumers parse one JSON object).
     process.stdout.write(
-      JSON.stringify(buildClaudeHookOutput(context, opts.event)),
+      opts.format === "markdown" ? `${rendered}\n` : rendered,
     );
   } catch {
     // Hooks must not block or surface errors — eat all failures silently.

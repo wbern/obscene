@@ -1096,18 +1096,103 @@ describe("CLI Integration", () => {
     expect(result.stderr).toMatch(/between 1 and 365/);
   });
 
-  it("should describe the hook command in --help", {
+  it("should describe the hook alias in --help", {
     timeout: 10000,
   }, () => {
     const result = spawnSync("node", [BIN_PATH, "hook", "--help"], {
       encoding: "utf-8",
     });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("Claude Code hook");
+    expect(result.stdout).toContain("alias for");
+    expect(result.stdout).toContain("claude-code-hook");
     expect(result.stdout).toContain("--base");
     expect(result.stdout).toContain("--event");
     expect(result.stdout).toContain("--significant-percent");
     expect(result.stdout).toContain("--min-degree");
+  });
+
+  it("should describe the drift command and its --format flag in --help", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync("node", [BIN_PATH, "drift", "--help"], {
+      encoding: "utf-8",
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("--format");
+    expect(result.stdout).toContain("claude-code-hook");
+    expect(result.stdout).toContain("cursor");
+    expect(result.stdout).toContain("markdown");
+  });
+
+  it("rejects unknown --format values for drift", {
+    timeout: 10000,
+  }, () => {
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "drift", "--format", "nonsense"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/claude-code-hook/);
+  });
+
+  it("emits the Cursor flat additional_context shape under --format cursor", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "drift", "--base", "main", "--format", "cursor"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    if (result.stdout.length > 0) {
+      const parsed = JSON.parse(result.stdout);
+      expect(typeof parsed.additional_context).toBe("string");
+      expect(parsed.additional_context).toContain("obscene drift");
+      expect(parsed.hookSpecificOutput).toBeUndefined();
+      expect(parsed.systemMessage).toBeUndefined();
+    }
+  });
+
+  it("emits raw text under --format markdown", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "drift", "--base", "main", "--format", "markdown"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    if (result.stdout.length > 0) {
+      // Plain text, not JSON.
+      expect(() => JSON.parse(result.stdout)).toThrow();
+      expect(result.stdout).toContain("obscene drift");
+      expect(result.stdout.endsWith("\n")).toBe(true);
+    }
+  });
+
+  it("hook alias defaults to the Claude Code envelope", {
+    timeout: 30000,
+  }, () => {
+    setupDeltaRepoB();
+
+    const result = spawnSync(
+      "node",
+      [BIN_PATH, "hook", "--base", "main", "--event", "Stop"],
+      { cwd: tempDir, encoding: "utf-8" },
+    );
+    expect(result.status).toBe(0);
+    if (result.stdout.length > 0) {
+      const parsed = JSON.parse(result.stdout);
+      // Claude Code Stop event uses top-level systemMessage; the Cursor
+      // shape (additional_context) must NOT appear from the legacy alias.
+      expect(typeof parsed.systemMessage).toBe("string");
+      expect(parsed.additional_context).toBeUndefined();
+    }
   });
 
   it("should reject --min-degree values outside 0-100 with a clear error", {

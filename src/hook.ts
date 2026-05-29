@@ -24,6 +24,12 @@ type ClaudeHookOutput =
   | ClaudeAdditionalContextOutput
   | ClaudeSystemMessageOutput;
 
+interface CursorHookOutput {
+  additional_context: string;
+}
+
+export type DriftFormat = "claude-code-hook" | "cursor" | "markdown";
+
 // Events that accept hookSpecificOutput.additionalContext per
 // https://code.claude.com/docs/en/hooks. Everything else (Stop, SubagentStop,
 // ConfigChange, PreCompact) emits top-level systemMessage, which is the only
@@ -155,4 +161,29 @@ export function buildClaudeHookOutput(
     };
   }
   return { systemMessage: context };
+}
+
+// Cursor's sessionStart hook (and similar context-accepting events) reads a
+// flat top-level `additional_context` (snake_case) — no per-event wrapper, no
+// hookSpecificOutput. Other Cursor events ignore unknown JSON keys, so this
+// shape is safe to emit unconditionally.
+export function buildCursorHookOutput(context: string): CursorHookOutput {
+  return { additional_context: context };
+}
+
+/**
+ * Serialize drift context for stdout. `claude-code-hook` and `cursor` produce
+ * single-line JSON for hook consumers; `markdown` returns the raw context
+ * string for piping (Aider /run, Plandex, humans).
+ */
+export function renderDriftOutput(
+  context: string,
+  format: DriftFormat,
+  eventName: string,
+): string {
+  if (format === "markdown") return context;
+  if (format === "cursor") {
+    return JSON.stringify(buildCursorHookOutput(context));
+  }
+  return JSON.stringify(buildClaudeHookOutput(context, eventName));
 }

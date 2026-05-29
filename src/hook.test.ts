@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildClaudeHookOutput,
+  buildCursorHookOutput,
   formatHotspotDeltaForAgent,
+  renderDriftOutput,
   SIGNIFICANT_PERCENT_CHANGE,
 } from "./hook.js";
 import type { CouplingReminder, HotspotDelta, ScoreChange } from "./types.js";
@@ -406,6 +408,46 @@ describe("buildClaudeHookOutput", () => {
     expect(buildClaudeHookOutput("hello", eventName)).toEqual({
       systemMessage: "hello",
     });
+  });
+});
+
+describe("buildCursorHookOutput", () => {
+  it("emits a flat additional_context with no wrapper", () => {
+    expect(buildCursorHookOutput("hello")).toEqual({
+      additional_context: "hello",
+    });
+  });
+});
+
+describe("renderDriftOutput", () => {
+  it("returns raw context for markdown format", () => {
+    expect(renderDriftOutput("hello", "markdown", "Stop")).toBe("hello");
+  });
+
+  it("serializes the Claude Code envelope for claude-code-hook on Stop", () => {
+    expect(renderDriftOutput("hello", "claude-code-hook", "Stop")).toBe(
+      JSON.stringify({ systemMessage: "hello" }),
+    );
+  });
+
+  it("serializes additionalContext envelope for claude-code-hook on SessionStart", () => {
+    expect(renderDriftOutput("hello", "claude-code-hook", "SessionStart")).toBe(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: "hello",
+        },
+      }),
+    );
+  });
+
+  it("serializes the flat Cursor shape regardless of event name", () => {
+    expect(renderDriftOutput("hello", "cursor", "SessionStart")).toBe(
+      JSON.stringify({ additional_context: "hello" }),
+    );
+    expect(renderDriftOutput("hello", "cursor", "Stop")).toBe(
+      JSON.stringify({ additional_context: "hello" }),
+    );
   });
 });
 

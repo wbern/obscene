@@ -199,15 +199,18 @@ Naming note: graph-theoretically `Partners` is the node degree and `Strength` is
 
 Per-file complexity without churn. Useful for raw complexity distribution.
 
-### `obscene hook`
+### `obscene drift`
 
-Emits a [Claude Code hook](https://docs.claude.com/en/docs/claude-code/hooks) JSON payload summarizing hotspot drift since a base ref. Designed to feed a soft signal back into the agent — when an edit pushes a file into a hotter tier (or moves an existing hot file's score by ≥25%), the next turn includes a one-line note in `hookSpecificOutput.additionalContext`. When nothing crosses the threshold, the command exits silently — quiet sessions get no noise.
+Emits hotspot drift since a base ref, wrapped for the chosen consumer (agent runner hook envelopes or plain text). Designed to feed a soft signal back into the agent — when an edit pushes a file into a hotter tier (or moves an existing hot file's score by ≥25%), the next turn includes a one-line note. When nothing crosses the threshold, the command exits silently — quiet sessions get no noise.
 
 ```bash
-obscene hook --base HEAD --event Stop    # working tree vs last commit
-obscene hook --base origin/main          # session-cumulative drift
-obscene hook --significant-percent 50    # only surface large score moves
+obscene drift --base HEAD --format claude-code-hook --event Stop   # default
+obscene drift --base origin/main --format cursor                   # Cursor sessionStart
+obscene drift --base HEAD --format markdown                        # raw text for piping
+obscene drift --significant-percent 50                             # only large score moves
 ```
+
+> **Backwards-compat alias.** `obscene hook` keeps working as a thin alias for `obscene drift --format claude-code-hook`. Existing Claude Code configs need no change.
 
 Wire it into Claude Code via `.claude/settings.json` (project-local) or `~/.claude/settings.json` (global):
 
@@ -217,7 +220,7 @@ Wire it into Claude Code via `.claude/settings.json` (project-local) or `~/.clau
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "obscene hook --base HEAD --event Stop 2>/dev/null",
+        "command": "obscene drift --base HEAD --event Stop 2>/dev/null",
         "timeout": 30,
         "statusMessage": "obscene: scanning for hotspot drift…"
       }]
@@ -226,10 +229,13 @@ Wire it into Claude Code via `.claude/settings.json` (project-local) or `~/.clau
 }
 ```
 
+For Cursor, wire `--format cursor` into a sessionStart hook in `.cursor/hooks.json` — the output is the flat top-level `additional_context` shape Cursor reads. For Aider's `/run`, Plandex's pipe, or human inspection, use `--format markdown` and consume the raw text.
+
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--base <ref>` | `HEAD` | Compare against this ref. `HEAD` compares working tree vs last commit; a branch ref compares session-cumulative drift. |
-| `--event <name>` | `Stop` | Hook event name echoed back in `hookSpecificOutput.hookEventName`. |
+| `--format <fmt>` | `claude-code-hook` | Output wire format: `claude-code-hook` (Claude Code envelope), `cursor` (Cursor's flat `additional_context`), `markdown` (raw text for piping). |
+| `--event <name>` | `Stop` | Hook event name. Only meaningful for `--format claude-code-hook`, where it selects between `hookSpecificOutput.additionalContext` (SessionStart, Pre/PostToolUse, etc.) and top-level `systemMessage` (Stop, SubagentStop, ConfigChange, PreCompact). |
 | `--months <n>` | `3` | Churn window for the underlying delta pipeline. |
 | `--significant-percent <n>` | `25` | Minimum `|percentChange|` for a stable-tier score change to surface. Tier transitions (warm→hot, etc.) are always surfaced. |
 | `--min-degree <n>` | `50` | Minimum coupling degree (%) for co-change reminders. The default is recall-tuned for diff-scoped queries — the reminder set is already narrowed to the files just edited, so weaker historical pairs (50–70%) are useful "maybe glance at this" signal. Raise to 70+ for stricter precision. |
